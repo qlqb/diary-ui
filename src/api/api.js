@@ -259,3 +259,65 @@ export const diaryAPI = {
         return request('/diaries/statistics/streak');
     },
 };
+/**
+ * Todo API
+ */
+export const todoAPI = {
+    /**
+     * 오늘 날짜 문자열 반환 (UTC 밀림 방지, 로컬 기준)
+     */
+    getTodayString: () => {
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    },
+
+    /**
+     * 날짜별 Todo 목록 조회
+     * status 파라미터는 선택 (TODO / DONE / null=전체)
+     */
+    getTodosByDate: (date, status = null) => {
+        const params = new URLSearchParams({ date });
+        if (status) params.append('status', status);
+        return request(`/todos?${params.toString()}`);
+    },
+
+    /**
+     * Todo 생성
+     */
+    createTodo: (todoData) => {
+        return request('/todos', {
+            method: 'POST',
+            body: JSON.stringify(todoData),
+        });
+    },
+
+    /**
+     * Todo 완료 처리 (TODO → DONE)
+     */
+    markDone: (todoId) => {
+        return request(`/todos/${todoId}/done`, {
+            method: 'PATCH',
+        });
+    },
+
+    /**
+     * Todo 미완료 처리 (DONE → TODO)
+     */
+    markTodo: (todoId) => {
+        return request(`/todos/${todoId}/todo`, {
+            method: 'PATCH',
+        });
+    },
+
+    /**
+     * Todo 삭제 (소프트 삭제)
+     */
+    deleteTodo: (todoId) => {
+        return request(`/todos/${todoId}`, {
+            method: 'DELETE',
+        });
+    },
+};
