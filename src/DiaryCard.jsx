@@ -1,16 +1,10 @@
 import { useState } from 'react';
 
-/**
- * 일기 카드 컴포넌트
- */
 function DiaryCard({ diary, onEdit, onDelete, onToggleFavorite }) {
     const [expanded, setExpanded] = useState(false);
 
     const moodEmojis = {
-        HAPPY: '😊',
-        NEUTRAL: '😌',
-        SAD: '😢',
-        EXCITED: '🤩',
+        HAPPY: '😊', NEUTRAL: '😌', SAD: '😢', EXCITED: '🤩',
     };
 
     return (
@@ -25,14 +19,9 @@ function DiaryCard({ diary, onEdit, onDelete, onToggleFavorite }) {
             </div>
 
             <div className="diary-card-content">
-                <p className={expanded ? 'expanded' : 'collapsed'}>
-                    {diary.content}
-                </p>
-                {diary.content.length > 100 && (
-                    <button
-                        className="expand-button"
-                        onClick={() => setExpanded(!expanded)}
-                    >
+                <p className={expanded ? 'expanded' : 'collapsed'}>{diary.content}</p>
+                {diary.content?.length > 100 && (
+                    <button className="expand-button" onClick={() => setExpanded(!expanded)}>
                         {expanded ? '접기' : '더보기'}
                     </button>
                 )}
@@ -49,4 +38,4 @@ function DiaryCard({ diary, onEdit, onDelete, onToggleFavorite }) {
     );
 }
 
-export default DiaryCard
+export default DiaryCard;
