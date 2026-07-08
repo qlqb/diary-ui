@@ -19,6 +19,14 @@ const removeToken = () => {
     localStorage.removeItem(TOKEN_KEY);
 };
 
+const getTodayString = () => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+};
+
 /**
  * 공통 API 요청 함수
  */
@@ -53,7 +61,7 @@ async function request(url, options = {}) {
 
     try {
         data = await response.json();
-    } catch (error) {
+    } catch {
         data = null;
     }
 
@@ -259,6 +267,7 @@ export const diaryAPI = {
         return request('/diaries/statistics/streak');
     },
 };
+
 /**
  * Todo API
  */
@@ -266,13 +275,7 @@ export const todoAPI = {
     /**
      * 오늘 날짜 문자열 반환 (UTC 밀림 방지, 로컬 기준)
      */
-    getTodayString: () => {
-        const d = new Date();
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
-    },
+    getTodayString,
 
     /**
      * 날짜별 Todo 목록 조회
@@ -317,6 +320,91 @@ export const todoAPI = {
      */
     deleteTodo: (todoId) => {
         return request(`/todos/${todoId}`, {
+            method: 'DELETE',
+        });
+    },
+};
+
+/**
+ * ScheduleBlock API
+ */
+export const scheduleBlockAPI = {
+    /**
+     * 오늘 날짜 문자열 반환 (UTC 밀림 방지, 로컬 기준)
+     */
+    getTodayString,
+
+    /**
+     * 날짜별 오늘 해볼 것 조회
+     */
+    getByDate: (date) => {
+        const params = new URLSearchParams({ date });
+        return request(`/schedule-blocks?${params.toString()}`);
+    },
+
+    /**
+     * 오늘 해볼 것 생성
+     */
+    create: (scheduleBlockData) => {
+        return request('/schedule-blocks', {
+            method: 'POST',
+            body: JSON.stringify(scheduleBlockData),
+        });
+    },
+
+    /**
+     * 완료 처리
+     */
+    complete: (scheduleBlockId) => {
+        return request(`/schedule-blocks/${scheduleBlockId}/complete`, {
+            method: 'POST',
+        });
+    },
+
+    /**
+     * 완료 취소
+     */
+    uncomplete: (scheduleBlockId) => {
+        return request(`/schedule-blocks/${scheduleBlockId}/uncomplete`, {
+            method: 'POST',
+        });
+    },
+
+    /**
+     * 내일 또는 다른 날짜로 이동
+     */
+    move: (scheduleBlockId, toDate, memo = null) => {
+        return request(`/schedule-blocks/${scheduleBlockId}/move`, {
+            method: 'POST',
+            body: JSON.stringify({ toDate, memo }),
+        });
+    },
+
+    /**
+     * 작게 줄이기
+     */
+    reduce: (scheduleBlockId, afterTitle, memo = null) => {
+        return request(`/schedule-blocks/${scheduleBlockId}/reduce`, {
+            method: 'POST',
+            body: JSON.stringify({ afterTitle, memo }),
+        });
+    },
+
+    /**
+     * 보류
+     */
+    hold: (scheduleBlockId, memo = null) => {
+        return request(`/schedule-blocks/${scheduleBlockId}/hold`, {
+            method: 'POST',
+            body: JSON.stringify({ memo }),
+        });
+    },
+
+    /**
+     * 삭제
+     */
+    delete: (scheduleBlockId) => {
+        return request(`/schedule-blocks/${scheduleBlockId}`, {
             method: 'DELETE',
         });
     },
