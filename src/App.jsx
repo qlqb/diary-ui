@@ -342,6 +342,9 @@ function TodayView() {
   const [timePanelOpen, setTimePanelOpen] = useState(false);
   const [memoOpen, setMemoOpen] = useState(false);
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
+  const [reduceTarget, setReduceTarget] = useState(null);
+  const [reduceForm, setReduceForm] = useState({ afterTitle: '', memo: '' });
+  const [reduceError, setReduceError] = useState('');
   const [selectedStart, setSelectedStart] = useState(null);
   const [selectedDuration, setSelectedDuration] = useState(60);
   const [customTimeOpen, setCustomTimeOpen] = useState(false);
@@ -593,13 +596,52 @@ function TodayView() {
 
   const handleReduce = (item) => {
     const currentTitle = getItemTitle(item);
-    const afterTitle = window.prompt('작게 줄인 제목을 입력해주세요.', currentTitle);
-    if (afterTitle === null) return;
+    setOpenActionMenuId(null);
+    setReduceTarget(item);
+    setReduceForm({ afterTitle: currentTitle, memo: '' });
+    setReduceError('');
+  };
 
-    const trimmedTitle = afterTitle.trim();
-    if (!trimmedTitle || trimmedTitle === currentTitle.trim()) return;
+  const closeReduceModal = () => {
+    setReduceTarget(null);
+    setReduceForm({ afterTitle: '', memo: '' });
+    setReduceError('');
+  };
 
-    runItemAction(item, (itemId) => scheduleBlockAPI.reduce(itemId, trimmedTitle, null));
+  const handleReduceSubmit = async (event) => {
+    event.preventDefault();
+    if (!reduceTarget) return;
+
+    const itemId = getItemId(reduceTarget);
+    if (!itemId) return;
+    if (pendingItemIds.has(getPendingKey(itemId))) return;
+
+    const currentTitle = getItemTitle(reduceTarget).trim();
+    const afterTitle = reduceForm.afterTitle.trim();
+    const memo = reduceForm.memo.trim();
+
+    if (!afterTitle) {
+      setReduceError('작게 줄인 버전을 입력해주세요.');
+      return;
+    }
+
+    if (afterTitle === currentTitle) {
+      setReduceError('원래 항목과 다르게 줄여주세요.');
+      return;
+    }
+
+    setItemPending(itemId, true);
+    setReduceError('');
+    setError('');
+    try {
+      await scheduleBlockAPI.reduce(itemId, afterTitle, memo || null);
+      closeReduceModal();
+      await fetchItems();
+    } catch (e) {
+      setReduceError(e.message || '작게 줄이기를 적용하지 못했습니다.');
+    } finally {
+      setItemPending(itemId, false);
+    }
   };
 
   const handleHold = (item) => {
@@ -688,6 +730,8 @@ function TodayView() {
   const doneItems = items.filter((item) => getItemStatus(item) === 'DONE');
   const selectedPriority = priorityOptions.find((option) => option.value === form.priority);
   const timeLabel = formatTimeRange(form.startTime, form.endTime);
+  const reduceTargetId = reduceTarget ? getItemId(reduceTarget) : null;
+  const isReduceSubmitting = reduceTargetId ? pendingItemIds.has(getPendingKey(reduceTargetId)) : false;
 
   return (
     <div className="today-view">
@@ -946,6 +990,64 @@ function TodayView() {
               <p>위에서 하나만 가볍게 추가해보세요.</p>
             </div>
           )}
+        </div>
+      )}
+
+      {reduceTarget && (
+        <div className="today-modal-backdrop">
+          <form
+            className="today-reduce-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="today-reduce-title"
+            onSubmit={handleReduceSubmit}
+          >
+            <div className="today-reduce-header">
+              <div>
+                <h2 id="today-reduce-title">작게 줄이기</h2>
+                <p>오늘 할 수 있는 더 작은 형태로 바꿔보세요.</p>
+              </div>
+            </div>
+
+            <div className="today-reduce-original">
+              <span>원래 항목</span>
+              <div>{getItemTitle(reduceTarget)}</div>
+            </div>
+
+            <div className="today-reduce-field">
+              <label htmlFor="today-reduce-after-title">작게 줄인 버전</label>
+              <textarea
+                id="today-reduce-after-title"
+                value={reduceForm.afterTitle}
+                onChange={(event) => setReduceForm((prev) => ({ ...prev, afterTitle: event.target.value }))}
+                placeholder="예: 자료구조 2시간 공부 → 연결 리스트 삽입 코드만 보기"
+                rows="3"
+                autoFocus
+              />
+            </div>
+
+            <div className="today-reduce-field">
+              <label htmlFor="today-reduce-memo">메모</label>
+              <textarea
+                id="today-reduce-memo"
+                value={reduceForm.memo}
+                onChange={(event) => setReduceForm((prev) => ({ ...prev, memo: event.target.value }))}
+                placeholder="줄이는 이유나 참고할 내용을 짧게 적어보세요."
+                rows="3"
+              />
+            </div>
+
+            {reduceError && <div className="today-reduce-error">{reduceError}</div>}
+
+            <div className="today-reduce-actions">
+              <button type="button" className="btn-ghost" onClick={closeReduceModal} disabled={isReduceSubmitting}>
+                취소
+              </button>
+              <button type="submit" className="btn-primary" disabled={isReduceSubmitting}>
+                {isReduceSubmitting ? '적용 중...' : '적용'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
