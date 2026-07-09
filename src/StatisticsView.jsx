@@ -1,41 +1,11 @@
-import  {diaryAPI} from "./api/api.js";
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useDiaryStatistics } from './hooks/useDiaryStatistics.js';
 /**
  * 통계 뷰
  */
 function StatisticsView() {
-    const [summary, setSummary] = useState(null);
-    const [moodStats, setMoodStats] = useState(null);
-    const [monthlyStats, setMonthlyStats] = useState(null);
-    const [streakStats, setStreakStats] = useState(null);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        loadStatistics();
-    }, [selectedYear]);
-
-    const loadStatistics = async () => {
-        setLoading(true);
-
-        try {
-            const [summaryData, moodData, monthlyData, streakData] = await Promise.all([
-                diaryAPI.getStatisticsSummary(),
-                diaryAPI.getMoodStatistics(),
-                diaryAPI.getMonthlyStatistics(selectedYear),
-                diaryAPI.getStreakStatistics(),
-            ]);
-
-            setSummary(summaryData);
-            setMoodStats(moodData);
-            setMonthlyStats(monthlyData);
-            setStreakStats(streakData);
-        } catch (error) {
-            alert('통계를 불러오는데 실패했습니다: ' + error.message);
-        }
-
-        setLoading(false);
-    };
+    const { summary, moodStats, monthlyStats, streakStats, loading } = useDiaryStatistics(selectedYear);
 
     if (loading) {
         return <div className="loading">통계 로딩 중...</div>;
