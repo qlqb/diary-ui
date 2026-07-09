@@ -1981,12 +1981,12 @@ body {
 }
 
 .today-reduce-modal {
-  width: min(100%, 480px);
+  width: min(100%, 440px);
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 20px;
+  gap: 11px;
+  padding: 18px;
   overflow-y: auto;
   border: 0.5px solid #e5e7eb;
   border-radius: 12px;
@@ -1995,45 +1995,48 @@ body {
 }
 
 .today-reduce-header h2 {
-  margin: 0 0 4px;
+  margin: 0 0 3px;
   color: #111827;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
 }
 
 .today-reduce-header p {
   margin: 0;
   color: #6b7280;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .today-reduce-original {
-  padding: 12px;
-  border: 0.5px solid #e5e7eb;
-  border-radius: 10px;
-  background: #f9fafb;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0;
 }
 
 .today-reduce-original span {
-  display: block;
-  margin-bottom: 4px;
   color: #9ca3af;
   font-size: 12px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .today-reduce-original div {
-  color: #111827;
-  font-size: 14px;
-  line-height: 1.5;
-  word-break: break-word;
+  min-width: 0;
+  overflow: hidden;
+  color: #4b5563;
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .today-reduce-field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
 }
 
 .today-reduce-field label {
@@ -2045,16 +2048,16 @@ body {
 .today-reduce-field p {
   margin: 0;
   color: #9ca3af;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .today-reduce-field input[type="text"],
 .today-reduce-field textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 9px 11px;
   border: 0.5px solid #d1d5db;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
   color: #111827;
   font: inherit;
@@ -2066,7 +2069,7 @@ body {
 }
 
 .today-reduce-field input[type="text"] {
-  min-height: 40px;
+  min-height: 38px;
 }
 
 .today-reduce-field input[type="text"]:focus,
@@ -2078,7 +2081,7 @@ body {
 .today-reduce-time-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .today-reduce-section-title {
@@ -2089,25 +2092,25 @@ body {
 
 .today-reduce-current-time {
   color: #6b7280;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .today-reduce-time-options {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 10px;
+  gap: 6px;
+  padding: 8px;
   border: 0.5px solid #e5e7eb;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
 }
 
 .today-reduce-radio-row {
-  min-height: 38px;
+  min-height: 34px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 9px;
+  gap: 8px;
+  padding: 7px 8px;
   border: 0.5px solid #e5e7eb;
   border-radius: 8px;
   color: #374151;
@@ -2122,8 +2125,8 @@ body {
 }
 
 .today-reduce-radio-row input {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   accent-color: #16a34a;
   flex-shrink: 0;
 }
@@ -2137,8 +2140,8 @@ body {
 .today-reduce-time-inputs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 0 0 2px 25px;
+  gap: 7px;
+  padding: 0 0 1px 23px;
 }
 
 .today-reduce-time-inputs label {
@@ -2152,8 +2155,8 @@ body {
 
 .today-reduce-time-inputs input {
   width: 100%;
-  min-height: 40px;
-  padding: 8px 10px;
+  min-height: 36px;
+  padding: 7px 9px;
   border: 0.5px solid #d1d5db;
   border-radius: 8px;
   background: #fff;
@@ -2169,7 +2172,7 @@ body {
 }
 
 .today-reduce-error {
-  padding: 9px 11px;
+  padding: 8px 10px;
   border: 0.5px solid #fecaca;
   border-radius: 8px;
   background: #fef2f2;
@@ -2181,7 +2184,7 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 2px;
+  padding-top: 1px;
 }
 
 .today-reduce-actions button {
@@ -2248,8 +2251,9 @@ body {
 
   .today-reduce-modal {
     width: 100%;
-    max-height: min(86vh, 640px);
-    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+    max-height: min(84vh, 600px);
+    gap: 10px;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
@@ -2263,11 +2267,11 @@ body {
   }
 
   .today-reduce-time-options {
-    padding: 8px;
+    padding: 7px;
   }
 
   .today-reduce-radio-row {
-    min-height: 44px;
+    min-height: 38px;
   }
 
   .today-reduce-time-inputs {

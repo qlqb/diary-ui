@@ -656,18 +656,12 @@ function TodayView() {
     if (!itemId) return;
     if (pendingItemIds.has(getPendingKey(itemId))) return;
 
-    const currentTitle = getItemTitle(reduceTarget).trim();
     const reducedTitle = reduceForm.reducedTitle.trim();
     const memo = reduceForm.memo.trim();
     const canChangeTime = hasFixedTime(reduceTarget);
 
     if (!reducedTitle) {
       setReduceError('작게 줄인 이름을 입력해 주세요.');
-      return;
-    }
-
-    if (reducedTitle === currentTitle) {
-      setReduceError('조금 더 작게 바꿔 주세요.');
       return;
     }
 
@@ -688,7 +682,7 @@ function TodayView() {
       }
 
       if (toMinutes(reduceForm.endTime) <= toMinutes(reduceForm.startTime)) {
-        setReduceError('끝나는 시간이 시작 시간보다 뒤여야 해요.');
+        setReduceError('끝나는 시간은 시작 시간보다 뒤로 설정해 주세요.');
         return;
       }
     }
@@ -1095,7 +1089,7 @@ function TodayView() {
           >
             <div className="today-reduce-header">
               <div>
-                <h2 id="today-reduce-title">📉 목표 작게 줄이기</h2>
+                <h2 id="today-reduce-title">목표 작게 줄이기</h2>
                 <p>포기하는 대신, 지금 할 수 있는 만큼만 가볍게 조정해 보세요.</p>
               </div>
             </div>
@@ -1106,7 +1100,7 @@ function TodayView() {
             </div>
 
             <div className="today-reduce-field">
-              <label htmlFor="today-reduce-title-input">📝 할 일 이름 줄이기</label>
+              <label htmlFor="today-reduce-title-input">할 일 이름 줄이기</label>
               <input
                 id="today-reduce-title-input"
                 type="text"
@@ -1115,11 +1109,11 @@ function TodayView() {
                 placeholder="예: 알고리즘 1문제 풀기"
                 autoFocus
               />
-              <p>💡 예시: '알고리즘 1문제 풀기', '개발 책 5페이지 읽기'</p>
+              <p>예시: '알고리즘 1문제 풀기', '개발 책 5페이지 읽기'</p>
             </div>
 
             <div className="today-reduce-time-section">
-              <div className="today-reduce-section-title">🕒 시간도 함께 줄이시겠어요? (선택)</div>
+              <div className="today-reduce-section-title">시간도 함께 줄이시겠어요? (선택)</div>
               <div className="today-reduce-current-time">기존 시간: {reduceExistingTime}</div>
 
               <div className="today-reduce-time-options">
@@ -1182,13 +1176,13 @@ function TodayView() {
             </div>
 
             <div className="today-reduce-field">
-              <label htmlFor="today-reduce-memo">💭 메모 (선택)</label>
+              <label htmlFor="today-reduce-memo">메모 (선택)</label>
               <textarea
                 id="today-reduce-memo"
                 value={reduceForm.memo}
                 onChange={(event) => setReduceForm((prev) => ({ ...prev, memo: event.target.value }))}
                 placeholder="줄이는 이유나 참고할 내용을 짧게 적어보세요."
-                rows="3"
+                rows="2"
               />
             </div>
 
@@ -1199,7 +1193,7 @@ function TodayView() {
                 취소
               </button>
               <button type="submit" className="btn-primary" disabled={isReduceSubmitting}>
-                {isReduceSubmitting ? '조정 중...' : '✨ 조정 완료'}
+                {isReduceSubmitting ? '조정 중...' : '조정 완료'}
               </button>
             </div>
           </form>
