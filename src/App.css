@@ -2042,6 +2042,14 @@ body {
   font-weight: 700;
 }
 
+.today-reduce-field p {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.today-reduce-field input[type="text"],
 .today-reduce-field textarea {
   width: 100%;
   padding: 10px 12px;
@@ -2057,7 +2065,105 @@ body {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+.today-reduce-field input[type="text"] {
+  min-height: 40px;
+}
+
+.today-reduce-field input[type="text"]:focus,
 .today-reduce-field textarea:focus {
+  border-color: #86efac;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
+}
+
+.today-reduce-time-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.today-reduce-section-title {
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.today-reduce-current-time {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.today-reduce-time-options {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border: 0.5px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.today-reduce-radio-row {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: 0.5px solid #e5e7eb;
+  border-radius: 8px;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.today-reduce-radio-row:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.today-reduce-radio-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: #16a34a;
+  flex-shrink: 0;
+}
+
+.today-reduce-radio-row.disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  background: #f9fafb;
+}
+
+.today-reduce-time-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 0 2px 25px;
+}
+
+.today-reduce-time-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.today-reduce-time-inputs input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0.5px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.today-reduce-time-inputs input:focus {
   border-color: #86efac;
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
 }
@@ -2154,6 +2260,19 @@ body {
   .today-reduce-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .today-reduce-time-options {
+    padding: 8px;
+  }
+
+  .today-reduce-radio-row {
+    min-height: 44px;
+  }
+
+  .today-reduce-time-inputs {
+    grid-template-columns: 1fr;
+    padding-left: 0;
   }
 
   .today-header-card {

@@ -343,7 +343,13 @@ function TodayView() {
   const [memoOpen, setMemoOpen] = useState(false);
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
   const [reduceTarget, setReduceTarget] = useState(null);
-  const [reduceForm, setReduceForm] = useState({ afterTitle: '', memo: '' });
+  const [reduceForm, setReduceForm] = useState({
+    reducedTitle: '',
+    memo: '',
+    timeMode: 'KEEP',
+    startTime: '',
+    endTime: '',
+  });
   const [reduceError, setReduceError] = useState('');
   const [selectedStart, setSelectedStart] = useState(null);
   const [selectedDuration, setSelectedDuration] = useState(60);
@@ -403,6 +409,13 @@ function TodayView() {
     return `${startTime} - ${endTime}`;
   };
 
+  const getDatePart = (value) => {
+    if (!value) return '';
+    const text = String(value);
+    const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match?.[1] ?? '';
+  };
+
   const formatLocalDate = (date) => {
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -419,6 +432,11 @@ function TodayView() {
   const toScheduleDateTime = (time) => {
     if (!time) return null;
     return `${today}T${time.slice(0, 5)}:00`;
+  };
+
+  const toLocalDateTime = (date, time) => {
+    if (!date || !time) return null;
+    return `${date}T${time.slice(0, 5)}:00`;
   };
 
   const applyTime = (start = selectedStart, duration = selectedDuration) => {
@@ -447,7 +465,15 @@ function TodayView() {
   const getItemStatus = (item) => item.status ?? 'PLANNED';
   const getItemStart = (item) => item.startTime ?? item.start_time;
   const getItemEnd = (item) => item.endTime ?? item.end_time;
+  const getItemBlockType = (item) => item.blockType ?? item.block_type;
+  const getItemBlockDate = (item) => {
+    const blockDate = item.blockDate ?? item.block_date ?? getDatePart(getItemStart(item));
+    return blockDate || today;
+  };
   const getPendingKey = (itemId) => String(itemId);
+  const hasFixedTime = (item) => {
+    return getItemBlockType(item) === 'TIME_FIXED' && Boolean(getItemStart(item) && getItemEnd(item));
+  };
 
   const setItemPending = (itemId, isPending) => {
     const pendingKey = getPendingKey(itemId);
@@ -596,15 +622,29 @@ function TodayView() {
 
   const handleReduce = (item) => {
     const currentTitle = getItemTitle(item);
+    const startTime = formatTime(getItemStart(item));
+    const endTime = formatTime(getItemEnd(item));
     setOpenActionMenuId(null);
     setReduceTarget(item);
-    setReduceForm({ afterTitle: currentTitle, memo: '' });
+    setReduceForm({
+      reducedTitle: currentTitle,
+      memo: '',
+      timeMode: 'KEEP',
+      startTime,
+      endTime,
+    });
     setReduceError('');
   };
 
   const closeReduceModal = () => {
     setReduceTarget(null);
-    setReduceForm({ afterTitle: '', memo: '' });
+    setReduceForm({
+      reducedTitle: '',
+      memo: '',
+      timeMode: 'KEEP',
+      startTime: '',
+      endTime: '',
+    });
     setReduceError('');
   };
 
@@ -617,16 +657,63 @@ function TodayView() {
     if (pendingItemIds.has(getPendingKey(itemId))) return;
 
     const currentTitle = getItemTitle(reduceTarget).trim();
-    const afterTitle = reduceForm.afterTitle.trim();
+    const reducedTitle = reduceForm.reducedTitle.trim();
     const memo = reduceForm.memo.trim();
+    const canChangeTime = hasFixedTime(reduceTarget);
 
-    if (!afterTitle) {
-      setReduceError('작게 줄인 버전을 입력해주세요.');
+    if (!reducedTitle) {
+      setReduceError('작게 줄인 이름을 입력해 주세요.');
       return;
     }
 
-    if (afterTitle === currentTitle) {
-      setReduceError('원래 항목과 다르게 줄여주세요.');
+    if (reducedTitle === currentTitle) {
+      setReduceError('조금 더 작게 바꿔 주세요.');
+      return;
+    }
+
+    if (reduceForm.timeMode === 'SHRINK' && !canChangeTime) {
+      setReduceError('시간이 정해진 항목만 시간 축소를 할 수 있어요.');
+      return;
+    }
+
+    if (reduceForm.timeMode === 'CLEAR' && !canChangeTime) {
+      setReduceError('정해진 시간이 있는 항목만 시간 해제를 할 수 있어요.');
+      return;
+    }
+
+    if (reduceForm.timeMode === 'SHRINK') {
+      if (!reduceForm.startTime || !reduceForm.endTime) {
+        setReduceError('시작 시간과 끝나는 시간을 입력해 주세요.');
+        return;
+      }
+
+      if (toMinutes(reduceForm.endTime) <= toMinutes(reduceForm.startTime)) {
+        setReduceError('끝나는 시간이 시작 시간보다 뒤여야 해요.');
+        return;
+      }
+    }
+
+    const payload = {
+      reducedTitle,
+      timeMode: reduceForm.timeMode,
+      memo: memo || null,
+    };
+
+    if (reduceForm.timeMode === 'SHRINK') {
+      const blockDate = getItemBlockDate(reduceTarget);
+      payload.blockType = 'TIME_FIXED';
+      payload.startTime = toLocalDateTime(blockDate, reduceForm.startTime);
+      payload.endTime = toLocalDateTime(blockDate, reduceForm.endTime);
+    }
+
+    if (reduceForm.timeMode === 'CLEAR') {
+      payload.blockType = 'TASK';
+      payload.startTime = null;
+      payload.endTime = null;
+    }
+
+    if (!payload.timeMode) {
+      setReduceError('시간 조정 방식을 선택해 주세요.');
       return;
     }
 
@@ -634,7 +721,7 @@ function TodayView() {
     setReduceError('');
     setError('');
     try {
-      await scheduleBlockAPI.reduce(itemId, afterTitle, memo || null);
+      await scheduleBlockAPI.reduce(itemId, payload);
       closeReduceModal();
       await fetchItems();
     } catch (e) {
@@ -732,6 +819,10 @@ function TodayView() {
   const timeLabel = formatTimeRange(form.startTime, form.endTime);
   const reduceTargetId = reduceTarget ? getItemId(reduceTarget) : null;
   const isReduceSubmitting = reduceTargetId ? pendingItemIds.has(getPendingKey(reduceTargetId)) : false;
+  const reduceTargetHasTime = reduceTarget ? hasFixedTime(reduceTarget) : false;
+  const reduceExistingTime = reduceTarget
+    ? formatTimeRange(getItemStart(reduceTarget), getItemEnd(reduceTarget)).replace(' - ', ' ~ ') || '정해지지 않음'
+    : '정해지지 않음';
 
   return (
     <div className="today-view">
@@ -1004,8 +1095,8 @@ function TodayView() {
           >
             <div className="today-reduce-header">
               <div>
-                <h2 id="today-reduce-title">작게 줄이기</h2>
-                <p>오늘 할 수 있는 더 작은 형태로 바꿔보세요.</p>
+                <h2 id="today-reduce-title">📉 목표 작게 줄이기</h2>
+                <p>포기하는 대신, 지금 할 수 있는 만큼만 가볍게 조정해 보세요.</p>
               </div>
             </div>
 
@@ -1015,19 +1106,83 @@ function TodayView() {
             </div>
 
             <div className="today-reduce-field">
-              <label htmlFor="today-reduce-after-title">작게 줄인 버전</label>
-              <textarea
-                id="today-reduce-after-title"
-                value={reduceForm.afterTitle}
-                onChange={(event) => setReduceForm((prev) => ({ ...prev, afterTitle: event.target.value }))}
-                placeholder="예: 자료구조 2시간 공부 → 연결 리스트 삽입 코드만 보기"
-                rows="3"
+              <label htmlFor="today-reduce-title-input">📝 할 일 이름 줄이기</label>
+              <input
+                id="today-reduce-title-input"
+                type="text"
+                value={reduceForm.reducedTitle}
+                onChange={(event) => setReduceForm((prev) => ({ ...prev, reducedTitle: event.target.value }))}
+                placeholder="예: 알고리즘 1문제 풀기"
                 autoFocus
               />
+              <p>💡 예시: '알고리즘 1문제 풀기', '개발 책 5페이지 읽기'</p>
+            </div>
+
+            <div className="today-reduce-time-section">
+              <div className="today-reduce-section-title">🕒 시간도 함께 줄이시겠어요? (선택)</div>
+              <div className="today-reduce-current-time">기존 시간: {reduceExistingTime}</div>
+
+              <div className="today-reduce-time-options">
+                <label className="today-reduce-radio-row">
+                  <input
+                    type="radio"
+                    name="today-reduce-time-mode"
+                    value="KEEP"
+                    checked={reduceForm.timeMode === 'KEEP'}
+                    onChange={() => setReduceForm((prev) => ({ ...prev, timeMode: 'KEEP' }))}
+                  />
+                  <span>그대로 유지</span>
+                </label>
+
+                <label className={`today-reduce-radio-row ${!reduceTargetHasTime ? 'disabled' : ''}`}>
+                  <input
+                    type="radio"
+                    name="today-reduce-time-mode"
+                    value="SHRINK"
+                    checked={reduceForm.timeMode === 'SHRINK'}
+                    onChange={() => setReduceForm((prev) => ({ ...prev, timeMode: 'SHRINK' }))}
+                    disabled={!reduceTargetHasTime}
+                  />
+                  <span>시간 축소</span>
+                </label>
+
+                {reduceForm.timeMode === 'SHRINK' && reduceTargetHasTime && (
+                  <div className="today-reduce-time-inputs">
+                    <label>
+                      <span>시작</span>
+                      <input
+                        type="time"
+                        value={reduceForm.startTime}
+                        onChange={(event) => setReduceForm((prev) => ({ ...prev, startTime: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>끝</span>
+                      <input
+                        type="time"
+                        value={reduceForm.endTime}
+                        onChange={(event) => setReduceForm((prev) => ({ ...prev, endTime: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <label className={`today-reduce-radio-row ${!reduceTargetHasTime ? 'disabled' : ''}`}>
+                  <input
+                    type="radio"
+                    name="today-reduce-time-mode"
+                    value="CLEAR"
+                    checked={reduceForm.timeMode === 'CLEAR'}
+                    onChange={() => setReduceForm((prev) => ({ ...prev, timeMode: 'CLEAR' }))}
+                    disabled={!reduceTargetHasTime}
+                  />
+                  <span>시간 해제 (오늘 중 언제든 할 수 있게 바꾸기)</span>
+                </label>
+              </div>
             </div>
 
             <div className="today-reduce-field">
-              <label htmlFor="today-reduce-memo">메모</label>
+              <label htmlFor="today-reduce-memo">💭 메모 (선택)</label>
               <textarea
                 id="today-reduce-memo"
                 value={reduceForm.memo}
@@ -1044,7 +1199,7 @@ function TodayView() {
                 취소
               </button>
               <button type="submit" className="btn-primary" disabled={isReduceSubmitting}>
-                {isReduceSubmitting ? '적용 중...' : '적용'}
+                {isReduceSubmitting ? '조정 중...' : '✨ 조정 완료'}
               </button>
             </div>
           </form>

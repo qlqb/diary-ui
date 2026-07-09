@@ -383,10 +383,10 @@ export const scheduleBlockAPI = {
     /**
      * 작게 줄이기
      */
-    reduce: (scheduleBlockId, afterTitle, memo = null) => {
+    reduce: (scheduleBlockId, payload) => {
         return request(`/schedule-blocks/${scheduleBlockId}/reduce`, {
             method: 'POST',
-            body: JSON.stringify({ afterTitle, memo }),
+            body: JSON.stringify(payload),
         });
     },
 
