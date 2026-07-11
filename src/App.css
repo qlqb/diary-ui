@@ -5315,7 +5315,7 @@ body {
 }
 
 .add-piece-direct-end-row .add-piece-time-input-wrap {
-  grid-column: 3;
+  grid-column: 2;
   justify-self: start;
 }
 
@@ -5434,4 +5434,40 @@ body {
   font-style: normal;
   font-weight: 600;
   color: #374151;
+}
+
+/* 시간 정하기 헤더: 토글 버튼 + 시간 배치 해제를 한 줄에 배치 */
+.add-piece-time-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.add-piece-time-header .add-piece-collapse-toggle {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.add-piece-time-header .add-piece-time-clear {
+  flex-shrink: 0;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.add-piece-time-header .add-piece-time-clear:hover {
+  text-decoration: underline;
+}
+
+.add-piece-endmode-toggle button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.add-piece-endmode-toggle button:disabled:hover {
+  background: inherit;
 }

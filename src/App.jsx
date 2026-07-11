@@ -721,7 +721,7 @@ function TodayExecutionView({ onBack }) {
     startTime: null,
     endTime: null,
     scope: 'TODAY',
-    estimatedMinutes: 30,
+    estimatedMinutes: null,
     category: null,
     intensity: null,
     memo: '',
@@ -882,7 +882,7 @@ function TodayExecutionView({ onBack }) {
     return `${date}T${time.slice(0, 5)}:00`;
   };
 
-  const applyTime = (start = selectedStart, duration = form.estimatedMinutes || 30) => {
+  const applyTime = (start = selectedStart, duration = form.estimatedMinutes) => {
     if (!start || !duration) return;
     const end = toTime(toMinutes(start) + duration);
     setForm((prev) => ({ ...prev, startTime: start, endTime: end }));
@@ -966,8 +966,8 @@ function TodayExecutionView({ onBack }) {
 
   const handleStartSelect = (start) => {
     setSelectedStart(start);
-    if (endMode === 'DURATION') {
-      applyTime(start, form.estimatedMinutes || 30);
+    if (endMode === 'DURATION' && form.estimatedMinutes) {
+      applyTime(start, form.estimatedMinutes);
     } else {
       setForm((prev) => {
         const next = { ...prev, startTime: start || null };
@@ -979,17 +979,27 @@ function TodayExecutionView({ onBack }) {
     }
   };
 
-  // 예상 시간 칩/직접입력에서 호출. 시간 정하기가 소요 시간 모드로 열려 있으면
-  // 종료 시간도 즉시 다시 계산해 예상 시간과 항상 같은 값을 쓰게 한다.
+  // 예상 시간 칩/직접입력/'정하지 않음'에서 호출.
+  // 시간 정하기가 예상 시간 사용 모드로 열려 있으면 종료 시간도 함께 갱신해
+  // 예상 시간과 항상 같은 값을 쓰게 한다. null(정하지 않음)을 고르면
+  // 자동 계산 근거가 사라지므로 종료 시간 직접 선택 모드로 전환한다.
   const handleEstimatedMinutesChange = (minutes) => {
     setForm((prev) => {
       const next = { ...prev, estimatedMinutes: minutes };
-      if (endMode === 'DURATION' && selectedStart && minutes) {
-        next.startTime = selectedStart;
-        next.endTime = toTime(toMinutes(selectedStart) + minutes);
+      if (endMode === 'DURATION' && selectedStart) {
+        if (minutes) {
+          next.startTime = selectedStart;
+          next.endTime = toTime(toMinutes(selectedStart) + minutes);
+        } else {
+          next.endTime = null;
+        }
       }
       return next;
     });
+
+    if (!minutes && endMode === 'DURATION' && timeSectionOpen) {
+      setEndMode('DIRECT');
+    }
   };
 
   const handleEndTimeSelect = (end) => {
@@ -1003,12 +1013,48 @@ function TodayExecutionView({ onBack }) {
   };
 
   const handleEndModeChange = (mode) => {
+    if (mode === 'DURATION' && !form.estimatedMinutes) return;
     setEndMode(mode);
     if (mode === 'DURATION') {
-      if (selectedStart) applyTime(selectedStart, form.estimatedMinutes || 30);
+      if (selectedStart) applyTime(selectedStart, form.estimatedMinutes);
     } else if (!form.startTime && selectedStart) {
       setForm((prev) => ({ ...prev, startTime: selectedStart }));
     }
+  };
+
+  /*
+   * scope 변경 시 estimatedMinutes/시간 상태 정리 규칙.
+   * - TODAY/WEEK: 예상 시간은 선택사항 — 값이 있어도 없어도 그대로 둔다(강제 기본값 없음).
+   * - MONTH/LATER/PERIOD/YEAR: 방향/정리 단위라 예상 시간·시간 배치를 모두 비운다.
+   *   (시간 정하기는 TODAY에서만 열 수 있지만, TODAY에서 값을 만든 뒤 바로
+   *   이 scope들로 넘어오는 경우를 대비해 내부 값도 함께 정리한다.)
+   */
+  const handleScopeChange = (nextScope) => {
+    setForm((prev) => {
+      if (prev.scope === nextScope) return prev;
+
+      let estimatedMinutes = prev.estimatedMinutes;
+      let startTime = prev.startTime;
+      let endTime = prev.endTime;
+
+      if (nextScope !== 'TODAY' && nextScope !== 'WEEK') {
+        estimatedMinutes = null;
+        startTime = null;
+        endTime = null;
+      }
+
+      return { ...prev, scope: nextScope, estimatedMinutes, startTime, endTime };
+    });
+
+    if (nextScope !== 'TODAY' && nextScope !== 'WEEK') {
+      setSelectedStart(null);
+      setEndMode('DURATION');
+      setTimeSectionOpen(false);
+    }
+
+    setEstimatedCustomOpen(false);
+    setEstimatedSectionOpen(false);
+    setScopeMenuOpen(false);
   };
 
   const createBlock = async ({ title, priority, startTime = null, endTime = null, memo = null }) => {
@@ -1697,10 +1743,7 @@ function TodayExecutionView({ onBack }) {
                                     key={scopeValue}
                                     role="menuitem"
                                     className={form.scope === scopeValue ? 'active' : ''}
-                                    onClick={() => {
-                                      setForm((prev) => ({ ...prev, scope: scopeValue }));
-                                      setScopeMenuOpen(false);
-                                    }}
+                                    onClick={() => handleScopeChange(scopeValue)}
                                 >
                                   {SCOPE_LABELS[scopeValue]}
                                   {form.scope === scopeValue && <span className="scope-check">✓</span>}
@@ -1724,10 +1767,7 @@ function TodayExecutionView({ onBack }) {
                                     key={scopeValue}
                                     role="menuitem"
                                     className={`scope-dropdown-sub ${form.scope === scopeValue ? 'active' : ''}`}
-                                    onClick={() => {
-                                      setForm((prev) => ({ ...prev, scope: scopeValue }));
-                                      setScopeMenuOpen(false);
-                                    }}
+                                    onClick={() => handleScopeChange(scopeValue)}
                                 >
                                   {SCOPE_LABELS[scopeValue]}
                                   {form.scope === scopeValue && <span className="scope-check">✓</span>}
@@ -1758,6 +1798,13 @@ function TodayExecutionView({ onBack }) {
                           <>
                             <label>예상 시간 {isWeekScope && <span className="add-piece-optional-tag">선택</span>}</label>
                             <div className="add-piece-chip-row">
+                              <button
+                                  type="button"
+                                  className={`add-piece-chip ${!estimatedCustomOpen && !form.estimatedMinutes ? 'active' : ''}`}
+                                  onClick={() => { handleEstimatedMinutesChange(null); setEstimatedCustomOpen(false); }}
+                              >
+                                정하지 않음
+                              </button>
                               {estimatedMinuteOptions.map((minutes) => (
                                   <button
                                       type="button"
@@ -1868,31 +1915,46 @@ function TodayExecutionView({ onBack }) {
 
                 {showTimeSection && (
                     <>
-                      <button
-                          type="button"
-                          className="add-piece-collapse-toggle"
-                          onClick={() => {
-                            setTimeSectionOpen((open) => {
-                              const nextOpen = !open;
-                              if (nextOpen && !selectedStart) {
-                                const defaultStart = '09:00';
-                                const minutes = form.estimatedMinutes || 30;
-                                setSelectedStart(defaultStart);
-                                setEndMode('DURATION');
-                                setForm((prev) => ({
-                                  ...prev,
-                                  estimatedMinutes: minutes,
-                                  startTime: defaultStart,
-                                  endTime: toTime(toMinutes(defaultStart) + minutes),
-                                }));
-                              }
-                              return nextOpen;
-                            });
-                          }}
-                          aria-expanded={timeSectionOpen}
-                      >
-                        {timeSectionOpen ? <ChevronUp size={14} /> : <Plus size={14} />} 시간 정하기
-                      </button>
+                      <div className="add-piece-time-header">
+                        <button
+                            type="button"
+                            className="add-piece-collapse-toggle"
+                            onClick={() => {
+                              setTimeSectionOpen((open) => {
+                                const nextOpen = !open;
+                                if (nextOpen && !selectedStart) {
+                                  const defaultStart = '09:00';
+                                  setSelectedStart(defaultStart);
+                                  if (form.estimatedMinutes) {
+                                    setEndMode('DURATION');
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      startTime: defaultStart,
+                                      endTime: toTime(toMinutes(defaultStart) + prev.estimatedMinutes),
+                                    }));
+                                  } else {
+                                    setEndMode('DIRECT');
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      startTime: defaultStart,
+                                      endTime: null,
+                                    }));
+                                  }
+                                }
+                                return nextOpen;
+                              });
+                            }}
+                            aria-expanded={timeSectionOpen}
+                        >
+                          {timeSectionOpen ? <ChevronUp size={14} /> : <Plus size={14} />} 시간 정하기
+                        </button>
+
+                        {timeSectionOpen && timeLabel && (
+                            <button type="button" className="add-piece-time-clear" onClick={clearTime}>
+                              시간 배치 해제
+                            </button>
+                        )}
+                      </div>
 
                       {timeSectionOpen && (
                           <div className="add-piece-time-section">
@@ -1904,6 +1966,7 @@ function TodayExecutionView({ onBack }) {
                                     id="add-piece-start-time"
                                     className="input add-piece-time-input"
                                     type="time"
+                                    lang="en-GB"
                                     value={selectedStart ?? ''}
                                     onChange={(event) => handleStartSelect(event.target.value)}
                                 />
@@ -1913,8 +1976,10 @@ function TodayExecutionView({ onBack }) {
                                     type="button"
                                     className={endMode === 'DURATION' ? 'active' : ''}
                                     onClick={() => handleEndModeChange('DURATION')}
+                                    disabled={!form.estimatedMinutes}
+                                    title={!form.estimatedMinutes ? '위에서 예상 시간을 먼저 선택하세요' : undefined}
                                 >
-                                  소요 시간으로 계산
+                                  예상 시간 사용
                                 </button>
                                 <button
                                     type="button"
@@ -1926,10 +1991,9 @@ function TodayExecutionView({ onBack }) {
                               </div>
                             </div>
 
-                            {endMode === 'DURATION' ? (
+                            {endMode === 'DURATION' && form.estimatedMinutes ? (
                                 <p className="add-piece-duration-note">
-                                  예상 시간 <strong>{formatMinutesLabel(form.estimatedMinutes) || '30분'}</strong> 기준으로 종료 시간을 자동 계산해요.
-                                  {' '}예상 시간을 바꾸려면 위 <em>예상 시간</em>에서 다시 선택하세요.
+                                  예상 시간 <strong>{formatMinutesLabel(form.estimatedMinutes)}</strong>으로 배치해요.
                                 </p>
                             ) : (
                                 <div className="add-piece-time-row add-piece-direct-end-row">
@@ -1940,6 +2004,7 @@ function TodayExecutionView({ onBack }) {
                                         id="add-piece-end-time"
                                         className="input add-piece-time-input"
                                         type="time"
+                                        lang="en-GB"
                                         value={formatTime(form.endTime) || ''}
                                         onChange={(event) => handleEndTimeSelect(event.target.value)}
                                     />
@@ -1952,11 +2017,6 @@ function TodayExecutionView({ onBack }) {
                               <span className="add-piece-time-preview-value">
                         {timeLabel || '시간을 선택하면 여기 표시돼요'}
                       </span>
-                              {timeLabel && (
-                                  <button type="button" className="add-piece-time-clear" onClick={clearTime}>
-                                    시간 해제
-                                  </button>
-                              )}
                             </div>
                           </div>
                       )}
