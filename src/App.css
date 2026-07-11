@@ -5412,3 +5412,26 @@ body {
     padding: 12px 16px 18px;
   }
 }
+
+/* 시간 정하기: 소요 시간 모드는 예상 시간을 그대로 재사용한다는 안내 문구만 표시 */
+.add-piece-duration-note {
+  margin: 0;
+  padding: 9px 11px;
+  background: #f9fafb;
+  border: 0.5px dashed #d1d5db;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.add-piece-duration-note strong {
+  color: #4f46e5;
+  font-weight: 700;
+}
+
+.add-piece-duration-note em {
+  font-style: normal;
+  font-weight: 600;
+  color: #374151;
+}

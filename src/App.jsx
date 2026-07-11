@@ -721,7 +721,7 @@ function TodayExecutionView({ onBack }) {
     startTime: null,
     endTime: null,
     scope: 'TODAY',
-    estimatedMinutes: null,
+    estimatedMinutes: 30,
     category: null,
     intensity: null,
     memo: '',
@@ -754,7 +754,6 @@ function TodayExecutionView({ onBack }) {
   });
   const [reduceError, setReduceError] = useState('');
   const [selectedStart, setSelectedStart] = useState(null);
-  const [selectedDuration, setSelectedDuration] = useState(30);
   const [endMode, setEndMode] = useState('DURATION');
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
 
@@ -811,14 +810,14 @@ function TodayExecutionView({ onBack }) {
 
   const estimatedMinuteOptions = [10, 30, 60];
 
-  const durationOptions = [
-    { label: '15분', value: 15 },
-    { label: '30분', value: 30 },
-    { label: '45분', value: 45 },
-    { label: '1시간', value: 60 },
-    { label: '1시간 30분', value: 90 },
-    { label: '2시간', value: 120 },
-  ];
+  // 예상 시간(estimatedMinutes)을 시간 정하기 미리보기/안내 문구에서 재사용하기 위한 포맷터
+  const formatMinutesLabel = (minutes) => {
+    if (!minutes) return '';
+    if (minutes < 60) return `${minutes}분`;
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? `${hours}시간 ${rest}분` : `${hours}시간`;
+  };
 
   const formatDateKo = (dateString) => {
     const date = new Date(`${dateString}T00:00:00`);
@@ -883,7 +882,7 @@ function TodayExecutionView({ onBack }) {
     return `${date}T${time.slice(0, 5)}:00`;
   };
 
-  const applyTime = (start = selectedStart, duration = selectedDuration) => {
+  const applyTime = (start = selectedStart, duration = form.estimatedMinutes || 30) => {
     if (!start || !duration) return;
     const end = toTime(toMinutes(start) + duration);
     setForm((prev) => ({ ...prev, startTime: start, endTime: end }));
@@ -897,7 +896,6 @@ function TodayExecutionView({ onBack }) {
   const resetForm = () => {
     setForm(emptyForm);
     setSelectedStart(null);
-    setSelectedDuration(30);
     setEndMode('DURATION');
     setAddModalOpen(false);
     setTimeSectionOpen(false);
@@ -969,25 +967,45 @@ function TodayExecutionView({ onBack }) {
   const handleStartSelect = (start) => {
     setSelectedStart(start);
     if (endMode === 'DURATION') {
-      applyTime(start, selectedDuration);
+      applyTime(start, form.estimatedMinutes || 30);
     } else {
-      setForm((prev) => ({ ...prev, startTime: start || null }));
+      setForm((prev) => {
+        const next = { ...prev, startTime: start || null };
+        if (start && prev.endTime && toMinutes(prev.endTime) > toMinutes(start)) {
+          next.estimatedMinutes = toMinutes(prev.endTime) - toMinutes(start);
+        }
+        return next;
+      });
     }
   };
 
-  const handleDurationSelect = (duration) => {
-    setSelectedDuration(duration);
-    if (selectedStart) applyTime(selectedStart, duration);
+  // 예상 시간 칩/직접입력에서 호출. 시간 정하기가 소요 시간 모드로 열려 있으면
+  // 종료 시간도 즉시 다시 계산해 예상 시간과 항상 같은 값을 쓰게 한다.
+  const handleEstimatedMinutesChange = (minutes) => {
+    setForm((prev) => {
+      const next = { ...prev, estimatedMinutes: minutes };
+      if (endMode === 'DURATION' && selectedStart && minutes) {
+        next.startTime = selectedStart;
+        next.endTime = toTime(toMinutes(selectedStart) + minutes);
+      }
+      return next;
+    });
   };
 
   const handleEndTimeSelect = (end) => {
-    setForm((prev) => ({ ...prev, endTime: end || null }));
+    setForm((prev) => {
+      const next = { ...prev, endTime: end || null };
+      if (prev.startTime && end && toMinutes(end) > toMinutes(prev.startTime)) {
+        next.estimatedMinutes = toMinutes(end) - toMinutes(prev.startTime);
+      }
+      return next;
+    });
   };
 
   const handleEndModeChange = (mode) => {
     setEndMode(mode);
     if (mode === 'DURATION') {
-      if (selectedStart) applyTime(selectedStart, selectedDuration);
+      if (selectedStart) applyTime(selectedStart, form.estimatedMinutes || 30);
     } else if (!form.startTime && selectedStart) {
       setForm((prev) => ({ ...prev, startTime: selectedStart }));
     }
@@ -1745,7 +1763,7 @@ function TodayExecutionView({ onBack }) {
                                       type="button"
                                       key={minutes}
                                       className={`add-piece-chip ${!estimatedCustomOpen && form.estimatedMinutes === minutes ? 'active' : ''}`}
-                                      onClick={() => { setForm((prev) => ({ ...prev, estimatedMinutes: minutes })); setEstimatedCustomOpen(false); }}
+                                      onClick={() => { handleEstimatedMinutesChange(minutes); setEstimatedCustomOpen(false); }}
                                   >
                                     {minutes < 60 ? `${minutes}분` : '1시간'}
                                   </button>
@@ -1765,7 +1783,7 @@ function TodayExecutionView({ onBack }) {
                                     min="1"
                                     placeholder="분 단위로 입력"
                                     value={form.estimatedMinutes ?? ''}
-                                    onChange={(event) => setForm((prev) => ({ ...prev, estimatedMinutes: event.target.value ? Number(event.target.value) : null }))}
+                                    onChange={(event) => handleEstimatedMinutesChange(event.target.value ? Number(event.target.value) : null)}
                                 />
                             )}
                           </>
@@ -1858,12 +1876,14 @@ function TodayExecutionView({ onBack }) {
                               const nextOpen = !open;
                               if (nextOpen && !selectedStart) {
                                 const defaultStart = '09:00';
+                                const minutes = form.estimatedMinutes || 30;
                                 setSelectedStart(defaultStart);
                                 setEndMode('DURATION');
                                 setForm((prev) => ({
                                   ...prev,
+                                  estimatedMinutes: minutes,
                                   startTime: defaultStart,
-                                  endTime: toTime(toMinutes(defaultStart) + selectedDuration),
+                                  endTime: toTime(toMinutes(defaultStart) + minutes),
                                 }));
                               }
                               return nextOpen;
@@ -1907,19 +1927,10 @@ function TodayExecutionView({ onBack }) {
                             </div>
 
                             {endMode === 'DURATION' ? (
-                                <div className="add-piece-time-row add-piece-duration-row">
-                                  <label htmlFor="add-piece-duration">소요 시간</label>
-                                  <select
-                                      id="add-piece-duration"
-                                      className="add-piece-duration-select"
-                                      value={selectedDuration}
-                                      onChange={(event) => handleDurationSelect(Number(event.target.value))}
-                                  >
-                                    {durationOptions.map((option) => (
-                                        <option key={option.value} value={option.value}>{option.label}</option>
-                                    ))}
-                                  </select>
-                                </div>
+                                <p className="add-piece-duration-note">
+                                  예상 시간 <strong>{formatMinutesLabel(form.estimatedMinutes) || '30분'}</strong> 기준으로 종료 시간을 자동 계산해요.
+                                  {' '}예상 시간을 바꾸려면 위 <em>예상 시간</em>에서 다시 선택하세요.
+                                </p>
                             ) : (
                                 <div className="add-piece-time-row add-piece-direct-end-row">
                                   <label htmlFor="add-piece-end-time">종료 시간</label>
