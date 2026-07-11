@@ -408,4 +408,13 @@ export const scheduleBlockAPI = {
             method: 'DELETE',
         });
     },
+
+    /**
+     * 지난 계획 정리(pending) 조회.
+     * date는 pending 판단 기준 운영일이며, 이전 block_date의 PLANNED 블록을 반환한다.
+     */
+    getPending: (date) => {
+        const params = new URLSearchParams({ date });
+        return request(`/schedule-blocks/pending?${params.toString()}`);
+    },
 };
