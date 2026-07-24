@@ -31,12 +31,14 @@ import {
   Timer,
   RotateCcw,
   PauseCircle,
+  Zap,
 } from 'lucide-react';
 
 import { authAPI, diaryAPI, scheduleBlockAPI } from './api/api';
 import DiaryListView from './DiaryListView';
 import DiaryEditorView from './DiaryEditorView';
 import StatisticsView from './StatisticsView';
+import TimetableView from './TimetableView';
 
 /*
  * 시간표 도메인 API가 생기기 전까지 쓰는 목업 데이터.
@@ -159,7 +161,7 @@ function AuthView({ mode, onAuth, onSwitch }) {
         <div className="auth-card">
           <div className="auth-logo">
             <div className="auth-logo-icon"><Sparkles size={18} /></div>
-            <h1>diary-app</h1>
+            <h1>오늘조각</h1>
           </div>
           <p className="subtitle">매일의 시간을 기록해보세요</p>
 
@@ -237,6 +239,7 @@ function AuthView({ mode, onAuth, onSwitch }) {
 
 function MainShell({ user, onLogout }) {
   const [currentMenu, setCurrentMenu] = useState('today');
+  const [collapsed, setCollapsed] = useState(false);
 
   const menuItems = [
     { key: 'today', label: '오늘', icon: CalendarCheck2 },
@@ -254,10 +257,18 @@ function MainShell({ user, onLogout }) {
 
   return (
       <div className="shell">
-        <aside className="sidebar">
+        <aside className={`sidebar ${collapsed ? 'is-collapsed' : ''}`}>
           <div className="sidebar-logo">
             <div className="sidebar-logo-icon"><Sparkles size={20} /></div>
-            <span>diary-app</span>
+            <span>오늘조각</span>
+            <button
+                type="button"
+                className="sidebar-collapse-btn"
+                onClick={() => setCollapsed((c) => !c)}
+                aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
+            >
+              {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+            </button>
           </div>
 
           <nav className="sidebar-menu">
@@ -269,6 +280,7 @@ function MainShell({ user, onLogout }) {
                       key={menuItem.key}
                       className={`sidebar-item ${currentMenu === menuItem.key ? 'active' : ''}`}
                       onClick={() => setCurrentMenu(menuItem.key)}
+                      title={collapsed ? menuItem.label : undefined}
                   >
                     <MenuIcon size={17} />
                     <span>{menuItem.label}</span>
@@ -278,19 +290,31 @@ function MainShell({ user, onLogout }) {
           </nav>
 
           <div className="sidebar-bottom">
+            <button
+                type="button"
+                className="sidebar-quick-btn"
+                onClick={() => window.alert('Quick 추가 기능은 준비 중이에요.')}
+                title={collapsed ? 'Quick +' : undefined}
+            >
+              <Zap size={14} /> <span>Quick +</span>
+            </button>
+
             <div className="sidebar-user">
               <div className="sidebar-avatar">{nickname[0].toUpperCase()}</div>
-              <span>{nickname}님</span>
+              <span className="sidebar-user-name">{nickname}님</span>
+              {!collapsed && <ChevronDown size={14} className="sidebar-user-chevron" />}
             </div>
+
             <button
                 type="button"
                 className={`sidebar-item ${currentMenu === 'settings' ? 'active' : ''}`}
                 onClick={() => setCurrentMenu('settings')}
+                title={collapsed ? '설정' : undefined}
             >
               <Settings size={17} />
               <span>설정</span>
             </button>
-            <button type="button" className="sidebar-item" onClick={onLogout}>
+            <button type="button" className="sidebar-item" onClick={onLogout} title={collapsed ? '로그아웃' : undefined}>
               <LogOut size={17} />
               <span>로그아웃</span>
             </button>
@@ -302,13 +326,7 @@ function MainShell({ user, onLogout }) {
           {currentMenu === 'overview' && <OverviewView onGoToday={() => setCurrentMenu('today')} />}
           {currentMenu === 'diary' && <DiarySection />}
           {currentMenu === 'statistics' && <StatisticsView />}
-          {currentMenu === 'timetable' && (
-              <PlaceholderView
-                  icon={<CalendarDays size={30} />}
-                  title="시간표"
-                  desc="정규 수업 시간을 등록하고 오늘 화면과 연결할 공간이에요. 아직 준비 중입니다."
-              />
-          )}
+          {currentMenu === 'timetable' && <TimetableView onGoToday={() => setCurrentMenu('today')} />}
           {currentMenu === 'subjects' && (
               <PlaceholderView
                   icon={<BookOpen size={30} />}
