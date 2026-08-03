@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 
 import {
@@ -34,11 +34,19 @@ import {
   Zap,
 } from 'lucide-react';
 
-import { authAPI, diaryAPI, scheduleBlockAPI } from './api/api';
+import { authAPI, diaryAPI, scheduleBlockAPI, executionItemAPI } from './api/api';
 import DiaryListView from './DiaryListView';
 import DiaryEditorView from './DiaryEditorView';
 import StatisticsView from './StatisticsView';
 import TimetableView from './TimetableView';
+
+/* v6.1 4개 탭. 모두 같은 ExecutionItem 원본을 다르게 투영한다. */
+import TodayView from './views/TodayView.jsx';
+import PlanView from './views/PlanView.jsx';
+import ExecutionView from './views/ExecutionView.jsx';
+import RecordView from './views/RecordView.jsx';
+import AiPanelShell from './components/AiPanelShell.jsx';
+import { MOCK_EXECUTION_ITEMS } from './mock/executionMock.js';
 
 /*
  * 시간표 도메인 API가 생기기 전까지 쓰는 목업 데이터.
@@ -238,22 +246,78 @@ function AuthView({ mode, onAuth, onSwitch }) {
 /* ===================== 사이드바 셸 ===================== */
 
 function MainShell({ user, onLogout }) {
-  const [currentMenu, setCurrentMenu] = useState('today');
+  /*
+   * v6.1 최상위 탭은 4개다. 기능 목록이 아니라 사용자가 지금 하려는 일과
+   * 데이터 상태를 함께 보여준다.
+   *
+   * 오늘·계획·실행·기록은 각자 데이터를 소유하지 않는다.
+   * 아래 executionItems 하나를 서로 다르게 투영할 뿐이다.
+   *
+   * 기존 화면(한눈에·과목·공부계획·루틴·돌아보기·통계)은 코드를 지우지 않고
+   * 진입점만 끊었다. 시간표는 실행 탭의 내부 보기로 옮겼다.
+   */
+  const [currentTab, setCurrentTab] = useState('today');
   const [collapsed, setCollapsed] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [executionItems] = useState(MOCK_EXECUTION_ITEMS);
 
-  const menuItems = [
+  /*
+   * 오늘 탭만 execution_items 실제 API로 조회한다 (v6.1 §1 확정 결정).
+   * 계획/실행/기록 탭은 이번 범위에서 계속 executionItems(mock)를 쓴다.
+   */
+  const todayDate = executionItemAPI.getTodayString();
+  const [todayItems, setTodayItems] = useState([]);
+  const [todayLoading, setTodayLoading] = useState(true);
+  const [todayError, setTodayError] = useState(null);
+
+  const loadTodayItems = useCallback(async () => {
+    setTodayLoading(true);
+    setTodayError(null);
+    try {
+      const data = await executionItemAPI.getByDate(todayDate);
+      setTodayItems(data);
+    } catch (err) {
+      setTodayError(err.message || '오늘 조각을 불러오지 못했습니다.');
+    } finally {
+      setTodayLoading(false);
+    }
+  }, [todayDate]);
+
+  useEffect(() => {
+    loadTodayItems();
+  }, [loadTodayItems]);
+
+  const tabs = [
     { key: 'today', label: '오늘', icon: CalendarCheck2 },
-    { key: 'overview', label: '한눈에', icon: LayoutGrid },
-    { key: 'timetable', label: '시간표', icon: CalendarDays },
-    { key: 'subjects', label: '과목', icon: BookOpen },
-    { key: 'plan', label: '공부계획', icon: ClipboardList },
-    { key: 'routine', label: '루틴', icon: Repeat },
-    { key: 'diary', label: '기록', icon: NotebookPen },
-    { key: 'review', label: '돌아보기', icon: History },
-    { key: 'statistics', label: '통계', icon: BarChart3 },
+    { key: 'plan', label: '계획', icon: ClipboardList },
+    { key: 'execution', label: '실행', icon: CalendarDays },
+    { key: 'record', label: '기록', icon: NotebookPen },
   ];
 
   const nickname = user?.nickname || user?.name || user?.email?.split('@')[0] || '사용자';
+
+  const contextLabel = {
+    today: '오늘 날짜의 실행 조각',
+    plan: '검토 중인 계획 초안',
+    execution: '진행 중인 계획 전체',
+    record: '최근 확정된 기록',
+  }[currentTab];
+
+  /* 결과 기록은 오늘 화면에서만 일어난다. 실행 탭에는 이 핸들러를 넘기지 않는다. */
+  const handleRecordResult = (item) => {
+    setAiPanelOpen(true);
+    console.info('[stub] 결과 기록 대상:', item.executionItemId, item.title);
+  };
+
+  const handleOpenDetail = (item) => {
+    console.info('[stub] 상세 열기:', item.executionItemId ?? item.planId);
+  };
+
+  /* 실행 탭에서 오늘 항목의 결과를 남기려 하면 오늘 화면으로 보낸다. */
+  const handleGoToday = (item) => {
+    setCurrentTab('today');
+    console.info('[stub] 오늘로 이동:', item.executionItemId);
+  };
 
   return (
       <div className="shell">
@@ -272,28 +336,33 @@ function MainShell({ user, onLogout }) {
           </div>
 
           <nav className="sidebar-menu">
-            {menuItems.map((menuItem) => {
-              const MenuIcon = menuItem.icon;
+            {tabs.map((tab) => {
+              const TabIcon = tab.icon;
               return (
                   <button
                       type="button"
-                      key={menuItem.key}
-                      className={`sidebar-item ${currentMenu === menuItem.key ? 'active' : ''}`}
-                      onClick={() => setCurrentMenu(menuItem.key)}
-                      title={collapsed ? menuItem.label : undefined}
+                      key={tab.key}
+                      className={`sidebar-item ${currentTab === tab.key ? 'active' : ''}`}
+                      onClick={() => setCurrentTab(tab.key)}
+                      title={collapsed ? tab.label : undefined}
                   >
-                    <MenuIcon size={17} />
-                    <span>{menuItem.label}</span>
+                    <TabIcon size={17} />
+                    <span>{tab.label}</span>
                   </button>
               );
             })}
           </nav>
 
           <div className="sidebar-bottom">
+            {/*
+              * Quick + 는 별도 기능이 아니다(v6.1 §6).
+              * 우측 AI 패널을 여는 축약 진입점이며, 입력 후에는 동일한
+              * 상담·Proposal 흐름을 탄다. Quick 전용 API·분류·저장을 만들지 않는다.
+              */}
             <button
                 type="button"
                 className="sidebar-quick-btn"
-                onClick={() => window.alert('Quick 추가 기능은 준비 중이에요.')}
+                onClick={() => setAiPanelOpen(true)}
                 title={collapsed ? 'Quick +' : undefined}
             >
               <Zap size={14} /> <span>Quick +</span>
@@ -305,15 +374,6 @@ function MainShell({ user, onLogout }) {
               {!collapsed && <ChevronDown size={14} className="sidebar-user-chevron" />}
             </div>
 
-            <button
-                type="button"
-                className={`sidebar-item ${currentMenu === 'settings' ? 'active' : ''}`}
-                onClick={() => setCurrentMenu('settings')}
-                title={collapsed ? '설정' : undefined}
-            >
-              <Settings size={17} />
-              <span>설정</span>
-            </button>
             <button type="button" className="sidebar-item" onClick={onLogout} title={collapsed ? '로그아웃' : undefined}>
               <LogOut size={17} />
               <span>로그아웃</span>
@@ -322,47 +382,35 @@ function MainShell({ user, onLogout }) {
         </aside>
 
         <main className="shell-content">
-          {currentMenu === 'today' && <TodayView />}
-          {currentMenu === 'overview' && <OverviewView onGoToday={() => setCurrentMenu('today')} />}
-          {currentMenu === 'diary' && <DiarySection />}
-          {currentMenu === 'statistics' && <StatisticsView />}
-          {currentMenu === 'timetable' && <TimetableView onGoToday={() => setCurrentMenu('today')} />}
-          {currentMenu === 'subjects' && (
-              <PlaceholderView
-                  icon={<BookOpen size={30} />}
-                  title="과목"
-                  desc="과목별 진도와 자료를 관리할 공간이에요. 아직 준비 중입니다."
+          {currentTab === 'today' && (
+              <TodayView
+                  items={todayItems}
+                  loading={todayLoading}
+                  error={todayError}
+                  onRecordResult={handleRecordResult}
+                  onOpenDetail={handleOpenDetail}
+                  onRefresh={loadTodayItems}
               />
           )}
-          {currentMenu === 'plan' && (
-              <PlaceholderView
-                  icon={<ClipboardList size={30} />}
-                  title="공부계획"
-                  desc="이번 주·이번 달의 큰 방향을 담을 공간이에요. 아직 준비 중입니다."
+          {currentTab === 'plan' && <PlanView onOpenPlan={handleOpenDetail} />}
+          {currentTab === 'execution' && (
+              <ExecutionView
+                  items={executionItems}
+                  /* onRecordResult 를 전달하지 않는다. v6.1 §2 */
+                  onOpenDetail={handleOpenDetail}
+                  onGoToday={handleGoToday}
               />
           )}
-          {currentMenu === 'routine' && (
-              <PlaceholderView
-                  icon={<Repeat size={30} />}
-                  title="루틴"
-                  desc="반복되는 습관을 가볍게 확인할 공간이에요. 아직 준비 중입니다."
-              />
-          )}
-          {currentMenu === 'review' && (
-              <PlaceholderView
-                  icon={<History size={30} />}
-                  title="돌아보기"
-                  desc="한 주의 완료/이동/축소/보류 흐름을 돌아보는 공간이에요. 아직 준비 중입니다."
-              />
-          )}
-          {currentMenu === 'settings' && (
-              <PlaceholderView
-                  icon={<Settings size={30} />}
-                  title="설정"
-                  desc="알림, 기본 보기 방식 등을 관리할 공간이에요. 아직 준비 중입니다."
-              />
-          )}
+          {currentTab === 'record' && <RecordView />}
         </main>
+
+        <AiPanelShell
+            open={aiPanelOpen}
+            contextLabel={contextLabel}
+            targetDate={todayDate}
+            onClose={() => setAiPanelOpen(false)}
+            onApplied={loadTodayItems}
+        />
       </div>
   );
 }
@@ -499,7 +547,12 @@ function DiarySection() {
 
 /* ===================== 오늘 화면 ===================== */
 
-function TodayView() {
+/* ===================== 이전 화면 (진입점 없음) =====================
+ * 아래 컴포넌트들은 v6.1 4개 탭 전환으로 라우팅에서 분리됐다.
+ * 삭제하지 않고 남겨둔다. 새 화면이 안정되면 정리한다.
+ */
+
+function LegacyTodayView() {
   const [subView, setSubView] = useState('home');
 
   if (subView === 'execution') {

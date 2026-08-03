@@ -418,3 +418,155 @@ export const scheduleBlockAPI = {
         return request(`/schedule-blocks/pending?${params.toString()}`);
     },
 };
+
+/**
+ * 백엔드 ExecutionItemResponse(camelCase)를 화면이 쓰는 ExecutionItemDto 모양으로 맞춘다.
+ * scheduledStartAt/scheduledEndAt(ISO datetime)을 startTime/endTime('HH:mm')으로 슬라이스하고,
+ * expectedMinutes/orderIndex/sourceExecutionItemId 같은 실제 컬럼명을
+ * 화면이 기대하는 estimatedMinutes/displayOrder/parentExecutionItemId로 맞춘다.
+ * 응답이 이미 camelCase가 아닐 경우(snake_case)에도 방어적으로 읽는다.
+ */
+function toFrontendExecutionItem(raw) {
+    if (!raw) return raw;
+
+    const pick = (camel, snake) => (raw[camel] !== undefined ? raw[camel] : raw[snake]);
+    const toHHmm = (iso) => (iso ? String(iso).slice(11, 16) : null);
+
+    const placementType = pick('placementType', 'placement_type');
+    const scheduledStartAt = pick('scheduledStartAt', 'scheduled_start_at');
+    const scheduledEndAt = pick('scheduledEndAt', 'scheduled_end_at');
+
+    return {
+        executionItemId: pick('executionItemId', 'execution_item_id'),
+        userId: pick('userId', 'user_id'),
+        planItemId: pick('planItemId', 'plan_item_id') ?? null,
+        routineId: pick('routineId', 'routine_id') ?? null,
+        parentExecutionItemId: pick('sourceExecutionItemId', 'source_execution_item_id') ?? null,
+        title: raw.title,
+        description: raw.description ?? null,
+        placementType,
+        scheduledDate: pick('scheduledDate', 'scheduled_date'),
+        startTime: toHHmm(scheduledStartAt),
+        endTime: toHHmm(scheduledEndAt),
+        estimatedMinutes: pick('expectedMinutes', 'expected_minutes') ?? null,
+        status: raw.status,
+        isFixed: placementType === 'TIME_FIXED',
+        priority: raw.priority,
+        displayOrder: pick('orderIndex', 'order_index') ?? 0,
+        originType: pick('originType', 'origin_type'),
+        modifiedAfterCreation: !!pick('modifiedAfterCreation', 'modified_after_creation'),
+        version: raw.version,
+        createdAt: pick('createdAt', 'created_at'),
+        updatedAt: pick('updatedAt', 'updated_at'),
+    };
+}
+
+/**
+ * ExecutionItem API. Today/Execution 화면의 공식 실행 원본이다.
+ * scheduleBlockAPI를 대체한다 — schedule_blocks에는 더 이상 쓰지 않는다.
+ */
+export const executionItemAPI = {
+    getTodayString,
+
+    /** 날짜별 실행 조각 조회 */
+    getByDate: async (date) => {
+        const params = new URLSearchParams({ date });
+        const data = await request(`/execution-items?${params.toString()}`);
+        return (data ?? []).map(toFrontendExecutionItem);
+    },
+
+    /** 기준일 이전, 아직 결론 나지 않은 항목 조회 */
+    getPending: async (beforeDate) => {
+        const params = new URLSearchParams({ beforeDate });
+        const data = await request(`/execution-items/pending?${params.toString()}`);
+        return (data ?? []).map(toFrontendExecutionItem);
+    },
+
+    /** 직접 생성 (날짜만 있으면 DATE_ONLY, 시작/종료 시각이 있으면 TIME_FIXED) */
+    create: async (payload) => {
+        const data = await request('/execution-items', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        return toFrontendExecutionItem(data);
+    },
+
+    /** 완료. version은 현재 알고 있는 낙관적 락 값 */
+    complete: async (executionItemId, version, extra = {}) => {
+        const data = await request(`/execution-items/${executionItemId}/complete`, {
+            method: 'POST',
+            body: JSON.stringify({ version, ...extra }),
+        });
+        return toFrontendExecutionItem(data);
+    },
+
+    /** 재열기 (완료 취소) */
+    reopen: async (executionItemId, version, reason = null) => {
+        const data = await request(`/execution-items/${executionItemId}/reopen`, {
+            method: 'POST',
+            body: JSON.stringify({ version, reason }),
+        });
+        return toFrontendExecutionItem(data);
+    },
+
+    /** 다른 날짜로 이동 */
+    move: async (executionItemId, toDate, version, reason = null) => {
+        const data = await request(`/execution-items/${executionItemId}/move`, {
+            method: 'POST',
+            body: JSON.stringify({ toDate, version, reason }),
+        });
+        return toFrontendExecutionItem(data);
+    },
+
+    /** 작게 줄이기 */
+    reduce: async (executionItemId, payload) => {
+        const data = await request(`/execution-items/${executionItemId}/reduce`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        return toFrontendExecutionItem(data);
+    },
+
+    /** 보류 */
+    hold: async (executionItemId, version, reason = null) => {
+        const data = await request(`/execution-items/${executionItemId}/hold`, {
+            method: 'POST',
+            body: JSON.stringify({ version, reason }),
+        });
+        return toFrontendExecutionItem(data);
+    },
+
+    /** 삭제 (soft delete) */
+    delete: (executionItemId, version) => {
+        const params = new URLSearchParams({ version });
+        return request(`/execution-items/${executionItemId}?${params.toString()}`, {
+            method: 'DELETE',
+        });
+    },
+};
+
+/**
+ * AI 오늘 제안 API. 상담 원문 -> 구조화된 제안 -> 사용자 편집 -> 오늘에 일괄 적용.
+ */
+export const proposalAPI = {
+    /** 제안 생성 */
+    create: (sourceText, targetDate) => {
+        return request('/ai/proposals', {
+            method: 'POST',
+            body: JSON.stringify({ sourceText, targetDate }),
+        });
+    },
+
+    /** 제안 조회 (새로고침 후 PROPOSED 카드 복원용) */
+    get: (proposalId) => {
+        return request(`/ai/proposals/${proposalId}`);
+    },
+
+    /** 편집된 항목만 담아 전체 적용. editedItems에 없는 항목은 원본 그대로 적용된다 */
+    apply: (proposalId, editedItems = []) => {
+        return request(`/ai/proposals/${proposalId}/apply`, {
+            method: 'POST',
+            body: JSON.stringify({ editedItems }),
+        });
+    },
+};
