@@ -85,6 +85,15 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
   const [applySuccess, setApplySuccess] = useState(false);
 
   const bodyRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  // 패널이 실제로 unmount될 때(로그아웃 등) 진행 중인 스트림을 취소한다. 취소 후 여기서
+  // 자동으로 다시 연결하거나 재전송하지 않는다.
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // 대화 시작/복원: 저장된 conversationId가 있으면 이어서 쓰고, 없으면 새로 만든다.
   useEffect(() => {
@@ -168,6 +177,11 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
   if (!open) return null;
 
   const runTurn = async (payload, { optimisticUserText } = {}) => {
+    // 이전 요청이 아직 살아있으면(정상적으로는 sending 가드가 막지만 방어적으로) 먼저 취소한다.
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setSending(true);
     setSendError(null);
     setCurrentOffer(null);
@@ -181,6 +195,7 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
 
     try {
       await conversationAPI.sendMessage(conversationId, payload, {
+        signal: controller.signal,
         onEvent: (eventName, data) => {
           if (eventName === 'message.started') {
             started = true;
@@ -214,11 +229,19 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
         },
       });
     } catch (err) {
+      if (err.name === 'AbortError') {
+        // 사용자가 패널을 벗어났거나 의도적으로 취소한 것 — 자동으로 다시 연결하지 않는다.
+        setMessages((prev) => prev.filter((m) => m.key !== streamingKey));
+        return;
+      }
       if (!started) {
         setMessages((prev) => prev.filter((m) => m.key !== streamingKey));
       }
       setSendError(err.message || 'AI 응답을 받지 못했습니다.');
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setSending(false);
     }
   };

@@ -524,7 +524,11 @@ function toFrontendExecutionItem(raw) {
         endTime: toHHmm(scheduledEndAt),
         estimatedMinutes: pick('expectedMinutes', 'expected_minutes') ?? null,
         status: raw.status,
-        isFixed: placementType === 'TIME_FIXED',
+        // isFixed는 "이동·축소·보류 등을 제한하는 잠금 속성"이고 placementType(TIME_FIXED=
+        // 시작·종료 시각이 정해진 배치 형식)과는 별개 개념이다. 백엔드 execution_items에는
+        // 아직 그 잠금 속성을 담는 컬럼이 없으므로 placementType에서 추론하지 않는다 —
+        // TIME_FIXED 항목도 완료·이동·축소가 막히면 안 된다.
+        isFixed: false,
         priority: raw.priority,
         displayOrder: pick('orderIndex', 'order_index') ?? 0,
         originType: pick('originType', 'origin_type'),
