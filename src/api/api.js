@@ -80,6 +80,80 @@ async function request(url, options = {}) {
 }
 
 /**
+ * SSE(POST) 스트리밍 요청. AI 상담 대화 전용.
+ *
+ * 백엔드는 event: <name>\ndata: <json>\n\n 형식의 SSE 프레임을 내려준다
+ * (message.started/message.delta/offer.ready/proposal.ready/message.completed/message.error).
+ * 네이티브 EventSource는 POST 요청과 Authorization 헤더를 못 보내므로 fetch의
+ * ReadableStream을 직접 읽어 프레임 경계를 스스로 찾는다.
+ */
+async function streamRequest(url, body, { onEvent, signal } = {}) {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal,
+    });
+
+    if (!response.ok || !response.body) {
+        let data = null;
+        try {
+            data = await response.json();
+        } catch {
+            data = null;
+        }
+        throw new Error(data?.message || data?.error || `요청 실패: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex;
+        while ((separatorIndex = buffer.indexOf('\n\n')) !== -1) {
+            const rawFrame = buffer.slice(0, separatorIndex);
+            buffer = buffer.slice(separatorIndex + 2);
+            const frame = parseSseFrame(rawFrame);
+            if (frame) {
+                onEvent?.(frame.event, frame.data);
+            }
+        }
+    }
+}
+
+function parseSseFrame(rawFrame) {
+    let eventName = 'message';
+    const dataLines = [];
+    for (const line of rawFrame.split('\n')) {
+        if (line.startsWith('event:')) {
+            eventName = line.slice('event:'.length).trim();
+        } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice('data:'.length).trim());
+        }
+    }
+    if (dataLines.length === 0) {
+        return null;
+    }
+    const raw = dataLines.join('\n');
+    try {
+        return { event: eventName, data: JSON.parse(raw) };
+    } catch {
+        return { event: eventName, data: raw };
+    }
+}
+
+/**
  * 인증 API
  */
 export const authAPI = {
@@ -546,27 +620,49 @@ export const executionItemAPI = {
 };
 
 /**
- * AI 오늘 제안 API. 상담 원문 -> 구조화된 제안 -> 사용자 편집 -> 오늘에 일괄 적용.
+ * AI 제안(Proposal) 조회·적용 API. 생성은 여기 없다 — conversationAPI.sendMessage의
+ * 대화 흐름에서 사용자가 요청했거나 OFFER에 동의했을 때만 서버가 만든다.
  */
 export const proposalAPI = {
-    /** 제안 생성 */
-    create: (sourceText, targetDate) => {
-        return request('/ai/proposals', {
-            method: 'POST',
-            body: JSON.stringify({ sourceText, targetDate }),
-        });
-    },
-
     /** 제안 조회 (새로고침 후 PROPOSED 카드 복원용) */
     get: (proposalId) => {
         return request(`/ai/proposals/${proposalId}`);
     },
 
-    /** 편집된 항목만 담아 전체 적용. editedItems에 없는 항목은 원본 그대로 적용된다 */
-    apply: (proposalId, editedItems = []) => {
+    /** 편집/제외 항목을 담아 전체 적용. editedItems/excludedItemIds에 없는 항목은 원본 그대로 적용된다 */
+    apply: (proposalId, editedItems = [], excludedItemIds = []) => {
         return request(`/ai/proposals/${proposalId}/apply`, {
             method: 'POST',
-            body: JSON.stringify({ editedItems }),
+            body: JSON.stringify({ editedItems, excludedItemIds }),
         });
+    },
+};
+
+/**
+ * AI 상담 대화 API. 자유 대화 -> (필요하면) 계획 초안 제안 -> 사용자 요청/동의 시에만
+ * Proposal 생성까지, 대화 하나의 흐름으로 이어진다.
+ */
+export const conversationAPI = {
+    /** 대화 시작. scope를 생략하면 서버가 TODAY로 시작한다 */
+    create: (scope = 'TODAY') => {
+        return request('/ai/conversations', {
+            method: 'POST',
+            body: JSON.stringify({ scope }),
+        });
+    },
+
+    /** 새로고침 후 대화 이력 복원 */
+    getMessages: (conversationId) => {
+        return request(`/ai/conversations/${conversationId}/messages`);
+    },
+
+    /**
+     * 메시지 한 턴을 스트리밍으로 보낸다.
+     * payload: { message, requestedAction, sourceMessageId, idempotencyKey }
+     * onEvent(eventName, data)가 message.started/message.delta/offer.ready/proposal.ready/
+     * message.completed/message.error 각각에 대해 호출된다.
+     */
+    sendMessage: (conversationId, payload, { onEvent, signal } = {}) => {
+        return streamRequest(`/ai/conversations/${conversationId}/messages`, payload, { onEvent, signal });
     },
 };

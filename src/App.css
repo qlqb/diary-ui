@@ -5935,7 +5935,7 @@ body {
 }
 
 .v6-proposal-card {
-  border: 0.5px solid #e5e7eb;
+  border: 1.5px dashed #c7d2fe;
   border-radius: 10px;
   padding: 0.75rem 0.85rem;
   background: #fafaff;
@@ -6016,6 +6016,143 @@ body {
   color: #059669;
   padding: 1.5rem 0.5rem;
   font-size: 0.85rem;
+}
+
+/* ── AI 상담: 대화 말풍선 ── */
+.v6-ai-chat-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.v6-ai-chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.v6-ai-bubble {
+  max-width: 88%;
+  border-radius: 12px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
+.v6-ai-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.v6-ai-bubble-user {
+  align-self: flex-end;
+  background: #eef2ff;
+  color: #1e1b4b;
+  border-bottom-right-radius: 3px;
+}
+
+.v6-ai-bubble-assistant {
+  align-self: flex-start;
+  background: #f3f4f6;
+  color: #111827;
+  border-bottom-left-radius: 3px;
+}
+
+.v6-ai-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 0.9em;
+  margin-left: 2px;
+  background: currentColor;
+  vertical-align: text-bottom;
+  animation: v6-cursor-blink 1s step-start infinite;
+}
+
+@keyframes v6-cursor-blink {
+  50% { opacity: 0; }
+}
+
+.v6-ai-offer {
+  margin-bottom: 0.75rem;
+}
+
+.v6-ai-offer-btn {
+  width: 100%;
+  font-size: 0.83rem;
+}
+
+/* ── AI 상담: 하단 입력 행 (전송 버튼 옆으로) ── */
+.v6-ai-footer-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+}
+
+.v6-ai-footer-input .v6-ai-textarea {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.v6-ai-send-btn {
+  flex-shrink: 0;
+  width: 2.3rem;
+  height: 2.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0;
+}
+
+/* ── AI 상담: 제안 카드 부가 정보(제외 토글, 배치 배지) ── */
+.v6-proposal-card-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.v6-proposal-card-badge-row .v6-proposal-card-badge {
+  margin-bottom: 0;
+}
+
+.v6-proposal-card-placement {
+  font-size: 0.7rem;
+  color: #9ca3af;
+}
+
+.v6-proposal-exclude-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 6px;
+  border: 0.5px solid #e5e7eb;
+  background: #fff;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.v6-proposal-exclude-btn:hover {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.v6-proposal-card-excluded {
+  opacity: 0.55;
+}
+
+.v6-proposal-card-excluded .v6-proposal-exclude-btn {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
 }
 
 @media (max-width: 1100px) {
