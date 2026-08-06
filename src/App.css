@@ -6155,6 +6155,252 @@ body {
   background: #fef2f2;
 }
 
+/* ── AI 상담: 헤더 액션(대화 목록 / 새 대화 / 닫기) ── */
+.v6-ai-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 기존 .v6-ai-example은 정적 문구용이었다 — 이제 클릭 가능한 버튼으로도 쓰므로 리셋을 더한다. */
+.v6-ai-example {
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+
+.v6-ai-example:hover {
+  background: #e5e7eb;
+}
+
+.v6-ai-new-conversation-hint {
+  margin-bottom: 0.5rem;
+}
+
+/* ── AI 상담: 대화 목록(패널 내부 슬라이드 화면) ── */
+.v6-ai-conversation-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.v6-ai-conv-group {
+  margin-bottom: 1.1rem;
+}
+
+.v6-ai-conv-group-label {
+  font-size: 0.7rem;
+  font-weight: 650;
+  color: #9ca3af;
+  margin: 0 0 0.4rem;
+}
+
+.v6-ai-conv-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 0.5rem 0.55rem;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.v6-ai-conv-item:hover {
+  background: #f3f4f6;
+}
+
+.v6-ai-conv-item-active {
+  background: #eef2ff;
+}
+
+.v6-ai-conv-item-icon {
+  flex-shrink: 0;
+  color: #9ca3af;
+}
+
+.v6-ai-conv-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  color: #374151;
+}
+
+.v6-ai-conv-item-active .v6-ai-conv-item-title {
+  color: #4338ca;
+  font-weight: 550;
+}
+
+.v6-ai-conv-item-meta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.v6-ai-conv-item-badge {
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: #4f46e5;
+  background: #eef2ff;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+}
+
+.v6-ai-conv-item-time {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+/* ── AI 상담: 7일 범위 일정 후보 배치 미리보기 ── */
+.v6-schedule-preview {
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 0.65rem 0.7rem;
+  margin-bottom: 0.7rem;
+  background: #fafafa;
+}
+
+.v6-schedule-window-list {
+  list-style: none;
+  margin: 0.3rem 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.v6-schedule-window {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  border-radius: 6px;
+  padding: 0.25rem 0.45rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+}
+
+.v6-schedule-window-time {
+  color: #374151;
+}
+
+.v6-schedule-window-confidence {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.v6-schedule-window-high {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.v6-schedule-window-medium {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.v6-schedule-window-low {
+  border-color: #e5e7eb;
+}
+
+.v6-schedule-unplaced {
+  margin: 0.4rem 0;
+}
+
+.v6-schedule-unplaced ul {
+  margin: 0.2rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.76rem;
+  color: #b45309;
+}
+
+.v6-schedule-exceptions {
+  list-style: none;
+  margin: 0.3rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.v6-schedule-exceptions li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  color: #6b7280;
+}
+
+.v6-schedule-exceptions li > span {
+  flex: 1;
+}
+
+.v6-schedule-exception-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 0.4rem;
+}
+
+.v6-schedule-exception-form input {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.74rem;
+  font-family: inherit;
+}
+
+.v6-schedule-replan-btn {
+  margin-top: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.v6-proposal-card-placement-unplaced {
+  color: #b45309;
+  font-weight: 550;
+}
+
+.v6-schedule-result-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0.5rem;
+  font-size: 0.74rem;
+}
+
+.v6-schedule-result-text {
+  flex: 1;
+  min-width: 0;
+  color: #6b7280;
+}
+
+.v6-schedule-result-unplaced {
+  color: #b45309;
+}
+
+.v6-schedule-result-edit input {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.74rem;
+  font-family: inherit;
+}
+
 @media (max-width: 1100px) {
   .v6-ai-panel {
     display: none;

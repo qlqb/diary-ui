@@ -643,6 +643,29 @@ export const proposalAPI = {
 };
 
 /**
+ * 7일 범위 일정 후보 배치 미리보기 API. 이 두 호출 모두 OpenAI를 호출하지 않는다 —
+ * 서버가 Timefold만 다시 돌린다. 가용시간 예외를 고치거나 항목을 수정한 뒤 "다시 배치"를
+ * 누를 때마다 recompute를 부른다.
+ */
+export const schedulePreviewAPI = {
+    /** 새로고침 후 복원용. 아직 한 번도 계산하지 않았으면 null(204) */
+    get: (proposalId) => {
+        return request(`/ai/proposals/${proposalId}/schedule-preview`);
+    },
+
+    /**
+     * 재계산. payload: { horizonStart, horizonEnd, availabilityOverrides, items }
+     * horizonStart/horizonEnd를 생략하면 서버가 오늘부터 최대 7일로 계산한다.
+     */
+    recompute: (proposalId, payload = {}) => {
+        return request(`/ai/proposals/${proposalId}/schedule-preview`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    },
+};
+
+/**
  * AI 상담 대화 API. 자유 대화 -> (필요하면) 계획 초안 제안 -> 사용자 요청/동의 시에만
  * Proposal 생성까지, 대화 하나의 흐름으로 이어진다.
  */
@@ -653,6 +676,11 @@ export const conversationAPI = {
             method: 'POST',
             body: JSON.stringify({ scope }),
         });
+    },
+
+    /** 내 대화 목록. 마지막 메시지 시각 내림차순, 첫 메시지를 아직 안 보낸 빈 대화는 제외됨 */
+    list: () => {
+        return request('/ai/conversations');
     },
 
     /** 새로고침 후 대화 이력 복원 */
