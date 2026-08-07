@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AiPanelShell from './AiPanelShell.jsx';
-import { conversationAPI, proposalAPI, schedulePreviewAPI } from '../api/api.js';
+import { conversationAPI, proposalAPI, schedulePreviewAPI, contextSuggestionAPI } from '../api/api.js';
 
 vi.mock('../api/api.js', () => ({
   conversationAPI: {
@@ -10,6 +10,7 @@ vi.mock('../api/api.js', () => ({
     list: vi.fn(),
     getMessages: vi.fn(),
     sendMessage: vi.fn(),
+    getContextSuggestions: vi.fn(),
   },
   proposalAPI: {
     get: vi.fn(),
@@ -18,6 +19,10 @@ vi.mock('../api/api.js', () => ({
   schedulePreviewAPI: {
     get: vi.fn(),
     recompute: vi.fn(),
+  },
+  contextSuggestionAPI: {
+    apply: vi.fn(),
+    dismiss: vi.fn(),
   },
 }));
 
@@ -61,6 +66,7 @@ describe('AiPanelShell', () => {
     conversationAPI.list.mockResolvedValue([]);
     conversationAPI.create.mockResolvedValue({ conversationId: 1 });
     conversationAPI.getMessages.mockResolvedValue([]);
+    conversationAPI.getContextSuggestions.mockResolvedValue([]);
     schedulePreviewAPI.get.mockResolvedValue(null);
     schedulePreviewAPI.recompute.mockResolvedValue({
       proposalId: 900,
@@ -516,6 +522,114 @@ describe('AiPanelShell', () => {
           scheduledEndAt: '2026-08-10T19:30:00',
         }),
       ]);
+    });
+  });
+
+  describe('장기 컨텍스트 변경 후보', () => {
+    it('context.suggestions.ready 수신 시 카드를 표시하고, 계획 Proposal 카드와 섞이지 않는다', async () => {
+      const user = userEvent.setup();
+      const pending = mockPendingSend();
+      render(<AiPanelShell open contextLabel="오늘" onClose={() => {}} onApplied={() => {}} />);
+
+      const textarea = await screen.findByPlaceholderText(/오늘 프로젝트를 좀 하고 싶은데/);
+      await user.type(textarea, '이사해서 이동시간이 짧아졌어');
+      await user.click(textarea.parentElement.querySelector('.v6-ai-send-btn'));
+
+      pending.emit('message.started', {});
+      pending.emit('context.suggestions.ready', {
+        suggestions: [{
+          suggestionId: 501,
+          operation: 'SUPERSEDE',
+          targetContextId: 13,
+          targetContextContent: '현재 알바에서 집까지 약 50분 걸린다.',
+          proposedContent: '현재 알바에서 집까지 약 20분 걸린다.',
+          reason: '사용자가 새 이동시간을 알려줌',
+          status: 'PROPOSED',
+        }],
+      });
+      pending.emit('message.completed', { reply: '알겠어요', responseType: 'CHAT', userMessageId: 1 });
+      await act(async () => pending.resolve());
+
+      expect(await screen.findByText('생활 정보가 달라진 것 같아요')).toBeInTheDocument();
+      expect(screen.getByText('현재 알바에서 집까지 약 50분 걸린다.')).toBeInTheDocument();
+      expect(screen.getByText('현재 알바에서 집까지 약 20분 걸린다.')).toBeInTheDocument();
+      expect(document.querySelector('.v6-proposal-card')).toBeNull();
+    });
+
+    it('"장기 정보에 반영"을 누르면 apply API를 호출하고 반영 상태를 보여준다(자동 저장 아님)', async () => {
+      const user = userEvent.setup();
+      const pending = mockPendingSend();
+      contextSuggestionAPI.apply.mockResolvedValue({ suggestionId: 502, status: 'APPLIED' });
+      render(<AiPanelShell open contextLabel="오늘" onClose={() => {}} onApplied={() => {}} />);
+
+      const textarea = await screen.findByPlaceholderText(/오늘 프로젝트를 좀 하고 싶은데/);
+      await user.type(textarea, '새로운 사실이야');
+      await user.click(textarea.parentElement.querySelector('.v6-ai-send-btn'));
+
+      pending.emit('message.started', {});
+      pending.emit('context.suggestions.ready', {
+        suggestions: [{
+          suggestionId: 502, operation: 'ADD', targetContextId: null,
+          proposedContent: '늦게 퇴근한 다음 날에는 가벼운 계획을 선호한다.', reason: '사용자가 말함', status: 'PROPOSED',
+        }],
+      });
+      pending.emit('message.completed', { reply: '기억할게요', responseType: 'CHAT', userMessageId: 1 });
+      await act(async () => pending.resolve());
+
+      // 카드가 도착한 시점까지는 apply가 호출되지 않는다 — 생성 즉시 자동 저장되지 않는다.
+      expect(contextSuggestionAPI.apply).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('button', { name: '장기 정보에 반영' }));
+
+      await waitFor(() => expect(contextSuggestionAPI.apply).toHaveBeenCalledWith(502));
+      expect(await screen.findByText('장기 정보에 반영됐어요.')).toBeInTheDocument();
+    });
+
+    it('"저장하지 않기"를 누르면 dismiss API를 호출하고 상태를 보여준다', async () => {
+      const user = userEvent.setup();
+      const pending = mockPendingSend();
+      contextSuggestionAPI.dismiss.mockResolvedValue({ suggestionId: 503, status: 'DISMISSED' });
+      render(<AiPanelShell open contextLabel="오늘" onClose={() => {}} onApplied={() => {}} />);
+
+      const textarea = await screen.findByPlaceholderText(/오늘 프로젝트를 좀 하고 싶은데/);
+      await user.type(textarea, '오늘만 그런거야');
+      await user.click(textarea.parentElement.querySelector('.v6-ai-send-btn'));
+
+      pending.emit('message.started', {});
+      pending.emit('context.suggestions.ready', {
+        suggestions: [{
+          suggestionId: 503, operation: 'ADD', targetContextId: null,
+          proposedContent: '일회성 정보', reason: '사용자가 말함', status: 'PROPOSED',
+        }],
+      });
+      pending.emit('message.completed', { reply: '네', responseType: 'CHAT', userMessageId: 1 });
+      await act(async () => pending.resolve());
+
+      await user.click(screen.getByRole('button', { name: '저장하지 않기' }));
+
+      await waitFor(() => expect(contextSuggestionAPI.dismiss).toHaveBeenCalledWith(503));
+      expect(await screen.findByText('저장하지 않았어요.')).toBeInTheDocument();
+    });
+
+    it('대화 재진입 시 아직 처리하지 않은 Context 변경 후보를 복원한다', async () => {
+      conversationAPI.list.mockResolvedValue([
+        { conversationId: 60, title: '이전 상담', lastMessageAt: new Date().toISOString(), pendingProposalCount: 0 },
+      ]);
+      conversationAPI.getMessages.mockResolvedValue([
+        { messageId: 1, role: 'USER', content: '알바 옮겼어', responseType: null, proposalId: null },
+        { messageId: 2, role: 'ASSISTANT', content: '기억할게요', responseType: 'CHAT', proposalId: null },
+      ]);
+      conversationAPI.getContextSuggestions.mockResolvedValue([{
+        suggestionId: 504, operation: 'MARK_STALE', targetContextId: 20,
+        targetContextContent: '예전 알바는 22시에 끝난다.', proposedContent: null,
+        reason: '알바를 옮김', status: 'PROPOSED',
+      }]);
+
+      render(<AiPanelShell open contextLabel="오늘" onClose={() => {}} onApplied={() => {}} />);
+
+      expect(await screen.findByText('이 정보는 다시 확인이 필요할 수 있어요')).toBeInTheDocument();
+      expect(screen.getByText('예전 알바는 22시에 끝난다.')).toBeInTheDocument();
+      expect(conversationAPI.getContextSuggestions).toHaveBeenCalledWith(60);
     });
   });
 });

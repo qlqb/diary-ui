@@ -22,7 +22,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { X, Sparkles, Loader2, CircleCheck, Send, Ban, List, Plus, MessageCircle, RefreshCw, CalendarX } from 'lucide-react';
-import { conversationAPI, proposalAPI, schedulePreviewAPI } from '../api/api.js';
+import { conversationAPI, proposalAPI, schedulePreviewAPI, contextSuggestionAPI } from '../api/api.js';
 import { PRIORITY_LABEL } from '../types/execution.js';
 
 const PRIORITY_OPTIONS = ['MUST', 'SHOULD', 'OPTIONAL'];
@@ -30,6 +30,27 @@ const NEW_CONVERSATION_DRAFT_KEY = '__new__';
 
 /** 오늘 화면 전용 추천 질문. 지금은 이 패널이 오늘 상담(TODAY)만 다루므로 딱 이 범위만 보여준다. */
 const SUGGESTED_PROMPTS = ['지금부터 할 수 있는 일을 정리해줘', '남은 오늘 계획을 다시 짜줘'];
+
+/**
+ * operation별 카드 문구. 백엔드는 "이사"/"알바 변경" 같은 생활 사건을 모른다 — 화면도
+ * ADD/SUPERSEDE/MARK_STALE/ARCHIVE/CONFIRM 다섯 가지 범용 연산 문구만 안다.
+ */
+function contextSuggestionCopy(operation) {
+  switch (operation) {
+    case 'ADD':
+      return { heading: '새로 기억할 정보가 있어요', primaryLabel: '장기 정보에 반영', secondaryLabel: '저장하지 않기' };
+    case 'SUPERSEDE':
+      return { heading: '생활 정보가 달라진 것 같아요', primaryLabel: '장기 정보에 반영', secondaryLabel: '저장하지 않기' };
+    case 'MARK_STALE':
+      return { heading: '이 정보는 다시 확인이 필요할 수 있어요', primaryLabel: '확인 필요로 표시', secondaryLabel: '계속 사용' };
+    case 'ARCHIVE':
+      return { heading: '이 정보를 더 이상 쓰지 않을까요?', primaryLabel: '더 이상 사용 안 함', secondaryLabel: '계속 사용' };
+    case 'CONFIRM':
+      return { heading: '이 정보, 지금도 맞나요?', primaryLabel: '다시 유효함으로 확인', secondaryLabel: '그대로 두기' };
+    default:
+      return { heading: '생활 정보가 달라진 것 같아요', primaryLabel: '장기 정보에 반영', secondaryLabel: '저장하지 않기' };
+  }
+}
 
 function newIdempotencyKey() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -152,6 +173,11 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
   const [currentOffer, setCurrentOffer] = useState(null);
   const [currentProposal, setCurrentProposal] = useState(null); // { proposalId, cards: [] }
   const [excludedIds, setExcludedIds] = useState(() => new Set());
+
+  // 장기 컨텍스트 변경 후보(PROPOSED만). 계획 Proposal 카드와 섞지 않고 별도 섹션에 둔다.
+  const [contextSuggestions, setContextSuggestions] = useState([]);
+  // suggestionId -> { status: 'working' | 'applied' | 'dismissed' | 'error', message? }
+  const [contextActionState, setContextActionState] = useState({});
 
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState(null);
@@ -299,6 +325,8 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
     setAvailabilityOverrides([]);
     setItemFixedOverrides({});
     setExceptionDraft({ date: '', start: '', end: '' });
+    setContextSuggestions([]);
+    setContextActionState({});
     lastUserMessageIdRef.current = null;
   };
 
@@ -394,6 +422,17 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
           }
         }
       }
+
+      // 아직 승인/거절하지 않은 Context 변경 후보 복구. 메모리에만 있고 새로고침하면
+      // 사라지는 방식으로 만들지 않기 위해 서버에서 다시 불러온다.
+      try {
+        const pendingSuggestions = await conversationAPI.getContextSuggestions(conversationId);
+        if (loadTokenRef.current === myToken) {
+          setContextSuggestions(pendingSuggestions ?? []);
+        }
+      } catch {
+        // 실패해도 대화 자체는 정상 표시한다.
+      }
     } catch (err) {
       if (loadTokenRef.current === myToken) {
         setLoadError(err.message || '대화를 불러오지 못했습니다. 삭제되었거나 접근할 수 없어요.');
@@ -475,6 +514,9 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
           } else if (eventName === 'proposal.ready') {
             setCurrentProposal({ proposalId: data.proposalId, cards: (data.items ?? []).map(cardFromResponseItem) });
             setExcludedIds(new Set());
+          } else if (eventName === 'context.suggestions.ready') {
+            // CHAT/OFFER/PROPOSAL 어느 응답에도 붙을 수 있는 sidecar다 — responseType 분기와 무관하게 쌓는다.
+            setContextSuggestions((prev) => [...prev, ...(data?.suggestions ?? [])]);
           } else if (eventName === 'message.completed') {
             if (data?.userMessageId) lastUserMessageIdRef.current = data.userMessageId;
             setMessages((prev) =>
@@ -620,6 +662,37 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
     }
   };
 
+  /**
+   * "장기 정보에 반영" 등 승인 버튼. AI가 후보를 만들었다고 자동 저장되지 않았다는 것이
+   * 핵심이다 — 사용자가 이 버튼을 눌러야만 서버가 실제 user_contexts를 바꾼다.
+   */
+  const handleApplyContextSuggestion = async (suggestionId) => {
+    setContextActionState((prev) => ({ ...prev, [suggestionId]: { status: 'working' } }));
+    try {
+      await contextSuggestionAPI.apply(suggestionId);
+      setContextActionState((prev) => ({ ...prev, [suggestionId]: { status: 'applied' } }));
+    } catch (err) {
+      setContextActionState((prev) => ({
+        ...prev,
+        [suggestionId]: { status: 'error', message: err.message || '반영하지 못했습니다.' },
+      }));
+    }
+  };
+
+  /** "저장하지 않기" 등 거절 버튼. suggestion만 DISMISSED 처리하고, 현재 대화 맥락은 그대로 유지된다. */
+  const handleDismissContextSuggestion = async (suggestionId) => {
+    setContextActionState((prev) => ({ ...prev, [suggestionId]: { status: 'working' } }));
+    try {
+      await contextSuggestionAPI.dismiss(suggestionId);
+      setContextActionState((prev) => ({ ...prev, [suggestionId]: { status: 'dismissed' } }));
+    } catch (err) {
+      setContextActionState((prev) => ({
+        ...prev,
+        [suggestionId]: { status: 'error', message: err.message || '처리하지 못했습니다.' },
+      }));
+    }
+  };
+
   const groups = groupConversations(conversationList);
 
   return (
@@ -741,6 +814,20 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
                   </div>
                 ))}
             </div>
+
+            {contextSuggestions.length > 0 && (
+              <div className="v6-context-suggestions">
+                {contextSuggestions.map((suggestion) => (
+                  <ContextSuggestionCard
+                    key={suggestion.suggestionId}
+                    suggestion={suggestion}
+                    actionState={contextActionState[suggestion.suggestionId]}
+                    onApply={() => handleApplyContextSuggestion(suggestion.suggestionId)}
+                    onDismiss={() => handleDismissContextSuggestion(suggestion.suggestionId)}
+                  />
+                ))}
+              </div>
+            )}
 
             {currentOffer && !sending && (
               <div className="v6-ai-offer">
@@ -915,6 +1002,55 @@ export default function AiPanelShell({ open, contextLabel, onClose, onApplied })
         </>
       )}
     </aside>
+  );
+}
+
+/**
+ * 장기 컨텍스트 변경 후보 카드 한 장. 계획 Proposal 카드와 다른 톤(별도 클래스)으로 그린다.
+ * AI가 생성하자마자 반영되지 않는다 — 버튼을 눌러야만 apply/dismiss API가 호출된다.
+ */
+function ContextSuggestionCard({ suggestion, actionState, onApply, onDismiss }) {
+  const copy = contextSuggestionCopy(suggestion.operation);
+  const working = actionState?.status === 'working';
+  const resolved = actionState?.status === 'applied' || actionState?.status === 'dismissed';
+
+  return (
+    <div className="v6-context-suggestion-card">
+      <p className="v6-context-suggestion-heading">{copy.heading}</p>
+
+      {suggestion.operation === 'SUPERSEDE' ? (
+        <div className="v6-context-suggestion-diff">
+          {suggestion.targetContextContent && (
+            <p className="v6-context-suggestion-before">{suggestion.targetContextContent}</p>
+          )}
+          <p className="v6-context-suggestion-arrow">↓</p>
+          <p className="v6-context-suggestion-after">{suggestion.proposedContent}</p>
+        </div>
+      ) : (
+        <p className="v6-context-suggestion-content">
+          {suggestion.operation === 'ADD' ? suggestion.proposedContent : suggestion.targetContextContent}
+        </p>
+      )}
+
+      {suggestion.reason && <p className="v6-context-suggestion-reason">{suggestion.reason}</p>}
+
+      {actionState?.status === 'error' && <p className="v6-ai-error">{actionState.message}</p>}
+
+      {resolved ? (
+        <p className="v6-context-suggestion-resolved">
+          {actionState.status === 'applied' ? '장기 정보에 반영됐어요.' : '저장하지 않았어요.'}
+        </p>
+      ) : (
+        <div className="v6-context-suggestion-actions">
+          <button type="button" className="v6-btn-small" onClick={onDismiss} disabled={working}>
+            {copy.secondaryLabel}
+          </button>
+          <button type="button" className="btn-primary v6-btn-small" onClick={onApply} disabled={working}>
+            {working ? <Loader2 size={13} className="v6-spin" /> : copy.primaryLabel}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

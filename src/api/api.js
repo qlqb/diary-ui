@@ -697,4 +697,34 @@ export const conversationAPI = {
     sendMessage: (conversationId, payload, { onEvent, signal } = {}) => {
         return streamRequest(`/ai/conversations/${conversationId}/messages`, payload, { onEvent, signal });
     },
+
+    /** 아직 승인/거절하지 않은 Context 변경 후보. 대화 재진입(새로고침 포함) 시 카드 복원용 */
+    getContextSuggestions: (conversationId) => {
+        return request(`/ai/conversations/${conversationId}/context-suggestions`);
+    },
+};
+
+/**
+ * 사용자 장기 컨텍스트 조회 전용. 실제 반영은 여기 없다 — contextSuggestionAPI.apply를
+ * 통해서만 일어난다.
+ */
+export const contextAPI = {
+    /** ACTIVE/STALE 장기 컨텍스트 목록 */
+    list: () => {
+        return request('/contexts');
+    },
+};
+
+/**
+ * 장기 컨텍스트 변경 후보(AI가 만든 ADD/SUPERSEDE/MARK_STALE/ARCHIVE/CONFIRM 후보) 승인/거절.
+ * 생성은 여기 없다 — conversationAPI.sendMessage 흐름에서 SSE(context.suggestions.ready)로
+ * 도착하거나, conversationAPI.getContextSuggestions로 복원된다.
+ */
+export const contextSuggestionAPI = {
+    apply: (suggestionId) => {
+        return request(`/ai/context-suggestions/${suggestionId}/apply`, { method: 'POST' });
+    },
+    dismiss: (suggestionId) => {
+        return request(`/ai/context-suggestions/${suggestionId}/dismiss`, { method: 'POST' });
+    },
 };

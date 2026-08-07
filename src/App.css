@@ -6082,6 +6082,81 @@ body {
   font-size: 0.83rem;
 }
 
+/* ── AI 상담: 장기 컨텍스트 변경 후보 (계획 Proposal 카드와 다른 톤으로 구분) ── */
+.v6-context-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 0.75rem;
+}
+
+.v6-context-suggestion-card {
+  border: 1.5px dashed #fcd34d;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  background: #fffbeb;
+}
+
+.v6-context-suggestion-heading {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: #92400e;
+  margin: 0 0 0.5rem;
+}
+
+.v6-context-suggestion-content {
+  font-size: 0.83rem;
+  color: #111827;
+  margin: 0 0 0.4rem;
+  line-height: 1.5;
+}
+
+.v6-context-suggestion-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.4rem;
+}
+
+.v6-context-suggestion-before {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  text-decoration: line-through;
+  margin: 0;
+}
+
+.v6-context-suggestion-arrow {
+  font-size: 0.8rem;
+  color: #d97706;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.v6-context-suggestion-after {
+  font-size: 0.83rem;
+  color: #111827;
+  font-weight: 550;
+  margin: 0;
+}
+
+.v6-context-suggestion-reason {
+  font-size: 0.74rem;
+  color: #92400e;
+  margin: 0 0 0.6rem;
+}
+
+.v6-context-suggestion-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.v6-context-suggestion-resolved {
+  font-size: 0.78rem;
+  color: #059669;
+  margin: 0;
+}
+
 /* ── AI 상담: 하단 입력 행 (전송 버튼 옆으로) ── */
 .v6-ai-footer-input {
   display: flex;
