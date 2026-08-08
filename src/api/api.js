@@ -80,6 +80,37 @@ async function request(url, options = {}) {
 }
 
 /**
+ * 파일 업로드(multipart/form-data) 요청. Content-Type을 직접 지정하지 않는다 —
+ * 브라우저가 boundary를 포함해 자동으로 설정해야 하므로, request()와 달리 JSON 헤더를 쓰지 않는다.
+ */
+async function requestMultipart(url, formData) {
+    const token = getToken();
+    const headers = {};
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+        method: 'POST',
+        headers,
+        body: formData,
+    });
+
+    let data = null;
+    try {
+        data = await response.json();
+    } catch {
+        data = null;
+    }
+
+    if (!response.ok) {
+        throw new Error(data?.message || data?.error || `요청 실패: ${response.status}`);
+    }
+
+    return data;
+}
+
+/**
  * SSE(POST) 스트리밍 요청. AI 상담 대화 전용.
  *
  * 백엔드는 event: <name>\ndata: <json>\n\n 형식의 SSE 프레임을 내려준다
@@ -726,5 +757,184 @@ export const contextSuggestionAPI = {
     },
     dismiss: (suggestionId) => {
         return request(`/ai/context-suggestions/${suggestionId}/dismiss`, { method: 'POST' });
+    },
+};
+
+/**
+ * 과목 API. 학습 화면의 최상위 단위 — 강의계획서/교재 업로드, topic 트리가 모두 과목 하나에 딸린다.
+ */
+export const courseAPI = {
+    /** 내 과목 목록 (topicCount 포함) */
+    list: () => {
+        return request('/courses');
+    },
+
+    /** 과목 상세 */
+    get: (courseId) => {
+        return request(`/courses/${courseId}`);
+    },
+
+    /** 과목 생성. payload: { title } */
+    create: (payload) => {
+        return request('/courses', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    },
+};
+
+/**
+ * 학습 자료 업로드/조회 API. 업로드 직후 텍스트 추출까지 동기로 끝나고 extractionStatus로
+ * 결과(SUCCESS/FAILED_NO_TEXT/FAILED)를 알려준다 — 별도 폴링이 필요 없다.
+ */
+export const materialAPI = {
+    /**
+     * 자료 업로드. materialType: SYLLABUS|TEXTBOOK_TOC|PROFESSOR_SLIDE|OTHER
+     */
+    upload: (courseId, materialType, file) => {
+        const formData = new FormData();
+        formData.append('materialType', materialType);
+        formData.append('file', file);
+        return requestMultipart(`/courses/${courseId}/materials?materialType=${materialType}`, formData);
+    },
+
+    /** 과목의 업로드 자료 목록 */
+    listByCourse: (courseId) => {
+        return request(`/courses/${courseId}/materials`);
+    },
+};
+
+/**
+ * Material Agent 분석 draft/review/apply API. draft 상태는 course_topics에 전혀 영향을
+ * 주지 않는다 — apply()를 호출해야만 확정된다.
+ */
+export const materialAnalysisAPI = {
+    /** 분석 실행 (draft 생성) */
+    analyze: (courseId, materialId) => {
+        return request(`/courses/${courseId}/materials/${materialId}/analyses`, { method: 'POST' });
+    },
+
+    /** 특정 자료의 분석 이력 */
+    listByMaterial: (courseId, materialId) => {
+        return request(`/courses/${courseId}/materials/${materialId}/analyses`);
+    },
+
+    /** 분석 단건 조회 */
+    get: (analysisId) => {
+        return request(`/material-analyses/${analysisId}`);
+    },
+
+    /** 사용자가 검토 중 수정한 내용 저장. payload: { payload: MaterialAnalysisPayload } */
+    edit: (analysisId, payload) => {
+        return request(`/material-analyses/${analysisId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ payload }),
+        });
+    },
+
+    /** 확정 반영 — course_topics 생성, courses 교재 필드 갱신 */
+    apply: (analysisId) => {
+        return request(`/material-analyses/${analysisId}/apply`, { method: 'POST' });
+    },
+
+    /** 폐기 */
+    dismiss: (analysisId) => {
+        return request(`/material-analyses/${analysisId}/dismiss`, { method: 'POST' });
+    },
+};
+
+/**
+ * 확정된 topic 트리 + 진행 상태 API. topic 자체는 Material Agent apply()를 통해서만
+ * 생성된다 — 여기서는 조회와 진행 상태 변경만 한다.
+ */
+export const topicAPI = {
+    /** 과목의 topic 트리 (진행 상태 포함, 계층 구조 그대로) */
+    getTree: (courseId) => {
+        return request(`/courses/${courseId}/topics`);
+    },
+
+    /**
+     * 사용자가 학습 화면에서 직접 진행 상태를 바꾸는 액션.
+     * status: NOT_STARTED|IN_PROGRESS|LEARNED
+     */
+    updateProgress: (topicId, status) => {
+        return request(`/topics/${topicId}/progress`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+    },
+};
+
+/**
+ * Learning Agent 개인과외 대화 API. conversationAPI(Today 상담)와 같은 SSE 패턴이 아니라
+ * 동기 요청/응답이다 — 학습 상담은 잦고 짧은 호출이라 스트리밍 없이도 충분하다.
+ */
+export const learningConversationAPI = {
+    /** 새 대화 시작 */
+    create: () => {
+        return request('/learning/conversations', { method: 'POST' });
+    },
+
+    /** 대화 이력 */
+    getMessages: (conversationId) => {
+        return request(`/learning/conversations/${conversationId}/messages`);
+    },
+
+    /** 질문 전송. payload: { topicId, message } */
+    sendMessage: (conversationId, topicId, message) => {
+        return request(`/learning/conversations/${conversationId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ topicId, message }),
+        });
+    },
+};
+
+/**
+ * Learning Agent 다음 학습 추천 API. WHAT(무엇을 공부할지)만 결정한다 — 시간 배치는
+ * planningAPI로 넘긴다.
+ */
+export const learningRecommendationAPI = {
+    /** 다음 학습 추천 받기 */
+    recommend: (courseId) => {
+        return request(`/courses/${courseId}/learning/recommendation`, { method: 'POST' });
+    },
+
+    /** 추천 단건 조회 */
+    get: (recommendationId) => {
+        return request(`/learning/recommendations/${recommendationId}`);
+    },
+};
+
+/**
+ * Planning Agent API. 계획 초안은 기존 proposalAPI/schedulePreviewAPI가 다루는
+ * ai_proposals/스케줄 미리보기를 그대로 재사용한다 — 여기 draft 응답의 proposal.proposalId로
+ * 그 두 API를 계속 쓰면 된다(재배치, 검토 등). apply만 이 API로 한다 — 실행 조각에 학습
+ * topic을 연결하는 처리가 얹혀 있기 때문이다.
+ */
+export const planningAPI = {
+    /** 계획 초안 생성. instruction(자연어, 선택): 예) "이번 주에 공부하게 계획해줘" */
+    createDraft: (recommendationId, instruction = null) => {
+        return request(`/learning/recommendations/${recommendationId}/planning-draft`, {
+            method: 'POST',
+            body: JSON.stringify({ instruction }),
+        });
+    },
+
+    /** 계획 확정 적용. proposalAPI.apply와 같은 payload(editedItems/excludedItemIds) */
+    apply: (proposalId, editedItems = [], excludedItemIds = []) => {
+        return request(`/planning/proposals/${proposalId}/apply`, {
+            method: 'POST',
+            body: JSON.stringify({ editedItems, excludedItemIds }),
+        });
+    },
+};
+
+/** "다음 추천 + 바로 계획까지" 복합 요청 전용 편의 API. */
+export const orchestrationAPI = {
+    recommendAndPlan: (courseId, planningInstruction = null) => {
+        return request(`/courses/${courseId}/learning/recommend-and-plan`, {
+            method: 'POST',
+            body: JSON.stringify({ planningInstruction }),
+        });
     },
 };
