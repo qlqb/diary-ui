@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { ViewHeader, SubTabs, EmptyState } from './shared.jsx';
 import { MOCK_PLANS } from '../mock/executionMock.js';
 import { PlanStatus, PLAN_STATUS_LABEL } from '../types/plan.js';
+import LearningView from './learning/LearningView.jsx';
 
 const SUB_TABS = [
   { key: 'plans', label: '계획 목록' },
@@ -65,12 +66,7 @@ export default function PlanView({ onOpenPlan }) {
         </>
       )}
 
-      {sub === 'subjects' && (
-        <EmptyState
-          title="자료·과목은 다음 단계에서 연결해요"
-          desc="과목과 강의계획서가 계획의 근거로 붙는 자리예요."
-        />
-      )}
+      {sub === 'subjects' && <LearningView />}
     </div>
   );
 }
