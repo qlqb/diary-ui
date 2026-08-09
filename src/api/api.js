@@ -584,6 +584,13 @@ export const executionItemAPI = {
         return (data ?? []).map(toFrontendExecutionItem);
     },
 
+    /** 날짜 범위 실행 조각 조회 (주간 시간표용). getByDate와 같은 원본을 여러 날짜에 걸쳐 투영한다 */
+    getByDateRange: async (startDate, endDate) => {
+        const params = new URLSearchParams({ startDate, endDate });
+        const data = await request(`/execution-items/range?${params.toString()}`);
+        return (data ?? []).map(toFrontendExecutionItem);
+    },
+
     /** 기준일 이전, 아직 결론 나지 않은 항목 조회 */
     getPending: async (beforeDate) => {
         const params = new URLSearchParams({ beforeDate });

@@ -6,25 +6,23 @@ import {
     ChevronRight,
     ChevronDown,
     Plus,
-    Pencil,
     Check,
     X,
     Clock,
     FileText,
     BookOpen,
     RefreshCw,
-    Briefcase,
-    CircleDot,
-    PlusCircle,
     Info,
     ArrowLeft,
-    MapPin,
-    Tag,
-    Code2,
-    MoreHorizontal,
 } from 'lucide-react';
+import { STATUS_LABEL, PRIORITY_LABEL } from './types/execution.js';
 
-/* ===================== 상수 ===================== */
+/*
+ * v6.1 §12: 주간 시간표는 더 이상 자체 mock(EVENTS/TODAY_EVENTS)을 갖지 않는다.
+ * items(ExecutionItemDto[])/weekDates/todayDate는 모두 부모(ExecutionView)가 executionItemAPI
+ * 로 실제 조회해 내려준다 — Today 화면과 같은 원본, 같은 API를 쓴다. 여기서는 그 원본을
+ * 주간 그리드로 투영만 한다.
+ */
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -34,7 +32,6 @@ const HOUR_PX = 46;
 
 const CATEGORIES = [
     { key: 'study', label: '공부', color: '#6366f1' },
-    { key: 'project', label: '프로젝트', color: '#22c55e' },
     { key: 'class', label: '교정 일정', color: '#3b82f6' },
     { key: 'routine', label: '루틴', color: '#06b6d4' },
 ];
@@ -47,125 +44,35 @@ const CATEGORY_MAP = CATEGORIES.reduce((acc, c) => {
 const ICON_MAP = {
     class: CalendarDays,
     routine: RefreshCw,
-    project: CircleDot,
-    code: Code2,
     study: BookOpen,
-    work: Briefcase,
 };
 
-/* ===================== 목업 데이터 ===================== */
+/* ===================== 실행 조각 -> 화면 이벤트 매핑 ===================== */
 
-const EVENTS = [
-    // 월 ~ 금 정보처리산업기사 특강
-    ...[0, 1, 2, 3, 4].map((day) => ({
-        id: `class-${day}`,
-        day,
-        title: '정보처리산업기사 특강',
-        start: '09:00',
-        end: '11:00',
-        category: 'class',
-        icon: 'class',
-        repeat: '매주 월–금 09:00 – 11:00',
-        place: '온라인 강의실',
-        memo: '실기 대비 특강',
-        nextRepeat: '7월 13일 월요일 09:00',
-    })),
-    // 운동 (월화수 + 금)
-    ...[0, 1, 2, 4].map((day) => ({
-        id: `routine-${day}`,
-        day,
-        title: '운동',
-        start: '11:30',
-        end: '12:30',
-        category: 'routine',
-        icon: 'routine',
-        repeat: '매주 월·화·수·금 11:30 – 12:30',
-        place: '헬스장',
-        memo: '유산소 30분 + 근력',
-        nextRepeat: '7월 13일 월요일 11:30',
-    })),
-    // diary-app 개발 (월수금)
-    ...[0, 2, 4].map((day) => ({
-        id: `project-${day}`,
-        day,
-        title: 'diary-app 개발',
-        start: '14:00',
-        end: '16:00',
-        category: 'project',
-        icon: 'project',
-        repeat: '매주 월·수·금 14:00 – 16:00',
-        place: '개인 작업실',
-        memo: '기능 개발 및 개선, 배포 준비',
-        nextRepeat: '7월 13일 월요일 14:00',
-    })),
-    // 자습 (화목)
-    ...[1, 3].map((day) => ({
-        id: `self-${day}`,
-        day,
-        title: '자습',
-        start: '14:00',
-        end: '15:00',
-        category: 'study',
-        icon: 'study',
-    })),
-    // 영어 공부 (월화목)
-    ...[0, 1, 3].map((day) => ({
-        id: `eng-${day}`,
-        day,
-        title: '영어 공부',
-        start: '15:30',
-        end: '17:00',
-        category: 'study',
-        icon: 'study',
-    })),
-    // LG Aimers (수금)
-    ...[2, 4].map((day) => ({
-        id: `aimers-${day}`,
-        day,
-        title: 'LG Aimers',
-        start: '16:30',
-        end: '18:00',
-        category: 'study',
-        icon: 'study',
-    })),
-    // 알바 (월~금)
-    ...[0, 1, 2, 3, 4].map((day) => ({
-        id: `work-${day}`,
-        day,
-        title: '알바',
-        start: '19:00',
-        end: '22:00',
-        category: 'work',
-        icon: 'work',
-    })),
-    // 토요일
-    {
-        id: 'sat-eng',
-        day: 5,
-        title: '영어 공부',
-        start: '09:00',
-        end: '10:30',
-        category: 'study',
-        icon: 'study',
-    },
-    {
-        id: 'sat-self',
-        day: 5,
-        title: '자습',
-        start: '11:00',
-        end: '12:00',
-        category: 'study',
-        icon: 'study',
-    },
-];
+/** ExecutionItemType -> 화면 카테고리. 백엔드에 없는 필드(장소/메모/반복 문구 등)는 만들지 않는다. */
+function categoryOf(item) {
+    if (item.itemType === 'FIXED_EVENT') return 'class';
+    if (item.itemType === 'ROUTINE_OCCURRENCE') return 'routine';
+    return 'study';
+}
 
-const TODAY_EVENTS = [
-    { id: 't1', title: '영어 공부', start: '09:00', end: '10:30', status: '종료', icon: 'study' },
-    { id: 't2', title: '자습', start: '11:00', end: '12:00', status: '종료', icon: 'study' },
-    { id: 't3', title: '알바', start: '19:00', end: '22:00', status: '예정', icon: 'work' },
-];
+function toEvent(item) {
+    return {
+        id: item.executionItemId,
+        raw: item,
+        day: null, // weekDates 기준으로 호출부에서 채운다
+        title: item.title,
+        start: item.startTime,
+        end: item.endTime,
+        category: categoryOf(item),
+        icon: categoryOf(item),
+        status: item.status,
+        priority: item.priority,
+        estimatedMinutes: item.estimatedMinutes,
+    };
+}
 
-/* ===================== 유틸 ===================== */
+/* ===================== 날짜 유틸 ===================== */
 
 function toMinutes(hhmm) {
     const [h, m] = hhmm.split(':').map(Number);
@@ -180,20 +87,46 @@ function heightOf(start, end) {
     return ((toMinutes(end) - toMinutes(start)) / 60) * HOUR_PX;
 }
 
+function formatMD(dateString) {
+    if (!dateString) return '';
+    const [, m, d] = dateString.split('-');
+    return `${Number(m)}/${Number(d)}`;
+}
+
+function formatMDKo(dateString) {
+    if (!dateString) return '';
+    const [, m, d] = dateString.split('-');
+    return `${Number(m)}월 ${Number(d)}일`;
+}
+
+function formatFullKo(dateString) {
+    if (!dateString) return '';
+    const date = new Date(`${dateString}T00:00:00`);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return `${formatMDKo(dateString)} ${days[date.getDay()]}요일`;
+}
+
 /* ===================== 컴포넌트 ===================== */
 
-export default function TimetableView() {
-    const [activeCategories, setActiveCategories] = useState(
-        CATEGORIES.map((c) => c.key),
-    );
+export default function TimetableView({
+    items = [],
+    weekDates = [],
+    todayDate,
+    loading = false,
+    error = null,
+    onPrevWeek,
+    onNextWeek,
+    onToday,
+    onOpenDetail,
+}) {
+    const [activeCategories, setActiveCategories] = useState(CATEGORIES.map((c) => c.key));
     const [semesterOpen, setSemesterOpen] = useState(false);
     const [panelOpen, setPanelOpen] = useState(true);
     const [selectedEvent, setSelectedEvent] = useState(null);
-    const [, setMemoOpen] = useState(false);
-    const [, setSlotOpen] = useState(false);
 
-    const todayIndex = 5; // 토요일
-    const nowMinutes = 19 * 60; // 19:00 현재 시각선
+    const todayIndex = weekDates.indexOf(todayDate);
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
     const hours = useMemo(() => {
         const list = [];
@@ -209,16 +142,22 @@ export default function TimetableView() {
         );
     };
 
-    const visibleEvents = EVENTS.filter((event) => {
-        if (event.category === 'work') return true;
-        return activeCategories.includes(event.category);
-    });
+    const events = useMemo(() => {
+        return items
+            .filter((item) => item.scheduledDate && weekDates.includes(item.scheduledDate))
+            .map((item) => ({ ...toEvent(item), day: weekDates.indexOf(item.scheduledDate) }));
+    }, [items, weekDates]);
 
-    const dates = ['7/6', '7/7', '7/8', '7/9', '7/10', '7/11', '7/12'];
+    const visibleEvents = events.filter((event) => activeCategories.includes(event.category));
+    const timedEvents = visibleEvents.filter((event) => event.start && event.end);
+    const untimedEvents = visibleEvents.filter((event) => !event.start || !event.end);
+
+    const todayEvents = events
+        .filter((event) => event.day === todayIndex)
+        .sort((a, b) => (a.start ?? '99:99').localeCompare(b.start ?? '99:99'));
 
     return (
         <div className="timetable-view">
-            {/* 최상단 헤더 바 (전체 폭) */}
             <div className="timetable-topbar">
                 <h1 className="timetable-title">주간 시간표</h1>
                 <div className="timetable-header-hint">
@@ -232,7 +171,6 @@ export default function TimetableView() {
 
             <div className="timetable-body">
                 <div className="timetable-main">
-                    {/* 툴바 */}
                     <div className="timetable-toolbar">
                         <div className="timetable-select-wrap">
                             <button
@@ -257,30 +195,38 @@ export default function TimetableView() {
 
                         <div className="timetable-range">
                             <CalendarDays size={16} />
-                            <span>7월 6일 – 7월 12일</span>
+                            <span>{formatMDKo(weekDates[0])} – {formatMDKo(weekDates[6])}</span>
                         </div>
 
                         <div className="timetable-nav">
-                            <button type="button" className="timetable-nav-btn">
+                            <button type="button" className="timetable-nav-btn" onClick={onPrevWeek}>
                                 <ChevronLeft size={15} />
                                 이전
                             </button>
-                            <button type="button" className="timetable-nav-btn">오늘</button>
-                            <button type="button" className="timetable-nav-btn">
+                            <button type="button" className="timetable-nav-btn" onClick={onToday}>오늘</button>
+                            <button type="button" className="timetable-nav-btn" onClick={onNextWeek}>
                                 다음
                                 <ChevronRight size={15} />
                             </button>
                         </div>
                     </div>
 
-                    {/* 요약 바 */}
                     <div className="timetable-summary">
-                        <span className="timetable-summary-main">오늘 남은 일정 1</span>
-                        <span className="timetable-summary-dot">·</span>
-                        <span className="timetable-summary-sub">시험 · 과제 3</span>
+                        <span className="timetable-summary-main">이번 주 실행 조각 {events.length}개</span>
+                        {loading && (
+                            <>
+                                <span className="timetable-summary-dot">·</span>
+                                <span className="timetable-summary-sub">불러오는 중...</span>
+                            </>
+                        )}
+                        {error && (
+                            <>
+                                <span className="timetable-summary-dot">·</span>
+                                <span className="timetable-summary-sub timetable-summary-error">{error}</span>
+                            </>
+                        )}
                     </div>
 
-                    {/* 필터 */}
                     <div className="timetable-filter">
                         <span className="timetable-filter-label">표시 일정</span>
                         {CATEGORIES.map((cat) => {
@@ -308,10 +254,8 @@ export default function TimetableView() {
                         })}
                     </div>
 
-                    {/* 그리드 */}
                     <div className="timetable-grid-card">
                         <div className="timetable-grid">
-                            {/* 헤더 행 */}
                             <div className="timetable-grid-head">
                                 <div className="timetable-gutter-head" />
                                 {DAY_LABELS.map((day, index) => {
@@ -324,18 +268,14 @@ export default function TimetableView() {
                                                 isSunday ? 'sunday' : ''
                                             }`}
                                         >
-                        <span>
-                          {day} {dates[index]}
-                        </span>
+                                            <span>{day} {formatMD(weekDates[index])}</span>
                                             {isToday && <span className="timetable-today-badge">오늘</span>}
                                         </div>
                                     );
                                 })}
                             </div>
 
-                            {/* 본문 */}
                             <div className="timetable-grid-body" style={{ height: gridHeight }}>
-                                {/* 시간 눈금 */}
                                 <div className="timetable-gutter">
                                     {hours.map((h) => (
                                         <div
@@ -348,16 +288,34 @@ export default function TimetableView() {
                                     ))}
                                 </div>
 
-                                {/* 요일 컬럼 */}
                                 {DAY_LABELS.map((day, dayIndex) => {
                                     const isToday = dayIndex === todayIndex;
-                                    const dayEvents = visibleEvents.filter((e) => e.day === dayIndex);
+                                    const dayTimedEvents = timedEvents.filter((e) => e.day === dayIndex);
+                                    const dayUntimedEvents = untimedEvents.filter((e) => e.day === dayIndex);
                                     return (
                                         <div
                                             key={day}
                                             className={`timetable-col ${isToday ? 'today' : ''}`}
                                         >
-                                            {/* 시간선 */}
+                                            {dayUntimedEvents.length > 0 && (
+                                                <div className="timetable-untimed-row">
+                                                    {dayUntimedEvents.map((event) => {
+                                                        const cat = CATEGORY_MAP[event.category];
+                                                        return (
+                                                            <button
+                                                                type="button"
+                                                                key={event.id}
+                                                                className="timetable-untimed-chip"
+                                                                style={{ color: cat?.color, borderColor: `${cat?.color}55` }}
+                                                                onClick={() => { setSelectedEvent(event); setPanelOpen(true); }}
+                                                            >
+                                                                {event.title}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
                                             {hours.map((h) => (
                                                 <div
                                                     key={h}
@@ -366,8 +324,7 @@ export default function TimetableView() {
                                                 />
                                             ))}
 
-                                            {/* 이벤트 */}
-                                            {dayEvents.map((event) => {
+                                            {dayTimedEvents.map((event) => {
                                                 const cat = CATEGORY_MAP[event.category];
                                                 const accent = cat ? cat.color : '#9ca3af';
                                                 const EventIcon = ICON_MAP[event.icon] || BookOpen;
@@ -407,89 +364,29 @@ export default function TimetableView() {
                                                     </div>
                                                 );
                                             })}
-
-                                            {/* 목요일 빈 슬롯 추가 버튼 */}
-                                            {dayIndex === 3 && (
-                                                <button
-                                                    type="button"
-                                                    className="timetable-add-slot"
-                                                    style={{ top: topOf('11:30'), height: HOUR_PX - 8 }}
-                                                >
-                                                    <PlusCircle size={13} />
-                                                    일정 추가
-                                                </button>
-                                            )}
                                         </div>
                                     );
                                 })}
 
-                                {/* 현재 시각선 */}
-                                <div
-                                    className="timetable-nowline"
-                                    style={{ top: ((nowMinutes - START_HOUR * 60) / 60) * HOUR_PX }}
-                                >
-                                    <span className="timetable-nowline-label">19:00</span>
-                                    <span className="timetable-nowline-dot" />
-                                </div>
+                                {todayIndex !== -1 && nowMinutes >= START_HOUR * 60 && nowMinutes <= END_HOUR * 60 && (
+                                    <div
+                                        className="timetable-nowline"
+                                        style={{ top: ((nowMinutes - START_HOUR * 60) / 60) * HOUR_PX }}
+                                    >
+                                        <span className="timetable-nowline-label">
+                                            {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}
+                                        </span>
+                                        <span className="timetable-nowline-dot" />
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    </div>
-
-                    {/* 하단 바 */}
-                    <div className="timetable-footer">
-                        <div className="timetable-footer-card">
-                            <Clock size={16} className="timetable-footer-icon" />
-                            <span className="timetable-footer-label">다음 빈 시간:</span>
-                            <span className="timetable-footer-value">수요일 12:30 – 14:00</span>
-                            <button
-                                type="button"
-                                className="timetable-footer-btn"
-                                onClick={() => setSlotOpen((v) => !v)}
-                            >
-                                시간 후보 보기
-                                <ChevronDown size={14} />
-                            </button>
-                        </div>
-
-                        <div className="timetable-footer-card">
-                            <FileText size={16} className="timetable-footer-icon" />
-                            <span className="timetable-footer-label strong">시간표 메모</span>
-                            <div className="timetable-memo-tags">
-                                <span>마감 1</span>
-                                <span className="timetable-memo-dot">·</span>
-                                <span>주간 목표 2</span>
-                                <span className="timetable-memo-dot">·</span>
-                                <span>확인 필요 1</span>
-                                <span className="timetable-memo-dot">·</span>
-                                <span>개인 메모 1</span>
-                            </div>
-                            <button
-                                type="button"
-                                className="timetable-memo-toggle"
-                                onClick={() => setMemoOpen((v) => !v)}
-                            >
-                                <ChevronDown size={16} />
-                            </button>
                         </div>
                     </div>
                 </div>
 
-                {/* 우측 패널 */}
                 <aside className="timetable-side">
-                    <div className="timetable-side-actions">
-                        <button type="button" className="timetable-btn-primary">
-                            <Plus size={16} />
-                            일정 추가
-                        </button>
-                        <button type="button" className="timetable-btn-outline">
-                            <Pencil size={15} />
-                            시간표 편집
-                        </button>
-                    </div>
-
                     {panelOpen && (
                         selectedEvent ? (
-                            /* ===== 선택 일정 상세 ===== */
                             <div className="timetable-panel">
                                 <div className="timetable-detail-head">
                                     <button
@@ -517,10 +414,7 @@ export default function TimetableView() {
                                 {(() => {
                                     const cat = CATEGORY_MAP[selectedEvent.category];
                                     const accent = cat ? cat.color : '#9ca3af';
-                                    const DetailIcon =
-                                        selectedEvent.category === 'project'
-                                            ? Code2
-                                            : ICON_MAP[selectedEvent.icon] || BookOpen;
+                                    const DetailIcon = ICON_MAP[selectedEvent.icon] || BookOpen;
                                     return (
                                         <>
                                             <div className="timetable-detail-name-row">
@@ -529,83 +423,42 @@ export default function TimetableView() {
                                                 {cat && (
                                                     <span
                                                         className="timetable-detail-tag"
-                                                        style={{
-                                                            color: accent,
-                                                            background: `${accent}14`,
-                                                            borderColor: `${accent}44`,
-                                                        }}
+                                                        style={{ color: accent, background: `${accent}14`, borderColor: `${accent}44` }}
                                                     >
-                                    {cat.label}
-                                  </span>
+                                                        {cat.label}
+                                                    </span>
                                                 )}
                                             </div>
 
                                             <div className="timetable-detail-meta">
                                                 <div className="timetable-detail-row">
                                                     <Clock size={16} />
-                                                    <span className="timetable-detail-key">반복</span>
+                                                    <span className="timetable-detail-key">시간</span>
                                                     <span className="timetable-detail-val">
-                                  {selectedEvent.repeat ||
-                                      `${selectedEvent.start} – ${selectedEvent.end}`}
-                                </span>
+                                                        {selectedEvent.start ? `${selectedEvent.start} – ${selectedEvent.end}` : '시간 미정'}
+                                                    </span>
                                                 </div>
                                                 <div className="timetable-detail-row">
-                                                    <MapPin size={16} />
-                                                    <span className="timetable-detail-key">장소</span>
+                                                    <Info size={16} />
+                                                    <span className="timetable-detail-key">상태</span>
                                                     <span className="timetable-detail-val">
-                                  {selectedEvent.place || '미지정'}
-                                </span>
+                                                        {STATUS_LABEL[selectedEvent.status] ?? selectedEvent.status}
+                                                    </span>
                                                 </div>
                                                 <div className="timetable-detail-row">
-                                                    <Tag size={16} />
-                                                    <span className="timetable-detail-key">메모</span>
+                                                    <FileText size={16} />
+                                                    <span className="timetable-detail-key">우선순위</span>
                                                     <span className="timetable-detail-val">
-                                  {selectedEvent.memo || '없음'}
-                                </span>
+                                                        {PRIORITY_LABEL[selectedEvent.priority] ?? selectedEvent.priority}
+                                                    </span>
                                                 </div>
                                             </div>
 
-                                            <div
-                                                className="timetable-detail-note"
-                                                style={{
-                                                    background: `${accent}0d`,
-                                                    borderColor: `${accent}33`,
-                                                    color: accent,
-                                                }}
+                                            <button
+                                                type="button"
+                                                className="timetable-detail-link"
+                                                onClick={() => onOpenDetail?.(selectedEvent.raw)}
                                             >
-                                                <Info size={15} />
-                                                <span>
-                                이번 주 {DAY_LABELS[selectedEvent.day]}요일 일정입니다.
-                              </span>
-                                            </div>
-
-                                            {selectedEvent.nextRepeat && (
-                                                <div className="timetable-detail-next">
-                                                    <CalendarDays size={16} />
-                                                    <span className="timetable-detail-next-label">
-                                    다음 반복 일정:
-                                  </span>
-                                                    <span className="timetable-detail-next-val">
-                                    {selectedEvent.nextRepeat}
-                                  </span>
-                                                </div>
-                                            )}
-
-                                            <div className="timetable-detail-actions">
-                                                <button type="button" className="timetable-detail-edit">
-                                                    <Pencil size={15} />
-                                                    수정
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="timetable-detail-more"
-                                                    aria-label="더보기"
-                                                >
-                                                    <MoreHorizontal size={18} />
-                                                </button>
-                                            </div>
-
-                                            <button type="button" className="timetable-detail-link">
                                                 <CalendarDays size={15} />
                                                 오늘 계획에서 보기
                                             </button>
@@ -614,12 +467,11 @@ export default function TimetableView() {
                                 })()}
                             </div>
                         ) : (
-                            /* ===== 오늘 일정 목록 ===== */
                             <div className="timetable-panel">
                                 <div className="timetable-panel-head">
                                     <div>
                                         <h2 className="timetable-panel-title">오늘 일정</h2>
-                                        <p className="timetable-panel-date">7월 11일 토요일</p>
+                                        <p className="timetable-panel-date">{formatFullKo(todayDate)}</p>
                                     </div>
                                     <button
                                         type="button"
@@ -631,46 +483,48 @@ export default function TimetableView() {
                                     </button>
                                 </div>
 
-                                <div className="timetable-panel-list">
-                                    {TODAY_EVENTS.map((event) => {
-                                        const EventIcon = ICON_MAP[event.icon] || BookOpen;
-                                        const done = event.status === '종료';
-                                        return (
-                                            <div
-                                                key={event.id}
-                                                role="button"
-                                                tabIndex={0}
-                                                className="timetable-panel-item"
-                                                onClick={() => setSelectedEvent(event)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        e.preventDefault();
-                                                        setSelectedEvent(event);
-                                                    }
-                                                }}
-                                            >
-                                                <div className="timetable-panel-icon">
-                                                    <EventIcon size={16} />
-                                                </div>
-                                                <div className="timetable-panel-body">
-                                                    <div className="timetable-panel-time">
-                                                        {event.start} – {event.end}
-                                                    </div>
-                                                    <div className="timetable-panel-name">{event.title}</div>
-                                                </div>
-                                                <span
-                                                    className={`timetable-status ${done ? 'done' : 'upcoming'}`}
+                                {todayEvents.length === 0 ? (
+                                    <p className="timetable-panel-hint">오늘 배치된 실행 조각이 없어요.</p>
+                                ) : (
+                                    <div className="timetable-panel-list">
+                                        {todayEvents.map((event) => {
+                                            const EventIcon = ICON_MAP[event.icon] || BookOpen;
+                                            const done = event.status === 'DONE';
+                                            return (
+                                                <div
+                                                    key={event.id}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    className="timetable-panel-item"
+                                                    onClick={() => setSelectedEvent(event)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            setSelectedEvent(event);
+                                                        }
+                                                    }}
                                                 >
-                                {event.status}
-                              </span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                                    <div className="timetable-panel-icon">
+                                                        <EventIcon size={16} />
+                                                    </div>
+                                                    <div className="timetable-panel-body">
+                                                        <div className="timetable-panel-time">
+                                                            {event.start ? `${event.start} – ${event.end}` : '시간 미정'}
+                                                        </div>
+                                                        <div className="timetable-panel-name">{event.title}</div>
+                                                    </div>
+                                                    <span className={`timetable-status ${done ? 'done' : 'upcoming'}`}>
+                                                        {STATUS_LABEL[event.status] ?? event.status}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
 
                                 <div className="timetable-panel-hint">
                                     <Info size={14} />
-                                    <p>시간표에서 일정을 클릭하면 반복, 장소, 메모를 확인할 수 있어요.</p>
+                                    <p>시간표에서 일정을 클릭하면 상태와 우선순위를 확인할 수 있어요.</p>
                                 </div>
                             </div>
                         )

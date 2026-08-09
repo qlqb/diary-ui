@@ -15,7 +15,7 @@
  * 오늘 항목의 결과를 남기려는 행동은 onGoToday 로 오늘 화면에 연결한다.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { ViewHeader, SubTabs, ExecutionItemCard, EmptyState } from './shared.jsx';
 import {
@@ -25,6 +25,7 @@ import {
   MOCK_PLAN_ITEMS,
   MOCK_PLANS,
 } from '../mock/executionMock.js';
+import { executionItemAPI } from '../api/api.js';
 import TimetableView from '../TimetableView.jsx';
 
 const SUB_TABS = [
@@ -33,9 +34,43 @@ const SUB_TABS = [
   { key: 'routine', label: '루틴' },
 ];
 
+/** 월요일 시작 주간 날짜 7개. 로컬 기준으로만 계산해 UTC 밀림을 피한다. */
+function weekDatesFor(offset) {
+  const now = new Date();
+  const day = now.getDay(); // 0=일 ... 6=토
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
+}
+
 export default function ExecutionView({ items, onOpenDetail, onGoToday }) {
   const [sub, setSub] = useState('progress');
   const today = getTodayString();
+
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekDates = weekDatesFor(weekOffset);
+  const [timetableItems, setTimetableItems] = useState([]);
+  const [timetableLoading, setTimetableLoading] = useState(false);
+  const [timetableError, setTimetableError] = useState(null);
+
+  useEffect(() => {
+    if (sub !== 'timetable') return;
+    let cancelled = false;
+    setTimetableLoading(true);
+    setTimetableError(null);
+    executionItemAPI.getByDateRange(weekDates[0], weekDates[6])
+      .then((data) => { if (!cancelled) setTimetableItems(data); })
+      .catch((err) => { if (!cancelled) setTimetableError(err.message || '시간표를 불러오지 못했습니다.'); })
+      .finally(() => { if (!cancelled) setTimetableLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sub, weekOffset]);
 
   const active = selectActiveExecutionItems(items);
   const groups = groupByPlan(active, MOCK_PLAN_ITEMS, MOCK_PLANS);
@@ -97,10 +132,22 @@ export default function ExecutionView({ items, onOpenDetail, onGoToday }) {
 
       {/*
         * 시간표는 실행 탭의 내부 보기다(v6.1 §5.4).
-        * 기존 TimetableView 를 그대로 쓴다. 아직 자체 mock(EVENTS)을 사용하며,
-        * ExecutionItem 원본으로 바꾸는 것은 이후 단계다.
+        * Today와 같은 원본(executionItemAPI)을 주간 범위로 조회해 투영한다 — 별도의
+        * "학습 시간표" mock을 따로 소유하지 않는다.
         */}
-      {sub === 'timetable' && <TimetableView />}
+      {sub === 'timetable' && (
+        <TimetableView
+          items={timetableItems}
+          weekDates={weekDates}
+          todayDate={today}
+          loading={timetableLoading}
+          error={timetableError}
+          onPrevWeek={() => setWeekOffset((v) => v - 1)}
+          onNextWeek={() => setWeekOffset((v) => v + 1)}
+          onToday={() => setWeekOffset(0)}
+          onOpenDetail={onOpenDetail}
+        />
+      )}
 
       {sub === 'routine' && (
         <EmptyState
