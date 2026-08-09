@@ -6669,3 +6669,534 @@ body {
   border-radius: 10px;
   padding: 0.85rem 1rem;
 }
+
+/* ===== 계획 탭 -> 학습 안내 배너 ===== */
+.v6-notice-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.v6-notice-link:hover { background: #f3f4f6; }
+.v6-notice-link svg:first-child { color: #6366f1; flex-shrink: 0; }
+.v6-notice-link svg:last-child { margin-left: auto; color: #9ca3af; flex-shrink: 0; }
+
+/* ===== 학습 개요 (LearningView) ===== */
+.learning-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.85rem;
+}
+
+.learning-course-card {
+  background: #fff;
+  border: 0.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.learning-course-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.learning-course-card-title {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  color: #111827;
+  cursor: pointer;
+  text-align: left;
+}
+.learning-course-card-title:hover { color: #4f46e5; }
+
+.learning-course-card-pct {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4f46e5;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.learning-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  overflow: hidden;
+}
+.learning-progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  border-radius: 999px;
+  transition: width 0.2s;
+}
+
+.learning-course-card-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+.learning-course-card-status-label {
+  font-size: 0.66rem;
+  color: #9ca3af;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.learning-course-card-status-value {
+  font-size: 0.85rem;
+  color: #111827;
+  font-weight: 550;
+}
+
+.learning-course-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.learning-course-card-actions .btn-primary,
+.learning-course-card-actions .btn-ghost {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.learning-course-progress-badge {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: #4f46e5;
+  background: #eef2ff;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ===== LearningMap: 계층 학습 지도 ===== */
+.learning-map-shell {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.1fr) minmax(260px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.learning-map {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem;
+  background: #fff;
+  border: 0.5px solid #e5e7eb;
+  border-radius: 10px;
+}
+.learning-map ul { list-style: none; margin: 0; padding: 0; }
+
+.learning-map-node { margin: 1px 0; }
+
+.learning-map-row {
+  display: flex;
+  align-items: center;
+  border-radius: 7px;
+}
+.learning-map-row.selected {
+  background: #eef2ff;
+}
+
+.learning-map-toggle,
+.learning-map-toggle-spacer {
+  width: 22px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.learning-map-title-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 5px 6px 5px 2px;
+  font-size: 0.83rem;
+  color: #374151;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 6px;
+}
+.learning-map-row.selected .learning-map-title-btn {
+  color: #3730a3;
+  font-weight: 600;
+}
+
+.learning-map-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.learning-map-status-icon { flex-shrink: 0; }
+.learning-map-status-NOT_STARTED .learning-map-status-icon { color: #d1d5db; }
+.learning-map-status-IN_PROGRESS .learning-map-status-icon { color: #2563eb; }
+.learning-map-status-LEARNED .learning-map-status-icon { color: #059669; }
+
+/* ===== TopicDetail: 선택된 topic 상세 ===== */
+.topic-detail {
+  background: #fff;
+  border: 0.5px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  position: sticky;
+  top: 12px;
+}
+
+.topic-detail-empty {
+  color: #9ca3af;
+  font-size: 0.83rem;
+}
+
+.topic-detail-title {
+  font-size: 1rem;
+  font-weight: 650;
+  color: #111827;
+  margin: 0;
+}
+
+.topic-detail-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.topic-detail-key {
+  flex-shrink: 0;
+  width: 64px;
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.topic-detail-val { color: #374151; }
+
+.topic-detail-source-locator {
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+
+.topic-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.topic-detail-tutor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+/* ===== TutorView: 개인과외 전용 화면 =====
+ * shell-content의 좌우/하단 패딩을 상쇄해 뷰포트 전체 높이를 그대로 쓰고,
+ * 내부(tutor-messages)만 스크롤한다 — 대화가 길어져도 페이지 전체가 늘어나지 않는다.
+ */
+.tutor-view {
+  height: 100vh;
+  margin: 0 -2.25rem -3rem;
+  padding: 0.5rem 2.25rem 1.25rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.tutor-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 0.75rem;
+  border-bottom: 0.5px solid #f0f0f2;
+  flex-shrink: 0;
+}
+
+.tutor-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.tutor-header-course {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  font-weight: 600;
+}
+.tutor-header-topic {
+  font-size: 1rem;
+  font-weight: 650;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutor-header-badge {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 650;
+  color: #4f46e5;
+  background: #eef2ff;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  flex-shrink: 0;
+}
+
+.tutor-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  padding-top: 0.75rem;
+  overflow: hidden;
+}
+
+.tutor-chat {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tutor-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0.5rem 0.25rem 1rem;
+}
+
+.tutor-chat-hint {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  text-align: center;
+  margin: 2rem auto;
+  max-width: 420px;
+  line-height: 1.6;
+}
+
+.tutor-bubble {
+  font-size: 0.9rem;
+  line-height: 1.65;
+  padding: 0.7rem 0.95rem;
+  border-radius: 12px;
+  max-width: 80%;
+  white-space: pre-wrap;
+}
+.tutor-bubble-user {
+  align-self: flex-end;
+  background: #4f46e5;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.tutor-bubble-assistant {
+  align-self: flex-start;
+  background: #f9fafb;
+  border: 0.5px solid #e5e7eb;
+  color: #111827;
+  border-bottom-left-radius: 4px;
+}
+.tutor-bubble-pending { color: #9ca3af; }
+
+.tutor-chat-error {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.tutor-input-row {
+  display: flex;
+  gap: 8px;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  flex-shrink: 0;
+}
+.tutor-input {
+  flex: 1;
+  min-width: 0;
+  border: 0.5px solid #d1d5db;
+  border-radius: 10px;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+}
+.tutor-input:focus { border-color: #6366f1; }
+.tutor-send-btn { flex-shrink: 0; }
+
+.tutor-footer {
+  flex-shrink: 0;
+  border-top: 0.5px solid #f0f0f2;
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tutor-footer-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+.tutor-footer-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tutor-footer-path-sep { color: #d1d5db; margin: 0 2px; }
+
+.tutor-materials-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.tutor-footer-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tutor-materials-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+}
+.tutor-materials-modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem 1.4rem;
+  width: 100%;
+  max-width: 420px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.tutor-materials-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.tutor-materials-modal-head h3 { font-size: 0.95rem; margin: 0; }
+.tutor-materials-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tutor-materials-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: #374151;
+  border: 0.5px solid #f0f0f2;
+  border-radius: 7px;
+  padding: 0.4rem 0.6rem;
+}
+
+/* ===== MaterialReview: 분석 draft 편집 ===== */
+.material-review-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  gap: 6px 10px;
+  margin: 0.5rem 0;
+}
+.material-review-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+.material-review-field-row span:first-child {
+  flex-shrink: 0;
+  width: 48px;
+}
+.material-review-input { flex: 1; min-width: 0; }
+
+.material-review-tree { margin-top: 0.5rem; }
+.material-review-node { margin: 3px 0; }
+.material-review-topic-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.material-review-title-input { max-width: 260px; }
+.material-review-remove-btn:hover { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+.material-review-add-root {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 0.5rem;
+}
+
+/* ===== TimetableView: 실데이터 보강 ===== */
+.timetable-untimed-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 4px;
+}
+.timetable-untimed-chip {
+  font-size: 0.68rem;
+  border: 0.5px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  background: #fff;
+  cursor: pointer;
+}
+.timetable-summary-error { color: #dc2626; }
+
+@media (max-width: 980px) {
+  .learning-map-shell { grid-template-columns: 1fr; }
+  .topic-detail { position: static; }
+}

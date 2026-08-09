@@ -1,29 +1,48 @@
 /**
- * 과목 상세. 자료 업로드/분석 검토/적용과 학습 topic 트리를 하나로 묶는다.
+ * 과목 상세 shell. 자료 업로드/분석 검토/적용과 학습 지도(LearningMap+TopicDetail)를 묶는다.
  *
- * "자료" 탭: 업로드 -> 분석(draft) -> 검토(수정 가능)/적용. 적용 전에는 course_topics가
- * 전혀 바뀌지 않는다.
- * "학습" 탭: 확정된 topic 트리 + 진행 상태 + Learning/Planning Agent 흐름.
+ * "학습" 탭: 확정된 topic 트리를 계층 그대로 보여주고(LearningMap), 선택한 topic 하나의
+ * 상세(TopicDetail)와 다음 학습 추천(RecommendationPanel)을 연결한다.
+ * "자료" 탭: 업로드 -> 분석(DRAFT) -> 편집 가능한 검토(MaterialReview)/적용. 적용 전에는
+ * course_topics가 전혀 바뀌지 않는다.
+ *
+ * AI 과외는 이 화면 안에서 펼치지 않는다 — onStartTutor로 부모(LearningView)에게 전환을
+ * 맡기고, 부모가 화면 전체를 TutorView로 바꾼다.
  */
 
 import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { ViewHeader, SubTabs, EmptyState } from '../shared.jsx';
 import { courseAPI, materialAPI, materialAnalysisAPI, topicAPI } from '../../api/api.js';
-import { MaterialType, MATERIAL_TYPE_LABEL, EXTRACTION_STATUS_LABEL, ExtractionStatus, MaterialAnalysisStatus } from '../../types/learning.js';
-import TopicTree from './TopicTree.jsx';
+import { MaterialType, MATERIAL_TYPE_LABEL, EXTRACTION_STATUS_LABEL, ExtractionStatus } from '../../types/learning.js';
+import LearningMap from './LearningMap.jsx';
+import TopicDetail from './TopicDetail.jsx';
+import MaterialReview from './MaterialReview.jsx';
 import RecommendationPanel from './RecommendationPanel.jsx';
 
 const SUB_TABS = [
-  { key: 'materials', label: '자료' },
   { key: 'topics', label: '학습' },
+  { key: 'materials', label: '자료' },
 ];
 
-export default function CourseDetail({ courseId, onBack }) {
+function flattenTopics(topics) {
+  const result = [];
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      result.push(node);
+      if (node.children?.length) walk(node.children);
+    }
+  };
+  walk(topics ?? []);
+  return result;
+}
+
+export default function CourseDetail({ courseId, onBack, onStartTutor }) {
   const [course, setCourse] = useState(null);
-  const [sub, setSub] = useState('materials');
+  const [sub, setSub] = useState('topics');
   const [materials, setMaterials] = useState([]);
   const [topics, setTopics] = useState([]);
+  const [selectedTopicId, setSelectedTopicId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -51,15 +70,21 @@ export default function CourseDetail({ courseId, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
+  const flatTopics = flattenTopics(topics);
+  const learnedCount = flatTopics.filter((t) => t.progressStatus === 'LEARNED').length;
+  const progressPct = flatTopics.length > 0 ? Math.round((learnedCount / flatTopics.length) * 100) : 0;
+  const selectedTopic = flatTopics.find((t) => t.topicId === selectedTopicId) ?? null;
+
   return (
     <div className="learning-panel">
       <ViewHeader
         title={
           <span className="learning-back-row">
-            <button type="button" className="learning-icon-btn" onClick={onBack} aria-label="과목 목록으로">
+            <button type="button" className="learning-icon-btn" onClick={onBack} aria-label="학습으로">
               <ArrowLeft size={18} />
             </button>
             {course?.title ?? '과목'}
+            {flatTopics.length > 0 && <span className="learning-course-progress-badge">{progressPct}%</span>}
           </span>
         }
         question={course?.textbookTitle ? `교재: ${course.textbookTitle}` : undefined}
@@ -70,14 +95,6 @@ export default function CourseDetail({ courseId, onBack }) {
       {loading && <p className="v6-section-desc">불러오는 중...</p>}
       {error && <p className="learning-error">{error}</p>}
 
-      {!loading && sub === 'materials' && (
-        <MaterialsPanel
-          courseId={courseId}
-          materials={materials}
-          onChanged={loadAll}
-        />
-      )}
-
       {!loading && sub === 'topics' && (
         <div>
           {topics.length === 0 ? (
@@ -86,13 +103,29 @@ export default function CourseDetail({ courseId, onBack }) {
               desc="자료 탭에서 강의계획서나 교재 목차를 올리고 분석을 적용하면 여기에 나타나요."
             />
           ) : (
-            <TopicTree topics={topics} onProgressChanged={loadAll} />
+            <div className="learning-map-shell">
+              <LearningMap
+                topics={topics}
+                selectedTopicId={selectedTopicId}
+                onSelectTopic={(topic) => setSelectedTopicId(topic.topicId)}
+              />
+              <TopicDetail
+                courseTitle={course?.title}
+                topic={selectedTopic}
+                onProgressChanged={loadAll}
+                onStartTutor={(topic) => onStartTutor?.(course, topic)}
+              />
+            </div>
           )}
           <section className="v6-section">
             <h2 className="v6-section-title">다음 학습</h2>
             <RecommendationPanel courseId={courseId} onApplied={loadAll} />
           </section>
         </div>
+      )}
+
+      {!loading && sub === 'materials' && (
+        <MaterialsPanel courseId={courseId} materials={materials} onChanged={loadAll} />
       )}
     </div>
   );
@@ -131,32 +164,24 @@ function MaterialsPanel({ courseId, materials, onChanged }) {
     }
   };
 
-  const handleApply = async (materialId) => {
-    const analysis = analyses[materialId];
-    if (!analysis) return;
-    setError(null);
-    try {
-      await materialAnalysisAPI.apply(analysis.analysisId);
-      setAnalyses((prev) => {
-        const next = { ...prev };
-        delete next[materialId];
-        return next;
-      });
-      await onChanged?.();
-    } catch (err) {
-      setError(err.message || '적용에 실패했습니다.');
-    }
+  const clearAnalysis = (materialId) => {
+    setAnalyses((prev) => {
+      const next = { ...prev };
+      delete next[materialId];
+      return next;
+    });
+  };
+
+  const handleApplied = async (materialId) => {
+    clearAnalysis(materialId);
+    await onChanged?.();
   };
 
   const handleDismiss = async (materialId) => {
     const analysis = analyses[materialId];
     if (!analysis) return;
     await materialAnalysisAPI.dismiss(analysis.analysisId);
-    setAnalyses((prev) => {
-      const next = { ...prev };
-      delete next[materialId];
-      return next;
-    });
+    clearAnalysis(materialId);
   };
 
   return (
@@ -204,9 +229,9 @@ function MaterialsPanel({ courseId, materials, onChanged }) {
                 )}
 
                 {analyses[m.materialId] && (
-                  <AnalysisReview
+                  <MaterialReview
                     analysis={analyses[m.materialId]}
-                    onApply={() => handleApply(m.materialId)}
+                    onApplied={() => handleApplied(m.materialId)}
                     onDismiss={() => handleDismiss(m.materialId)}
                   />
                 )}
@@ -216,61 +241,5 @@ function MaterialsPanel({ courseId, materials, onChanged }) {
         </div>
       )}
     </div>
-  );
-}
-
-function AnalysisReview({ analysis, onApply, onDismiss }) {
-  if (analysis.status === MaterialAnalysisStatus.FAILED || !analysis.payload) {
-    return (
-      <p className="learning-error">
-        분석에 실패했어요: {analysis.failureReason || '알 수 없는 오류'}
-      </p>
-    );
-  }
-
-  const { payload } = analysis;
-
-  return (
-    <div className="learning-analysis-review">
-      <p className="v6-section-desc">{payload.summary}</p>
-      {payload.courseFields?.textbookTitle && (
-        <p className="v6-item-tag">교재: {payload.courseFields.textbookTitle}</p>
-      )}
-      {payload.topics.length === 0 ? (
-        <p className="learning-error">목차 근거를 찾지 못했어요 — 교재 목차 자료를 올려주세요.</p>
-      ) : (
-        <ul className="learning-topic-preview">
-          {payload.topics.map((t, i) => (
-            <AnalysisTopicPreview key={i} node={t} depth={0} />
-          ))}
-        </ul>
-      )}
-      <div className="learning-chat-input-row">
-        <button type="button" className="v6-btn-small" onClick={onApply} disabled={payload.topics.length === 0}>
-          검토 완료 — 적용
-        </button>
-        <button type="button" className="v6-btn-small" onClick={onDismiss}>
-          폐기
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AnalysisTopicPreview({ node, depth }) {
-  return (
-    <li style={{ marginLeft: depth * 16 }}>
-      <span>{node.title}</span>{' '}
-      <span className={`learning-badge learning-badge-${node.sourceType === 'SOURCE' ? 'source' : 'derived'}`}>
-        {node.sourceType === 'SOURCE' ? '원문 근거' : 'AI 세분화'}
-      </span>
-      {node.children?.length > 0 && (
-        <ul>
-          {node.children.map((c, i) => (
-            <AnalysisTopicPreview key={i} node={c} depth={depth + 1} />
-          ))}
-        </ul>
-      )}
-    </li>
   );
 }

@@ -7,6 +7,7 @@ import {
   NotebookPen,
   LayoutGrid,
   BookOpen,
+  GraduationCap,
   Repeat,
   History,
   ClipboardList,
@@ -40,11 +41,16 @@ import DiaryEditorView from './DiaryEditorView';
 import StatisticsView from './StatisticsView';
 import TimetableView from './TimetableView';
 
-/* v6.1 4개 탭. 모두 같은 ExecutionItem 원본을 다르게 투영한다. */
+/*
+ * v6.1 4개 탭(오늘·계획·실행·기록)은 같은 ExecutionItem 원본을 다르게 투영한다.
+ * 학습은 별도 원본(course/topic)을 가진 다섯 번째 최상위 진입점이다 — 계획 탭 안에 숨어
+ * 있던 "자료·과목"을 꺼내 독립시켰다(2026-08-09 학습 UX 재구성).
+ */
 import TodayView from './views/TodayView.jsx';
 import PlanView from './views/PlanView.jsx';
 import ExecutionView from './views/ExecutionView.jsx';
 import RecordView from './views/RecordView.jsx';
+import LearningView from './views/learning/LearningView.jsx';
 import AiPanelShell from './components/AiPanelShell.jsx';
 import { MOCK_EXECUTION_ITEMS } from './mock/executionMock.js';
 
@@ -247,11 +253,14 @@ function AuthView({ mode, onAuth, onSwitch }) {
 
 function MainShell({ user, onLogout }) {
   /*
-   * v6.1 최상위 탭은 4개다. 기능 목록이 아니라 사용자가 지금 하려는 일과
-   * 데이터 상태를 함께 보여준다.
+   * 최상위 탭은 5개다. 기능 목록이 아니라 사용자가 지금 하려는 일과 데이터 상태를 함께 보여준다.
    *
    * 오늘·계획·실행·기록은 각자 데이터를 소유하지 않는다.
    * 아래 executionItems 하나를 서로 다르게 투영할 뿐이다.
+   *
+   * 학습은 별도 원본(course/topic)을 갖는 다섯 번째 진입점이다. 예전에는 계획 탭 안의
+   * "자료·과목"으로 숨어 있었지만, 학습 자체가 "계획을 만드는 일"이 아니라 별도의 활동이라
+   * 최상위로 꺼냈다 — PlanView는 더 이상 LearningView를 독립적으로 띄우지 않는다.
    *
    * 기존 화면(한눈에·과목·공부계획·루틴·돌아보기·통계)은 코드를 지우지 않고
    * 진입점만 끊었다. 시간표는 실행 탭의 내부 보기로 옮겼다.
@@ -283,12 +292,20 @@ function MainShell({ user, onLogout }) {
     }
   }, [todayDate]);
 
+  /*
+   * 오늘 탭에 들어올 때마다 다시 조회한다 — 학습 탭에서 추천을 계획에 적용하고 돌아왔을 때처럼
+   * 다른 화면에서 만들어진 ExecutionItem이 바로 보여야 한다. 시간표(ExecutionView)도 같은
+   * 방식으로 방문할 때마다 다시 조회한다 — 이 둘이 서로 다른 시점의 스냅샷을 들고 있지 않게 한다.
+   */
   useEffect(() => {
-    loadTodayItems();
-  }, [loadTodayItems]);
+    if (currentTab === 'today') {
+      loadTodayItems();
+    }
+  }, [currentTab, loadTodayItems]);
 
   const tabs = [
     { key: 'today', label: '오늘', icon: CalendarCheck2 },
+    { key: 'learning', label: '학습', icon: GraduationCap },
     { key: 'plan', label: '계획', icon: ClipboardList },
     { key: 'execution', label: '실행', icon: CalendarDays },
     { key: 'record', label: '기록', icon: NotebookPen },
@@ -298,6 +315,7 @@ function MainShell({ user, onLogout }) {
 
   const contextLabel = {
     today: '오늘 날짜의 실행 조각',
+    learning: '과목과 학습 지도',
     plan: '검토 중인 계획 초안',
     execution: '진행 중인 계획 전체',
     record: '최근 확정된 기록',
@@ -392,7 +410,10 @@ function MainShell({ user, onLogout }) {
                   onRefresh={loadTodayItems}
               />
           )}
-          {currentTab === 'plan' && <PlanView onOpenPlan={handleOpenDetail} />}
+          {currentTab === 'learning' && <LearningView />}
+          {currentTab === 'plan' && (
+              <PlanView onOpenPlan={handleOpenDetail} onGoToLearning={() => setCurrentTab('learning')} />
+          )}
           {currentTab === 'execution' && (
               <ExecutionView
                   items={executionItems}
