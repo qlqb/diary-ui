@@ -6790,11 +6790,16 @@ body {
 }
 
 /* ===== LearningMap: 계층 학습 지도 ===== */
+/*
+ * topic이 몇 개든(30~50개) 페이지 전체가 그만큼 길어지지 않도록 이 grid 자체에 고정 높이를
+ * 준다. 왼쪽 지도/오른쪽 상세 각각 내부 scroll로 탐색한다.
+ */
 .learning-map-shell {
   display: grid;
   grid-template-columns: minmax(240px, 1.1fr) minmax(260px, 0.9fr);
   gap: 1rem;
   align-items: start;
+  height: 520px;
 }
 
 .learning-map {
@@ -6804,6 +6809,8 @@ body {
   background: #fff;
   border: 0.5px solid #e5e7eb;
   border-radius: 10px;
+  height: 100%;
+  overflow-y: auto;
 }
 .learning-map ul { list-style: none; margin: 0; padding: 0; }
 
@@ -6872,8 +6879,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  position: sticky;
-  top: 12px;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .topic-detail-empty {
@@ -7197,6 +7204,185 @@ body {
 .timetable-summary-error { color: #dc2626; }
 
 @media (max-width: 980px) {
-  .learning-map-shell { grid-template-columns: 1fr; }
-  .topic-detail { position: static; }
+  .learning-map-shell { grid-template-columns: 1fr; height: auto; }
+  .learning-map, .topic-detail { height: 360px; }
+}
+
+/* ===== 과목 상단 요약 (현재 학습 / 다음 학습) ===== */
+.course-summary {
+  background: #fff;
+  border: 0.5px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.25rem;
+}
+
+.course-summary-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.course-summary-textbook {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.course-notes-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.course-summary-current,
+.course-summary-recommendation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.course-summary-label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.course-summary-value {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.course-summary-recommendation .learning-recommendation-panel {
+  gap: 0.4rem;
+}
+
+.course-summary-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 2px;
+}
+.course-summary-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+/* ===== 과목 정보 / 평가 정보 패널 (course_notes) ===== */
+.course-notes-panel {
+  background: #f9fafb;
+  border: 0.5px solid #f0f0f2;
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.course-notes-group-title,
+.material-review-notes-title {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: #6b7280;
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.course-notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.course-notes-list li {
+  display: flex;
+  gap: 8px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.course-notes-label {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #374151;
+  min-width: 84px;
+}
+
+.course-notes-detail {
+  color: #6b7280;
+}
+
+.material-review-notes {
+  background: #f9fafb;
+  border: 0.5px solid #f0f0f2;
+  border-radius: 8px;
+  padding: 0.65rem 0.8rem;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+/* ===== TopicDetail 보강: 경로/출처/하위 학습 내용 ===== */
+.topic-detail-path-row { align-items: flex-start; }
+
+.topic-detail-path {
+  font-size: 0.78rem;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+.topic-detail-path-sep {
+  color: #d1d5db;
+}
+
+.topic-detail-source-row { align-items: flex-start; }
+
+.topic-detail-source-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.topic-detail-children {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topic-detail-children-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topic-detail-children-list li {
+  font-size: 0.82rem;
+  color: #374151;
+  padding-left: 0.9rem;
+  position: relative;
+}
+.topic-detail-children-list li::before {
+  content: '·';
+  position: absolute;
+  left: 0.2rem;
+  color: #9ca3af;
 }

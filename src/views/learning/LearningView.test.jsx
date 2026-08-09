@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LearningView from './LearningView.jsx';
-import { courseAPI, topicAPI, materialAPI } from '../../api/api.js';
+import { courseAPI, courseNoteAPI, topicAPI, materialAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
   courseAPI: { list: vi.fn(), get: vi.fn(), create: vi.fn() },
+  courseNoteAPI: { list: vi.fn() },
   topicAPI: { getTree: vi.fn(), updateProgress: vi.fn() },
   materialAPI: { listByCourse: vi.fn() },
   materialAnalysisAPI: { analyze: vi.fn(), edit: vi.fn(), apply: vi.fn(), dismiss: vi.fn() },
@@ -53,12 +54,13 @@ describe('LearningView - 학습 진입점', () => {
     const user = userEvent.setup();
     courseAPI.get.mockResolvedValue({ courseId: 1, title: '자료구조', textbookTitle: null });
     materialAPI.listByCourse.mockResolvedValue([]);
+    courseNoteAPI.list.mockResolvedValue([]);
     render(<LearningView />);
 
     await screen.findByText('자료구조');
     await user.click(screen.getByRole('button', { name: /과목 보기/ }));
 
-    expect(await screen.findByRole('button', { name: '학습' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '학습 지도' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '자료' })).toBeInTheDocument();
   });
 });

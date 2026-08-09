@@ -56,4 +56,50 @@ describe('TopicDetail', () => {
     expect(onStartTutor).toHaveBeenCalledWith(topic);
     expect(topicAPI.updateProgress).not.toHaveBeenCalled();
   });
+
+  it('계층 경로를 과목 이름부터 조상 topic까지 이어서 보여준다', () => {
+    const ancestors = [
+      { topicId: 100, title: '자료구조 기초', sourceLocator: null },
+      { topicId: 101, title: '추상 자료형과 성능 분석', sourceLocator: '2장' },
+    ];
+    const { container } = render(
+      <TopicDetail courseTitle="자료구조" ancestors={ancestors} topic={topic} onProgressChanged={vi.fn()} onStartTutor={vi.fn()} />,
+    );
+
+    const pathText = container.querySelector('.topic-detail-path').textContent;
+    expect(pathText).toContain('자료구조');
+    expect(pathText).toContain('자료구조 기초');
+    expect(pathText).toContain('추상 자료형과 성능 분석');
+  });
+
+  it('별도 AI 호출 없이, 이미 저장된 하위 topic을 "이 주제에서 배울 내용"으로 보여준다', () => {
+    const parentTopic = {
+      ...topic,
+      title: '알고리즘 복잡도 분석',
+      children: [
+        { topicId: 30, title: '시간 복잡도' },
+        { topicId: 31, title: '공간 복잡도' },
+      ],
+    };
+    render(<TopicDetail courseTitle="자료구조" topic={parentTopic} onProgressChanged={vi.fn()} onStartTutor={vi.fn()} />);
+
+    expect(screen.getByText('이 주제에서 배울 내용')).toBeInTheDocument();
+    expect(screen.getByText('시간 복잡도')).toBeInTheDocument();
+    expect(screen.getByText('공간 복잡도')).toBeInTheDocument();
+  });
+
+  it('하위 topic이 없으면 "이 주제에서 배울 내용" 섹션을 보여주지 않는다', () => {
+    render(<TopicDetail courseTitle="자료구조" topic={{ ...topic, children: [] }} onProgressChanged={vi.fn()} onStartTutor={vi.fn()} />);
+
+    expect(screen.queryByText('이 주제에서 배울 내용')).not.toBeInTheDocument();
+  });
+
+  it('AI_DERIVED topic은 원문 근거 대신 상위 근거를 보여준다', () => {
+    const ancestors = [{ topicId: 100, title: '연결 리스트', sourceLocator: '3장' }];
+    render(
+      <TopicDetail courseTitle="자료구조" ancestors={ancestors} topic={topic} onProgressChanged={vi.fn()} onStartTutor={vi.fn()} />,
+    );
+
+    expect(screen.getByText(/상위 근거: 연결 리스트/)).toBeInTheDocument();
+  });
 });

@@ -42,6 +42,20 @@ export const MaterialAnalysisStatus = Object.freeze({
   FAILED: 'FAILED',
 });
 
+/**
+ * 학습 topic이 아닌 과목 사실 정보의 성격. course_notes.category와 1:1 대응한다.
+ * LearningMap을 오염시키지 않기 위해 Material Agent 분석 단계에서부터 topics와 분리한다.
+ */
+export const CourseNoteCategory = Object.freeze({
+  COURSE_INFO: 'COURSE_INFO',
+  ASSESSMENT: 'ASSESSMENT',
+});
+
+export const COURSE_NOTE_CATEGORY_LABEL = Object.freeze({
+  [CourseNoteCategory.COURSE_INFO]: '과목 정보',
+  [CourseNoteCategory.ASSESSMENT]: '평가/일정',
+});
+
 /** topic 항목이 원문에 실제 있었는지(SOURCE), AI가 학습 편의를 위해 세분화했는지(AI_DERIVED). */
 export const TopicSourceType = Object.freeze({
   SOURCE: 'SOURCE',
@@ -130,11 +144,28 @@ export const RecommendationStatus = Object.freeze({
  */
 
 /**
+ * @typedef {Object} CourseNoteDraft 과목 정보/평가 정보 후보 한 줄 (분석 draft 전용, 확정 전)
+ * @property {string} category COURSE_INFO|ASSESSMENT
+ * @property {string} label
+ * @property {string} detail
+ */
+
+/**
  * @typedef {Object} MaterialAnalysisPayload
  * @property {string} summary
  * @property {{textbookTitle: string|null, textbookAuthor: string|null, textbookPublisher: string|null, textbookIsbn: string|null}} courseFields
+ * @property {CourseNoteDraft[]} courseNotes 학습 topic이 아닌 과목 정보/평가 정보. topics와 분리되어 course_notes로 확정된다.
  * @property {{title: string, date: string|null, description: string}[]} keyDates
- * @property {TopicNodeDraft[]} topics
+ * @property {TopicNodeDraft[]} topics 실제 학습 내용만. 담당교수/평가 비율 등은 여기 들어가지 않는다.
+ */
+
+/**
+ * @typedef {Object} CourseNoteDto 확정된 과목 정보/평가 정보 한 줄
+ * @property {number} noteId
+ * @property {string} category COURSE_INFO|ASSESSMENT
+ * @property {string} label
+ * @property {string} detail
+ * @property {string} createdAt
  */
 
 /**

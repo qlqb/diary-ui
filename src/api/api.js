@@ -791,6 +791,16 @@ export const courseAPI = {
 };
 
 /**
+ * 학습 topic이 아닌 과목 정보/평가 정보(course_notes) 조회 API. Material Agent 분석의 apply()를
+ * 통해서만 생성된다 — 여기서는 조회만 한다.
+ */
+export const courseNoteAPI = {
+    list: (courseId) => {
+        return request(`/courses/${courseId}/notes`);
+    },
+};
+
+/**
  * 학습 자료 업로드/조회 API. 업로드 직후 텍스트 추출까지 동기로 끝나고 extractionStatus로
  * 결과(SUCCESS/FAILED_NO_TEXT/FAILED)를 알려준다 — 별도 폴링이 필요 없다.
  */

@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CourseDetail from './CourseDetail.jsx';
-import { courseAPI, materialAPI, materialAnalysisAPI, topicAPI } from '../../api/api.js';
+import { courseAPI, courseNoteAPI, materialAPI, materialAnalysisAPI, topicAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
   courseAPI: { get: vi.fn() },
+  courseNoteAPI: { list: vi.fn() },
   materialAPI: { listByCourse: vi.fn(), upload: vi.fn() },
   materialAnalysisAPI: { analyze: vi.fn(), edit: vi.fn(), apply: vi.fn(), dismiss: vi.fn() },
   topicAPI: { getTree: vi.fn(), updateProgress: vi.fn() },
@@ -42,6 +43,7 @@ function setupCommonMocks() {
   courseAPI.get.mockResolvedValue({ courseId: 1, title: '자료구조', textbookTitle: null });
   materialAPI.listByCourse.mockResolvedValue([material]);
   topicAPI.getTree.mockResolvedValue([]);
+  courseNoteAPI.list.mockResolvedValue([]);
 }
 
 async function openMaterialsTab(user) {
@@ -134,6 +136,7 @@ describe('CourseDetail - 학습 지도 (LearningMap + TopicDetail)', () => {
     courseAPI.get.mockResolvedValue({ courseId: 1, title: '자료구조', textbookTitle: null });
     materialAPI.listByCourse.mockResolvedValue([]);
     topicAPI.getTree.mockResolvedValue(topics);
+    courseNoteAPI.list.mockResolvedValue([]);
     const onStartTutor = vi.fn();
 
     render(<CourseDetail courseId={1} onBack={vi.fn()} onStartTutor={onStartTutor} />);
@@ -149,5 +152,89 @@ describe('CourseDetail - 학습 지도 (LearningMap + TopicDetail)', () => {
       expect.objectContaining({ courseId: 1, title: '자료구조' }),
       expect.objectContaining({ topicId: 1, title: '연결 리스트' }),
     );
+  });
+});
+
+describe('CourseDetail - 상단 요약 (현재/다음 학습, 과목 정보)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const topicsWithCurrent = [
+    {
+      topicId: 1,
+      parentTopicId: null,
+      title: '알고리즘 복잡도 분석',
+      sourceType: 'SOURCE',
+      sourceLocator: '2장',
+      progressStatus: 'IN_PROGRESS',
+      lastStudiedAt: null,
+      reviewCount: 0,
+      children: [],
+    },
+  ];
+
+  it('다음 학습 추천은 상단 요약에 한 번만 나타난다 — 학습 지도 아래 중복 렌더링하지 않는다', async () => {
+    courseAPI.get.mockResolvedValue({ courseId: 1, title: '자료구조', textbookTitle: null });
+    materialAPI.listByCourse.mockResolvedValue([]);
+    topicAPI.getTree.mockResolvedValue(topicsWithCurrent);
+    courseNoteAPI.list.mockResolvedValue([]);
+
+    render(<CourseDetail courseId={1} onBack={vi.fn()} onStartTutor={vi.fn()} />);
+
+    expect(await screen.findAllByText('다음 학습')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: '다음 학습 추천 받기' })).toBeInTheDocument();
+  });
+
+  it('현재 학습 중인 topic이 있으면 상단 요약에 보여주고, 이어 학습으로 학습 지도에서 바로 선택할 수 있다', async () => {
+    const user = userEvent.setup();
+    courseAPI.get.mockResolvedValue({ courseId: 1, title: '자료구조', textbookTitle: null });
+    materialAPI.listByCourse.mockResolvedValue([]);
+    topicAPI.getTree.mockResolvedValue(topicsWithCurrent);
+    courseNoteAPI.list.mockResolvedValue([]);
+
+    render(<CourseDetail courseId={1} onBack={vi.fn()} onStartTutor={vi.fn()} />);
+
+    expect(await screen.findByText('현재 학습')).toBeInTheDocument();
+    expect(screen.getAllByText('알고리즘 복잡도 분석').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: /이어 학습/ }));
+
+    // 선택된 topic의 상세가 오른쪽에 나타난다 — TutorView로 즉시 이동하지 않는다.
+    expect(await screen.findByText('학습 중')).toBeInTheDocument();
+  });
+
+  it('과목 정보/평가 정보가 있으면 접혀 있다가, 보기를 누르면 카테고리별로 펼쳐진다', async () => {
+    const user = userEvent.setup();
+    courseAPI.get.mockResolvedValue({ courseId: 1, title: '자료구조', textbookTitle: null });
+    materialAPI.listByCourse.mockResolvedValue([]);
+    topicAPI.getTree.mockResolvedValue([]);
+    courseNoteAPI.list.mockResolvedValue([
+      { noteId: 1, category: 'COURSE_INFO', label: '담당교수', detail: '홍길동 교수' },
+      { noteId: 2, category: 'ASSESSMENT', label: '평가 비율', detail: '중간 30%' },
+    ]);
+
+    render(<CourseDetail courseId={1} onBack={vi.fn()} onStartTutor={vi.fn()} />);
+
+    const toggle = await screen.findByRole('button', { name: /과목 정보/ });
+    expect(screen.queryByText('담당교수')).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(screen.getByText('담당교수')).toBeInTheDocument();
+    expect(screen.getByText('홍길동 교수')).toBeInTheDocument();
+    expect(screen.getByText('평가 비율')).toBeInTheDocument();
+  });
+
+  it('과목 정보/평가 정보가 없으면 토글 자체를 보여주지 않는다', async () => {
+    courseAPI.get.mockResolvedValue({ courseId: 1, title: '자료구조', textbookTitle: null });
+    materialAPI.listByCourse.mockResolvedValue([]);
+    topicAPI.getTree.mockResolvedValue([]);
+    courseNoteAPI.list.mockResolvedValue([]);
+
+    render(<CourseDetail courseId={1} onBack={vi.fn()} onStartTutor={vi.fn()} />);
+
+    await screen.findByText('다음 학습');
+    expect(screen.queryByRole('button', { name: /과목 정보/ })).not.toBeInTheDocument();
   });
 });

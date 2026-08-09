@@ -1,29 +1,42 @@
 /**
  * 과목 상세 shell. 자료 업로드/분석 검토/적용과 학습 지도(LearningMap+TopicDetail)를 묶는다.
  *
- * "학습" 탭: 확정된 topic 트리를 계층 그대로 보여주고(LearningMap), 선택한 topic 하나의
- * 상세(TopicDetail)와 다음 학습 추천(RecommendationPanel)을 연결한다.
+ * 상단 요약(진행률/교재/현재 학습/다음 학습)은 구독 탭과 무관하게 항상 보인다 — 긴 과목에서도
+ * 스크롤 없이 바로 "지금 무엇을 배우고 있고 다음은 뭘 할지"를 알 수 있어야 한다. 다음 학습
+ * 추천은 이 요약 안에서만 렌더링한다 — 예전처럼 학습 지도 맨 아래에 중복해서 두지 않는다.
+ *
+ * "학습 지도" 탭: 확정된 topic 트리를 계층 그대로 보여주고(LearningMap), 선택한 topic 하나의
+ * 상세(TopicDetail)를 연결한다. 담당교수/평가 비율처럼 학습 대상이 아닌 정보는 여기 나타나지
+ * 않는다 — course_notes로 분리되어 "과목 정보" 패널에서 확인한다.
  * "자료" 탭: 업로드 -> 분석(DRAFT) -> 편집 가능한 검토(MaterialReview)/적용. 적용 전에는
- * course_topics가 전혀 바뀌지 않는다.
+ * course_topics/course_notes가 전혀 바뀌지 않는다.
  *
  * AI 과외는 이 화면 안에서 펼치지 않는다 — onStartTutor로 부모(LearningView)에게 전환을
  * 맡기고, 부모가 화면 전체를 TutorView로 바꾼다.
  */
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, GraduationCap, Info, MessageCircleQuestion } from 'lucide-react';
 import { ViewHeader, SubTabs, EmptyState } from '../shared.jsx';
-import { courseAPI, materialAPI, materialAnalysisAPI, topicAPI } from '../../api/api.js';
-import { MaterialType, MATERIAL_TYPE_LABEL, EXTRACTION_STATUS_LABEL, ExtractionStatus } from '../../types/learning.js';
+import { courseAPI, courseNoteAPI, materialAPI, materialAnalysisAPI, topicAPI } from '../../api/api.js';
+import {
+  MaterialType,
+  MATERIAL_TYPE_LABEL,
+  EXTRACTION_STATUS_LABEL,
+  ExtractionStatus,
+  COURSE_NOTE_CATEGORY_LABEL,
+} from '../../types/learning.js';
 import LearningMap from './LearningMap.jsx';
 import TopicDetail from './TopicDetail.jsx';
 import MaterialReview from './MaterialReview.jsx';
 import RecommendationPanel from './RecommendationPanel.jsx';
 
 const SUB_TABS = [
-  { key: 'topics', label: '학습' },
+  { key: 'topics', label: '학습 지도' },
   { key: 'materials', label: '자료' },
 ];
+
+const NOTE_CATEGORY_ORDER = ['COURSE_INFO', 'ASSESSMENT'];
 
 function flattenTopics(topics) {
   const result = [];
@@ -37,11 +50,29 @@ function flattenTopics(topics) {
   return result;
 }
 
+/** 루트부터 targetId 바로 위 부모까지의 조상 목록. 대상을 찾지 못하면 null. */
+function findAncestors(topics, targetId, path = []) {
+  for (const node of topics) {
+    if (node.topicId === targetId) return path;
+    if (node.children?.length) {
+      const found = findAncestors(
+        node.children,
+        targetId,
+        [...path, { topicId: node.topicId, title: node.title, sourceLocator: node.sourceLocator }],
+      );
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 export default function CourseDetail({ courseId, onBack, onStartTutor }) {
   const [course, setCourse] = useState(null);
   const [sub, setSub] = useState('topics');
   const [materials, setMaterials] = useState([]);
   const [topics, setTopics] = useState([]);
+  const [courseNotes, setCourseNotes] = useState([]);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -50,14 +81,16 @@ export default function CourseDetail({ courseId, onBack, onStartTutor }) {
     setLoading(true);
     setError(null);
     try {
-      const [courseData, materialsData, topicsData] = await Promise.all([
+      const [courseData, materialsData, topicsData, notesData] = await Promise.all([
         courseAPI.get(courseId),
         materialAPI.listByCourse(courseId),
         topicAPI.getTree(courseId),
+        courseNoteAPI.list(courseId),
       ]);
       setCourse(courseData);
       setMaterials(materialsData ?? []);
       setTopics(topicsData ?? []);
+      setCourseNotes(notesData ?? []);
     } catch (err) {
       setError(err.message || '과목 정보를 불러오지 못했습니다.');
     } finally {
@@ -74,6 +107,13 @@ export default function CourseDetail({ courseId, onBack, onStartTutor }) {
   const learnedCount = flatTopics.filter((t) => t.progressStatus === 'LEARNED').length;
   const progressPct = flatTopics.length > 0 ? Math.round((learnedCount / flatTopics.length) * 100) : 0;
   const selectedTopic = flatTopics.find((t) => t.topicId === selectedTopicId) ?? null;
+  const currentTopic = flatTopics.find((t) => t.progressStatus === 'IN_PROGRESS') ?? null;
+  const ancestors = selectedTopicId != null ? findAncestors(topics, selectedTopicId) ?? [] : [];
+
+  const handleContinue = (topic) => {
+    setSub('topics');
+    setSelectedTopicId(topic.topicId);
+  };
 
   return (
     <div className="learning-panel">
@@ -87,8 +127,65 @@ export default function CourseDetail({ courseId, onBack, onStartTutor }) {
             {flatTopics.length > 0 && <span className="learning-course-progress-badge">{progressPct}%</span>}
           </span>
         }
-        question={course?.textbookTitle ? `교재: ${course.textbookTitle}` : undefined}
       />
+
+      {!loading && (
+        <div className="course-summary">
+          <div className="course-summary-meta-row">
+            {course?.textbookTitle && <span className="course-summary-textbook">교재: {course.textbookTitle}</span>}
+            {courseNotes.length > 0 && (
+              <button type="button" className="v6-btn-link course-notes-toggle" onClick={() => setNotesOpen((v) => !v)}>
+                <Info size={13} /> 과목 정보 {notesOpen ? '접기' : `보기 (${courseNotes.length})`}
+              </button>
+            )}
+          </div>
+
+          {notesOpen && (
+            <div className="course-notes-panel">
+              {NOTE_CATEGORY_ORDER.map((cat) => {
+                const items = courseNotes.filter((n) => n.category === cat);
+                if (items.length === 0) return null;
+                return (
+                  <div key={cat} className="course-notes-group">
+                    <h4 className="course-notes-group-title">{COURSE_NOTE_CATEGORY_LABEL[cat]}</h4>
+                    <ul className="course-notes-list">
+                      {items.map((n) => (
+                        <li key={n.noteId}>
+                          <span className="course-notes-label">{n.label}</span>
+                          <span className="course-notes-detail">{n.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {currentTopic && (
+            <div className="course-summary-current">
+              <span className="course-summary-label">현재 학습</span>
+              <span className="course-summary-value">{currentTopic.title}</span>
+            </div>
+          )}
+
+          <div className="course-summary-recommendation">
+            <span className="course-summary-label">다음 학습</span>
+            <RecommendationPanel courseId={courseId} onApplied={loadAll} />
+          </div>
+
+          {currentTopic && (
+            <div className="course-summary-actions">
+              <button type="button" className="btn-primary" onClick={() => handleContinue(currentTopic)}>
+                <GraduationCap size={14} /> 이어 학습
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => onStartTutor?.(course, currentTopic)}>
+                <MessageCircleQuestion size={14} /> AI 과외 시작
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
 
@@ -111,16 +208,13 @@ export default function CourseDetail({ courseId, onBack, onStartTutor }) {
               />
               <TopicDetail
                 courseTitle={course?.title}
+                ancestors={ancestors}
                 topic={selectedTopic}
                 onProgressChanged={loadAll}
                 onStartTutor={(topic) => onStartTutor?.(course, topic)}
               />
             </div>
           )}
-          <section className="v6-section">
-            <h2 className="v6-section-title">다음 학습</h2>
-            <RecommendationPanel courseId={courseId} onApplied={loadAll} />
-          </section>
         </div>
       )}
 

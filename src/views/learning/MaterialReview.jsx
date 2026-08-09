@@ -13,7 +13,9 @@
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { materialAnalysisAPI } from '../../api/api.js';
-import { MaterialAnalysisStatus } from '../../types/learning.js';
+import { MaterialAnalysisStatus, COURSE_NOTE_CATEGORY_LABEL } from '../../types/learning.js';
+
+const NOTE_CATEGORY_ORDER = ['COURSE_INFO', 'ASSESSMENT'];
 
 let localIdSeq = 0;
 const nextLocalId = () => `local-${++localIdSeq}`;
@@ -84,9 +86,13 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
 
   const hasTopics = topics.length > 0;
 
+  const courseNotes = analysis.payload.courseNotes ?? [];
+
   const buildPayload = () => ({
     summary: analysis.payload.summary,
     courseFields,
+    // 과목 정보/평가 정보는 이 화면에서 편집하지 않는다 — 받은 그대로 유지해서 apply 시 함께 저장한다.
+    courseNotes,
     keyDates: analysis.payload.keyDates ?? [],
     topics: topics.map(stripLocalIds),
   });
@@ -125,6 +131,29 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
         ))}
       </div>
 
+      {courseNotes.length > 0 && (
+        <div className="material-review-notes">
+          {NOTE_CATEGORY_ORDER.map((cat) => {
+            const items = courseNotes.filter((n) => n.category === cat);
+            if (items.length === 0) return null;
+            return (
+              <div key={cat} className="material-review-notes-group">
+                <h4 className="material-review-notes-title">{COURSE_NOTE_CATEGORY_LABEL[cat]}</h4>
+                <ul className="course-notes-list">
+                  {items.map((n, i) => (
+                    <li key={i}>
+                      <span className="course-notes-label">{n.label}</span>
+                      <span className="course-notes-detail">{n.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <h4 className="material-review-notes-title">학습 내용</h4>
       {!hasTopics ? (
         <p className="learning-error">목차 근거를 찾지 못했어요 — 교재 목차 자료를 올려주세요.</p>
       ) : (

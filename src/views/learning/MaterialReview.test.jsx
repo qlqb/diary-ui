@@ -102,3 +102,59 @@ describe('MaterialReview - AI 분석 초안 편집', () => {
     expect(onApplied).toHaveBeenCalled();
   });
 });
+
+describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
+  const analysisWithNotes = {
+    analysisId: 8,
+    status: 'DRAFT',
+    payload: {
+      summary: '분석 완료',
+      courseFields: { textbookTitle: null, textbookAuthor: null, textbookPublisher: null, textbookIsbn: null },
+      courseNotes: [
+        { category: 'COURSE_INFO', label: '담당교수', detail: '홍길동 교수' },
+        { category: 'ASSESSMENT', label: '평가 비율', detail: '중간 30% · 기말 30%' },
+      ],
+      keyDates: [],
+      topics: [
+        { title: '연결 리스트', sourceType: 'SOURCE', sourceLocator: '3장', children: [] },
+      ],
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    materialAnalysisAPI.edit.mockResolvedValue({});
+    materialAnalysisAPI.apply.mockResolvedValue({});
+  });
+
+  it('학습 내용과 분리해 과목 정보/평가 정보를 카테고리별로 보여준다 — Apply 전에 무엇이 확정될지 알 수 있다', () => {
+    render(<MaterialReview analysis={analysisWithNotes} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.getByText('과목 정보')).toBeInTheDocument();
+    expect(screen.getByText('평가/일정')).toBeInTheDocument();
+    expect(screen.getByText('담당교수')).toBeInTheDocument();
+    expect(screen.getByText('홍길동 교수')).toBeInTheDocument();
+    expect(screen.getByText('평가 비율')).toBeInTheDocument();
+    // 학습 내용(topics)과는 구분된 섹션이다.
+    expect(screen.getByText('학습 내용')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('연결 리스트')).toBeInTheDocument();
+  });
+
+  it('과목 정보/평가 정보는 이 화면에서 편집하지 않지만, 적용 시 그대로 함께 저장된다', async () => {
+    const user = userEvent.setup();
+    render(<MaterialReview analysis={analysisWithNotes} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: '검토 완료 — 적용' }));
+
+    expect(materialAnalysisAPI.edit).toHaveBeenCalledWith(8, expect.objectContaining({
+      courseNotes: analysisWithNotes.payload.courseNotes,
+    }));
+  });
+
+  it('과목 정보/평가 정보가 없으면 해당 섹션을 보여주지 않는다', () => {
+    render(<MaterialReview analysis={analysis} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.queryByText('과목 정보')).not.toBeInTheDocument();
+    expect(screen.queryByText('평가/일정')).not.toBeInTheDocument();
+  });
+});
