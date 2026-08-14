@@ -1,108 +1,115 @@
 /**
- * 기록 탭.
+ * 기록 = 실제로 무슨 일이 있었는지.
  *
- * 책임: 이미 발생하고 사용자가 확정한 ExecutionRecord 를 조회하고 해석한다.
- * 핵심 질문: 실제로 무슨 일이 있었고, 다음 판단에 무엇을 반영할까?
- *
- * 흐름: 실제 결과 발생 -> 기록함 -> 기간별 해석 -> 돌아보기 -> 반복된 차이 -> 패턴 후보
- *
- * 실제 결과 입력은 주로 오늘 화면에서 발생한다.
- * 여기는 승인된 결과를 모아 보고 해석하는 장소다.
+ * 계획이 아니라 결과(execution_records)를 본다. 완료뿐 아니라 "일부만 했다"도 그대로 남는다 —
+ * 완료율로 사람을 평가하지 않기 위해서다. 여기 쌓인 것이 다음 AI 판단의 근거가 된다.
  */
 
-import { useState } from 'react';
-import { ViewHeader, SubTabs, EmptyState } from './shared.jsx';
-import {
-  selectRecords,
-  MOCK_EXECUTION_RECORDS,
-  MOCK_EXECUTION_EVENTS,
-} from '../mock/executionMock.js';
-import { RESULT_TYPE_LABEL, EVENT_TYPE_LABEL } from '../types/execution.js';
+import { useEffect, useState } from 'react';
+import { CheckCircle2, CircleSlash, MinusCircle } from 'lucide-react';
+import { executionItemAPI } from '../api/api.js';
+import { formatDateKo, formatMinutes, shiftDate, todayString } from '../lib/datetime.js';
 
-const SUB_TABS = [
-  { key: 'inbox', label: '기록함' },
-  { key: 'review', label: '돌아보기' },
-  { key: 'pattern', label: '패턴' },
+const RANGES = [
+  { key: 7, label: '최근 7일' },
+  { key: 30, label: '최근 30일' },
 ];
 
-export default function RecordView() {
-  const [sub, setSub] = useState('inbox');
-  const records = selectRecords(MOCK_EXECUTION_RECORDS);
+const OUTCOME = {
+  COMPLETED: { label: '완료', icon: CheckCircle2, className: 'outcome-done' },
+  PARTIAL: { label: '일부 했음', icon: MinusCircle, className: 'outcome-partial' },
+  NOT_DONE: { label: '못 했음', icon: CircleSlash, className: 'outcome-none' },
+};
+
+export default function RecordView({ projectTitles, refreshToken }) {
+  const [days, setDays] = useState(7);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const today = todayString();
+    setLoading(true);
+    setError(null);
+    executionItemAPI.getRecords(shiftDate(today, -(days - 1)), today)
+      .then((data) => { if (!cancelled) setRecords(data ?? []); })
+      .catch((err) => { if (!cancelled) setError(err.message || '기록을 불러오지 못했습니다.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [days, refreshToken]);
+
+  const totalMinutes = records.reduce((sum, r) => sum + (r.actualMinutes ?? 0), 0);
+  const byDate = records.reduce((acc, record) => {
+    const key = (record.recordedAt ?? '').slice(0, 10) || record.scheduledDate || '날짜 없음';
+    (acc[key] ??= []).push(record);
+    return acc;
+  }, {});
 
   return (
-    <div className="v6-view">
-      <ViewHeader
-        title="기록"
-        question="실제로 무슨 일이 있었고, 다음 판단에 무엇을 반영할까?"
-      />
-      <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
+    <div className="view">
+      <header className="view-head">
+        <div>
+          <h1 className="view-title">기록</h1>
+          <p className="view-sub">
+            실제로 무슨 일이 있었을까? · {records.length}건
+            {totalMinutes > 0 && ` · 기록된 시간 ${formatMinutes(totalMinutes)}`}
+          </p>
+        </div>
+        <div className="week-nav">
+          {RANGES.map((range) => (
+            <button
+              key={range.key}
+              type="button"
+              className={`btn-ghost btn-sm${days === range.key ? ' is-selected' : ''}`}
+              onClick={() => setDays(range.key)}
+            >
+              {range.label}
+            </button>
+          ))}
+        </div>
+      </header>
 
-      {sub === 'inbox' && (
-        <section className="v6-section">
-          <h2 className="v6-section-title">확정된 결과</h2>
-          {records.length === 0 ? (
-            <EmptyState title="아직 기록이 없어요" />
-          ) : (
-            <div className="v6-item-list">
-              {records.map((r) => (
-                <article className="v6-item-card" key={r.executionRecordId}>
-                  <div className="v6-item-main">
-                    <p className="v6-item-title-plain">{r.title}</p>
-                    <div className="v6-item-meta">
-                      <span className="v6-item-status">
-                        {RESULT_TYPE_LABEL[r.resultType]}
-                      </span>
-                      <span className="v6-item-placement">{r.recordDate}</span>
-                      {r.actualMinutes != null && (
-                        <span className="v6-item-tag">{r.actualMinutes}분</span>
+      {error && <p className="view-error">{error}</p>}
+      {loading && <p className="view-dim">불러오는 중...</p>}
+
+      {!loading && !error && records.length === 0 && (
+        <div className="empty-block">
+          <p className="empty-title">아직 기록이 없어요</p>
+          <p className="empty-desc">오늘 화면에서 완료하거나 &quot;일부 했어요&quot;를 남기면 여기에 쌓여요.</p>
+        </div>
+      )}
+
+      {Object.entries(byDate).map(([date, dayRecords]) => (
+        <section className="view-section" key={date}>
+          <h2 className="section-title">{formatDateKo(date)}</h2>
+          <div className="row-list">
+            {dayRecords.map((record) => {
+              const outcome = OUTCOME[record.outcome] ?? OUTCOME.NOT_DONE;
+              const Icon = outcome.icon;
+              return (
+                <article className={`record-row ${outcome.className}`} key={record.executionRecordId}>
+                  <Icon size={16} />
+                  <div className="record-row-main">
+                    <span className="record-row-title">{record.title ?? '계획 밖에서 한 일'}</span>
+                    <span className="record-row-meta">
+                      <span className="chip">{outcome.label}</span>
+                      {record.completionPercent != null && record.outcome === 'PARTIAL' && (
+                        <span className="chip">{record.completionPercent}%</span>
                       )}
-                      {r.actualAmount && (
-                        <span className="v6-item-tag">{r.actualAmount}</span>
+                      {record.actualMinutes != null && <span className="chip">{formatMinutes(record.actualMinutes)}</span>}
+                      {record.courseId && projectTitles?.[record.courseId] && (
+                        <span className="chip chip-project">{projectTitles[record.courseId]}</span>
                       )}
-                      {r.executionItemId == null && (
-                        <span className="v6-item-tag">계획 밖</span>
-                      )}
-                    </div>
-                    {r.memo && <p className="v6-item-memo">{r.memo}</p>}
+                    </span>
+                    {record.note && <p className="record-row-note">{record.note}</p>}
                   </div>
                 </article>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {sub === 'review' && (
-        <EmptyState
-          title="돌아보기는 다음 단계에서 연결해요"
-          desc="선택한 기간의 사실에 사용자가 의미를 붙이는 자리예요."
-        />
-      )}
-
-      {sub === 'pattern' && (
-        <section className="v6-section">
-          <h2 className="v6-section-title">반복된 조정</h2>
-          <p className="v6-section-desc">
-            계획과 실제의 차이를 사실 그대로 모았어요. 판단은 직접 하시면 돼요.
-          </p>
-          <div className="v6-item-list">
-            {MOCK_EXECUTION_EVENTS.map((e) => (
-              <article className="v6-item-card" key={e.executionItemEventId}>
-                <div className="v6-item-main">
-                  <p className="v6-item-title-plain">
-                    {EVENT_TYPE_LABEL[e.eventType]}
-                  </p>
-                  <div className="v6-item-meta">
-                    <span className="v6-item-placement">{e.eventDate}</span>
-                    <span className="v6-item-tag">관련 기록 1건</span>
-                  </div>
-                  {e.memo && <p className="v6-item-memo">{e.memo}</p>}
-                </div>
-              </article>
-            ))}
+              );
+            })}
           </div>
         </section>
-      )}
+      ))}
     </div>
   );
 }
