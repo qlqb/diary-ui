@@ -3,7 +3,11 @@
  * Spring Boot 백엔드와 통신하는 함수들
  */
 
-const API_BASE_URL = 'http://localhost:8080/api';
+/**
+ * 백엔드 주소. 기본은 로컬 8080이고, 다른 포트에서 띄운 서버를 붙일 때만
+ * VITE_API_BASE_URL로 덮어쓴다(예: 개발 중 두 인스턴스를 동시에 띄우는 경우).
+ */
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? 'http://localhost:8080/api';
 
 const TOKEN_KEY = 'token';
 
@@ -545,6 +549,9 @@ function toFrontendExecutionItem(raw) {
         executionItemId: pick('executionItemId', 'execution_item_id'),
         userId: pick('userId', 'user_id'),
         planItemId: pick('planItemId', 'plan_item_id') ?? null,
+        // 어느 프로젝트의 실행인지. 화면에서 프로젝트 이름표를 붙이는 데 쓴다.
+        courseId: pick('courseId', 'course_id') ?? null,
+        topicId: pick('topicId', 'topic_id') ?? null,
         routineId: pick('routineId', 'routine_id') ?? null,
         parentExecutionItemId: pick('sourceExecutionItemId', 'source_execution_item_id') ?? null,
         title: raw.title,
@@ -582,6 +589,19 @@ export const executionItemAPI = {
         const params = new URLSearchParams({ date });
         const data = await request(`/execution-items?${params.toString()}`);
         return (data ?? []).map(toFrontendExecutionItem);
+    },
+
+    /** 프로젝트에 속한 실행 조각(지난 7일 ~ 앞으로 14일 + 날짜 미정) */
+    getByCourse: async (courseId, today) => {
+        const params = new URLSearchParams(today ? { today } : {});
+        const data = await request(`/execution-items/by-course/${courseId}?${params.toString()}`);
+        return (data ?? []).map(toFrontendExecutionItem);
+    },
+
+    /** 실제로 일어난 결과(기록 화면). 실행 조각이 아니라 execution_records를 본다 */
+    getRecords: (startDate, endDate) => {
+        const params = new URLSearchParams({ startDate, endDate });
+        return request(`/execution-items/records?${params.toString()}`);
     },
 
     /** 날짜 범위 실행 조각 조회 (주간 시간표용). getByDate와 같은 원본을 여러 날짜에 걸쳐 투영한다 */
@@ -637,6 +657,18 @@ export const executionItemAPI = {
     /** 작게 줄이기 */
     reduce: async (executionItemId, payload) => {
         const data = await request(`/execution-items/${executionItemId}/reduce`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        return toFrontendExecutionItem(data);
+    },
+
+    /**
+     * 일부 수행 기록. keepOpen=true면 오늘 안에 이어서 할 수 있게 PLANNED로 남고,
+     * false면 보류로 내려간다. 어느 쪽이든 실제로 한 만큼은 결과로 남는다.
+     */
+    partial: async (executionItemId, payload) => {
+        const data = await request(`/execution-items/${executionItemId}/partial`, {
             method: 'POST',
             body: JSON.stringify(payload),
         });
@@ -708,17 +740,25 @@ export const schedulePreviewAPI = {
  * Proposal 생성까지, 대화 하나의 흐름으로 이어진다.
  */
 export const conversationAPI = {
-    /** 대화 시작. scope를 생략하면 서버가 TODAY로 시작한다 */
-    create: (scope = 'TODAY') => {
+    /**
+     * 대화 시작. scope를 생략하면 서버가 TODAY로 시작한다.
+     * courseId를 주면 그 프로젝트에 묶인 대화가 되고, 서버가 그 프로젝트의 자료·학습 상태·
+     * 관련 실행을 컨텍스트로 함께 싣는다.
+     */
+    create: (scope = 'TODAY', courseId = null) => {
         return request('/ai/conversations', {
             method: 'POST',
-            body: JSON.stringify({ scope }),
+            body: JSON.stringify({ scope, courseId }),
         });
     },
 
-    /** 내 대화 목록. 마지막 메시지 시각 내림차순, 첫 메시지를 아직 안 보낸 빈 대화는 제외됨 */
-    list: () => {
-        return request('/ai/conversations');
+    /**
+     * 내 대화 목록. 마지막 메시지 시각 내림차순, 첫 메시지를 아직 안 보낸 빈 대화는 제외됨.
+     * courseId를 주면 그 프로젝트 대화만, 주지 않으면 프로젝트에 속하지 않은 대화만 돌아온다.
+     */
+    list: (courseId = null) => {
+        const params = courseId != null ? `?courseId=${courseId}` : '';
+        return request(`/ai/conversations${params}`);
     },
 
     /** 새로고침 후 대화 이력 복원 */
@@ -768,25 +808,41 @@ export const contextSuggestionAPI = {
 };
 
 /**
- * 과목 API. 학습 화면의 최상위 단위 — 강의계획서/교재 업로드, topic 트리가 모두 과목 하나에 딸린다.
+ * 프로젝트 API. 사용자가 AI와 계속 다루고 싶은 하나의 주제/맥락 단위다 —
+ * 자료·대화·학습 상태·관련 실행이 전부 여기에 딸린다.
+ *
+ * 생성에는 제목만 있으면 된다. 자료가 없는 프로젝트도 완전히 사용 가능한 공간이다.
  */
 export const courseAPI = {
-    /** 내 과목 목록 (topicCount 포함) */
+    /** 내 프로젝트 목록. 카드 요약(자료 수/학습 구조/진행 중 주제)까지 한 번에 온다 */
     list: () => {
         return request('/courses');
     },
 
-    /** 과목 상세 */
+    /** 프로젝트 상세 */
     get: (courseId) => {
         return request(`/courses/${courseId}`);
     },
 
-    /** 과목 생성. payload: { title } */
+    /** 프로젝트 생성. payload: { title, groupLabel? } */
     create: (payload) => {
         return request('/courses', {
             method: 'POST',
             body: JSON.stringify(payload),
         });
+    },
+
+    /** 제목/분류 수정. payload: { title?, groupLabel? } */
+    update: (courseId, payload) => {
+        return request(`/courses/${courseId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+        });
+    },
+
+    /** 보관. 실제로 지우지 않는다 — 쌓인 자료·대화·기록은 그대로 남는다 */
+    archive: (courseId) => {
+        return request(`/courses/${courseId}`, { method: 'DELETE' });
     },
 };
 
