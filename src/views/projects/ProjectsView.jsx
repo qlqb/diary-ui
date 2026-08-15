@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { Plus, FolderOpen, FileText, ArrowRight } from 'lucide-react';
+import { Plus, FolderOpen, ArrowRight } from 'lucide-react';
 import { courseAPI } from '../../api/api.js';
 
 const UNGROUPED = '__ungrouped__';
@@ -161,7 +161,6 @@ function ProjectCard({ project, onOpen }) {
       )}
 
       <span className="project-card-foot">
-        <span className="chip"><FileText size={11} /> 자료 {project.materialCount ?? 0}</span>
         {project.textbookTitle && <span className="chip">{project.textbookTitle}</span>}
         <span className="project-card-open">열기 <ArrowRight size={13} /></span>
       </span>
