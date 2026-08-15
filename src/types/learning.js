@@ -186,6 +186,9 @@ export const RecommendationStatus = Object.freeze({
  * @property {string} title
  * @property {string} sourceType SOURCE|AI_DERIVED
  * @property {string|null} sourceLocator
+ * @property {number|null} sourceMaterialId
+ * @property {string|null} sourceMaterialFilename 원본을 삭제해도 남는다 — 확정된 학습 내용의 출처 표시용
+ * @property {boolean} sourceMaterialDeleted true면 "원본 삭제됨 · 파일명"으로 적는다
  * @property {string} progressStatus NOT_STARTED|IN_PROGRESS|LEARNED
  * @property {string|null} lastStudiedAt
  * @property {string|null} lastReviewedAt

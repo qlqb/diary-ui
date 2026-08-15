@@ -35,6 +35,41 @@ describe('TopicDetail', () => {
     expect(screen.getByText('AI 세분화')).toBeInTheDocument();
   });
 
+  it('원본 자료가 남아 있으면 파일명을 그대로 보여준다', () => {
+    render(
+      <TopicDetail
+        courseTitle="자료구조"
+        topic={{ ...topic, sourceMaterialFilename: '강의계획서.pdf', sourceMaterialDeleted: false }}
+        onProgressChanged={vi.fn()}
+        onStartTutor={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('강의계획서.pdf')).toBeInTheDocument();
+    expect(screen.queryByText(/원본 삭제됨/)).not.toBeInTheDocument();
+  });
+
+  it('원본을 삭제했어도 어디서 온 항목인지는 계속 보여준다', () => {
+    // 확정된 학습 내용은 자료를 지워도 남는다. 출처 표시가 같이 사라지면
+    // "이게 어디서 왔더라"를 영영 알 수 없게 된다.
+    render(
+      <TopicDetail
+        courseTitle="자료구조"
+        topic={{ ...topic, sourceMaterialFilename: '강의계획서.pdf', sourceMaterialDeleted: true }}
+        onProgressChanged={vi.fn()}
+        onStartTutor={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/원본 삭제됨 · 강의계획서\.pdf/)).toBeInTheDocument();
+  });
+
+  it('연결된 원본 자료가 없으면 없다고 적는다', () => {
+    render(<TopicDetail courseTitle="자료구조" topic={topic} onProgressChanged={vi.fn()} onStartTutor={vi.fn()} />);
+
+    expect(screen.getByText('연결된 원본 자료가 없어요.')).toBeInTheDocument();
+  });
+
   it('학습 시작을 누르면 사용자가 명시적으로 진행 상태를 바꾼다', async () => {
     const user = userEvent.setup();
     const onProgressChanged = vi.fn().mockResolvedValue(undefined);

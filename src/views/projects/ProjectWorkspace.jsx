@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Upload, Trash2, Pencil, Loader2,
+  ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Upload, Trash2, Pencil, Loader2, Link2, X,
 } from 'lucide-react';
 import ExecutionRow from '../../components/ExecutionRow.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
@@ -23,7 +23,7 @@ import TopicDetail from '../learning/TopicDetail.jsx';
 import MaterialReview from '../learning/MaterialReview.jsx';
 import { adjustmentFor } from '../../ai/useProposalDraft.js';
 import {
-  courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI, topicAPI,
+  courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI, materialStoreAPI, topicAPI,
 } from '../../api/api.js';
 import { MaterialType, MATERIAL_TYPE_LABEL, EXTRACTION_STATUS_LABEL, ExtractionStatus } from '../../types/learning.js';
 import { todayString } from '../../lib/datetime.js';
@@ -324,46 +324,66 @@ function RenameForm({ project, onCancel, onSaved }) {
 }
 
 /**
- * 자료 영역.
+ * 자료 영역. 이 프로젝트가 "소유한" 자료가 아니라 "참고하는" 자료 목록이다.
+ *
+ * 자료 원본은 자료함이 갖고, 여기 있는 것은 연결이다. 그래서 각 행의 제거 액션은
+ * 연결 해제이지 파일 삭제가 아니다 — 같은 자료를 다른 프로젝트도 쓰고 있을 수 있고,
+ * 원본을 지우는 것은 자료 탭에서만 할 수 있다.
  *
  * 업로드가 끝나면 그 자리에서 "AI가 이 자료를 사용할 수 있어요"가 보인다 — 구조 분석은
  * 그다음에 원할 때 누르는 선택지이고, 분석 결과를 전부 검수해야 질문할 수 있는 구조가 아니다.
  */
 function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
-  const [file, setFile] = useState(null);
-  const [materialType, setMaterialType] = useState(MaterialType.OTHER);
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState(null);
+  const [error, setError] = useState(null);
   const [analyses, setAnalyses] = useState({});
   const [analyzingId, setAnalyzingId] = useState(null);
+  const [picking, setPicking] = useState(false);
+  const [busyId, setBusyId] = useState(null);
 
   const handleUpload = async (e) => {
-    e.preventDefault();
+    const file = e.target.files?.[0];
     if (!file || uploading) return;
     setUploading(true);
-    setUploadError(null);
+    setError(null);
     try {
-      await materialAPI.upload(courseId, materialType, file);
-      setFile(null);
-      e.target.reset?.();
+      // 새로 올리는 자료의 성격은 이 프로젝트 기준이다. 자료함에서 고르는 경로와 달리
+      // 여기서는 업로드와 연결이 한 번에 일어나므로 기본값으로 시작하고, 성격은
+      // 자료 상세에서 바꾼다.
+      await materialAPI.upload(courseId, MaterialType.OTHER, file);
       await onChanged();
     } catch (err) {
-      setUploadError(err.message || '업로드하지 못했습니다.');
+      setError(err.message || '업로드하지 못했습니다.');
     } finally {
       setUploading(false);
+      e.target.value = '';
     }
   };
 
   const handleAnalyze = async (materialId) => {
     setAnalyzingId(materialId);
-    setUploadError(null);
+    setError(null);
     try {
       const analysis = await materialAnalysisAPI.analyze(courseId, materialId);
       setAnalyses((prev) => ({ ...prev, [materialId]: analysis }));
     } catch (err) {
-      setUploadError(err.message || '분석하지 못했습니다.');
+      setError(err.message || '분석하지 못했습니다.');
     } finally {
       setAnalyzingId(null);
+    }
+  };
+
+  /** 연결 해제. 자료 원본도, 다른 프로젝트 연결도, 이미 적용한 학습 내용도 그대로 남는다. */
+  const handleUnlink = async (materialId) => {
+    setBusyId(materialId);
+    setError(null);
+    try {
+      await materialStoreAPI.removeLink(materialId, courseId);
+      await onChanged();
+    } catch (err) {
+      setError(err.message || '연결을 끊지 못했습니다.');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -377,28 +397,15 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
 
   return (
     <section className="view-section">
-      <h2 className="section-title">자료</h2>
+      <h2 className="section-title">연결된 자료 {materials.length > 0 ? materials.length : ''}</h2>
       <p className="section-desc">
-        올리는 즉시 AI가 이 자료를 참고해 답할 수 있어요. 진도 관리용 목차가 필요할 때만 구조 분석을 하세요.
+        연결하면 AI가 이 프로젝트에서 그 자료를 참고해 답해요. 같은 자료를 여러 프로젝트에서 쓸 수 있어요.
       </p>
 
-      <form className="material-upload" onSubmit={handleUpload}>
-        <select className="material-type" value={materialType} onChange={(e) => setMaterialType(e.target.value)}
-          aria-label="자료 종류">
-          {Object.values(MaterialType).map((t) => (
-            <option key={t} value={t}>{MATERIAL_TYPE_LABEL[t]}</option>
-          ))}
-        </select>
-        <input type="file" accept=".pdf,.pptx" onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          aria-label="자료 파일" />
-        <button type="submit" className="btn-ghost btn-sm" disabled={!file || uploading}>
-          {uploading ? <><Loader2 size={13} className="spin" /> 올리는 중</> : <><Upload size={13} /> 올리기</>}
-        </button>
-      </form>
-      {uploadError && <p className="view-error">{uploadError}</p>}
+      {error && <p className="view-error">{error}</p>}
 
       {materials.length === 0 ? (
-        <p className="view-dim">아직 올린 자료가 없어요. 없어도 AI와 이야기할 수 있어요.</p>
+        <p className="view-dim">아직 연결된 자료가 없어요. 없어도 AI와 이야기할 수 있어요.</p>
       ) : (
         <ul className="material-list">
           {materials.map((m) => (
@@ -426,6 +433,11 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
                     )}
                   </>
                 )}
+                <button type="button" className="btn-ghost btn-sm" disabled={busyId === m.materialId}
+                  title="이 프로젝트에서만 연결을 끊어요. 자료는 자료함에 남아요."
+                  onClick={() => handleUnlink(m.materialId)}>
+                  <X size={13} /> 연결 해제
+                </button>
               </span>
               {analyses[m.materialId] && (
                 <div className="material-review-slot">
@@ -443,6 +455,103 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
           ))}
         </ul>
       )}
+
+      <div className="material-detail-actions">
+        {/*
+          파일 input을 hidden으로 감추면 접근성 트리에서 완전히 사라져 키보드·스크린리더로
+          도달할 수 없다. 시각적으로만 가리고 포커스는 받을 수 있게 둔다.
+        */}
+        <label className={`btn-ghost btn-sm${uploading ? ' is-disabled' : ''}`}>
+          {uploading ? <><Loader2 size={13} className="spin" /> 올리는 중</> : <><Upload size={13} /> 새 자료 업로드</>}
+          <input type="file" accept=".pdf,.pptx" className="visually-hidden" disabled={uploading}
+            aria-label="새 자료 업로드" onChange={handleUpload} />
+        </label>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => setPicking(true)}>
+          <Link2 size={13} /> 내 자료에서 연결
+        </button>
+      </div>
+
+      {picking && (
+        <MaterialPicker
+          courseId={courseId}
+          linkedIds={new Set(materials.map((m) => m.materialId))}
+          onCancel={() => setPicking(false)}
+          onLinked={async () => { setPicking(false); await onChanged(); }}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * 이미 올려둔 자료를 이 프로젝트에 연결한다. 여기서 materialType을 고르는 이유는
+ * 그 값이 자료가 아니라 이 연결에 붙기 때문이다 — 같은 파일이 프로젝트마다 다를 수 있다.
+ */
+function MaterialPicker({ courseId, linkedIds, onCancel, onLinked }) {
+  const [available, setAvailable] = useState(null);
+  const [error, setError] = useState(null);
+  const [materialId, setMaterialId] = useState('');
+  const [materialType, setMaterialType] = useState(MaterialType.OTHER);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    materialStoreAPI.list()
+      .then((all) => {
+        if (!alive) return;
+        const list = all.filter((m) => !linkedIds.has(m.materialId));
+        setAvailable(list);
+        setMaterialId(list[0]?.materialId ?? '');
+      })
+      .catch((err) => { if (alive) setError(err.message || '자료를 불러오지 못했습니다.'); });
+    return () => { alive = false; };
+    // linkedIds는 매 렌더 새 Set이라 의존성에 넣지 않는다 — 열릴 때 한 번만 읽는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (error) return <p className="view-error">{error}</p>;
+  if (available === null) return <p className="view-dim">자료를 불러오는 중...</p>;
+
+  if (available.length === 0) {
+    return (
+      <div className="material-link-form">
+        <span className="view-dim">연결할 수 있는 다른 자료가 없어요.</span>
+        <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>닫기</button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="material-link-form"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError(null);
+        try {
+          await materialStoreAPI.addLink(Number(materialId), courseId, materialType);
+          await onLinked();
+        } catch (err) {
+          setError(err.message || '연결하지 못했습니다.');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <select className="material-type" value={materialId} aria-label="연결할 자료"
+        onChange={(e) => setMaterialId(e.target.value)}>
+        {available.map((m) => (
+          <option key={m.materialId} value={m.materialId}>{m.originalFilename}</option>
+        ))}
+      </select>
+      <select className="material-type" value={materialType} aria-label="이 프로젝트에서의 자료 종류"
+        onChange={(e) => setMaterialType(e.target.value)}>
+        {Object.values(MaterialType).map((t) => (
+          <option key={t} value={t}>{MATERIAL_TYPE_LABEL[t]}</option>
+        ))}
+      </select>
+      <button type="submit" className="btn-ghost btn-sm" disabled={busy || !materialId}>연결</button>
+      <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}>취소</button>
+    </form>
   );
 }

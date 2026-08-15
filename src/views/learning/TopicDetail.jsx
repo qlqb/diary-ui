@@ -115,7 +115,15 @@ export default function TopicDetail({ courseTitle, ancestors, topic, onProgressC
 
       <div className="topic-detail-row">
         <span className="topic-detail-key">관련 자료</span>
-        <span className="topic-detail-val">자료 탭에서 원본 자료를 확인할 수 있어요.</span>
+        <span className="topic-detail-val">
+          {topic.sourceMaterialFilename
+            ? (topic.sourceMaterialDeleted
+              // 원본을 지워도 확정된 학습 내용은 남는다. 그래서 출처도 계속 말해준다 —
+              // 다만 지금은 열어볼 수 없다는 사실을 함께 적는다.
+              ? <>원본 삭제됨 · {topic.sourceMaterialFilename}</>
+              : topic.sourceMaterialFilename)
+            : '연결된 원본 자료가 없어요.'}
+        </span>
       </div>
 
       <div className="topic-detail-row">

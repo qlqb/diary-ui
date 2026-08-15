@@ -919,7 +919,29 @@
   color: var(--ws-text-faint);
 }
 
-.material-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.material-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+/* 파일 input을 감싼 label을 버튼처럼 쓴다 — 브라우저 기본 파일 위젯을 노출하지 않는다. */
+label.btn-ghost { cursor: pointer; position: relative; }
+label.btn-ghost.is-disabled { opacity: 0.45; cursor: not-allowed; }
+
+/*
+  시각적으로만 감춘다. hidden 속성이나 display:none은 접근성 트리에서 요소를 제거해
+  키보드·스크린리더로 도달할 수 없게 만든다.
+*/
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offset: 2px; }
 
 .material-link-form {
   display: flex;
