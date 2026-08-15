@@ -72,7 +72,12 @@ export default function ScheduleView({
       if (action === 'complete') await executionItemAPI.complete(item.executionItemId, item.version);
       else if (action === 'partial') await executionItemAPI.partial(item.executionItemId, { version: item.version, ...payload });
       else if (action === 'reduce') await executionItemAPI.reduce(item.executionItemId, { version: item.version, ...payload });
-      else if (action === 'move') await executionItemAPI.move(item.executionItemId, payload.toDate, item.version);
+      else if (action === 'move') {
+        await executionItemAPI.move(item.executionItemId, payload.toDate, item.version, {
+          startTime: payload.startTime ?? null,
+          endTime: payload.endTime ?? null,
+        });
+      }
       setSelected(null);
       await load();
     } catch (err) {

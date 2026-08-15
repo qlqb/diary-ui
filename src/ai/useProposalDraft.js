@@ -133,12 +133,17 @@ export function useProposalDraft({ onApplied } = {}) {
 
     const editedItems = remaining.map((card) => {
       if (card.operation !== 'CREATE') {
-        // 조정 제안은 대상 항목에 무엇을 할지만 보낸다(분량/제목/옮길 날짜).
+        // 조정 제안은 대상 항목에 무엇을 할지만 보낸다(분량/제목/옮길 날짜·시각).
+        // 시각은 "오늘 뒤로"처럼 같은 날 안에서 시각만 옮기는 이동에서만 채워진다 —
+        // 비워 보내면 서버가 제안에 담겨 있던 값을 그대로 쓴다.
+        const movesToTime = Boolean(card.scheduledDate && card.startTime && card.endTime);
         return {
           proposalItemId: card.proposalItemId,
           title: card.title,
           expectedMinutes: card.expectedMinutes,
           scheduledDate: card.scheduledDate,
+          scheduledStartAt: movesToTime ? `${card.scheduledDate}T${card.startTime}:00` : null,
+          scheduledEndAt: movesToTime ? `${card.scheduledDate}T${card.endTime}:00` : null,
         };
       }
       const hasTime = Boolean(card.scheduledDate && card.startTime && card.endTime);

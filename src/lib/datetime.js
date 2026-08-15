@@ -70,6 +70,16 @@ export function nowMinutes() {
   return now.getHours() * 60 + now.getMinutes();
 }
 
+/** 다음 step 분 경계로 올림. "지금부터 바로"를 어중간한 15:43이 아니라 15:45로 잡는다. */
+export function ceilToStep(minutes, step = 5) {
+  return Math.ceil(minutes / step) * step;
+}
+
+/** 하루(24시간) 안으로 자른다. 자정을 넘겨서 오늘 안에 잡는 일이 없어야 한다. */
+export function clampToDay(minutes) {
+  return Math.max(0, Math.min(24 * 60, Math.round(minutes)));
+}
+
 /** 월요일 시작 7일. offset은 이번 주 기준 주 단위 이동량. */
 export function weekDates(offset = 0, base = new Date()) {
   const day = base.getDay(); // 0=일

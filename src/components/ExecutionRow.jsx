@@ -11,7 +11,9 @@
 
 import { useState } from 'react';
 import { Clock, Sparkles, Check, X } from 'lucide-react';
-import { formatDateShort, formatMinutes } from '../lib/datetime.js';
+import {
+  ceilToStep, clampToDay, formatDateShort, formatMinutes, hhmmOf, minutesOf, nowMinutes, shiftDate, todayString,
+} from '../lib/datetime.js';
 
 const PRIORITY_LABEL = { MUST: '꼭', SHOULD: '하면 좋음', OPTIONAL: '여유 있으면' };
 const STATUS_LABEL = { PLANNED: '', DONE: '완료', HOLD: '보류', CANCELLED: '취소', PARTIAL: '일부' };
@@ -33,9 +35,27 @@ function adjustmentLabel(adjustment) {
     return `제목: ${adjustment.title}`;
   }
   if (adjustment.operation === 'MOVE') {
+    // 같은 날 안에서 시각만 미는 이동은 날짜를 두 번 보여줘봐야 읽히지 않는다 — 시각을 보여준다.
+    const sameDay = adjustment.beforeScheduledDate === adjustment.scheduledDate;
+    if (sameDay && adjustment.startTime) {
+      return `오늘 ${adjustment.startTime}${adjustment.endTime ? `–${adjustment.endTime}` : ''}로`;
+    }
     return `${formatDateShort(adjustment.beforeScheduledDate)} → ${formatDateShort(adjustment.scheduledDate)}`;
   }
   return '오늘 목록에서 빼기 (보류, 되돌릴 수 있어요)';
+}
+
+function durationMinutes(item) {
+  if (item.estimatedMinutes != null) return item.estimatedMinutes;
+  const start = minutesOf(item.startTime);
+  const end = minutesOf(item.endTime);
+  return start != null && end != null && end > start ? end - start : 30;
+}
+
+/** "오늘 뒤로"의 기본값은 지금 바로 다음 5분 경계다 — 어중간한 15:43이 아니라 15:45. */
+function suggestLaterStart(item) {
+  if (!item.startTime) return '';
+  return hhmmOf(clampToDay(ceilToStep(nowMinutes(), 5)));
 }
 
 export default function ExecutionRow({
@@ -52,14 +72,28 @@ export default function ExecutionRow({
   const [reduceMinutes, setReduceMinutes] = useState(item.estimatedMinutes ?? 30);
   const [partialPercent, setPartialPercent] = useState(50);
   const [moveDate, setMoveDate] = useState('');
+  const [laterTime, setLaterTime] = useState(() => suggestLaterStart(item));
 
   const isDone = item.status === 'DONE';
   const isHold = item.status === 'HOLD';
   const canAct = item.status === 'PLANNED' && onAction;
+  // 같은 날 안에서 시각만 뒤로 미는 것은 시각이 정해진 항목에만 뜻이 있다.
+  const canMoveLaterToday = Boolean(item.startTime && item.endTime && item.scheduledDate === todayString());
 
   const run = async (action, payload) => {
     setTray(null);
     await onAction?.(action, item, payload);
+  };
+
+  const runLaterToday = () => {
+    const start = minutesOf(laterTime);
+    if (start == null) return;
+    const end = clampToDay(start + durationMinutes(item));
+    run('move', {
+      toDate: item.scheduledDate,
+      startTime: hhmmOf(start),
+      endTime: hhmmOf(end),
+    });
   };
 
   return (
@@ -145,8 +179,11 @@ export default function ExecutionRow({
               <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setTray('reduce')}>
                 줄이기
               </button>
+              {/* "미루기"가 아니라 "이동"이다 — 언제 할지를 바꾸는 것이고, 오늘 안에서 뒤로
+                  미는 것도 여기에 포함된다. 보류("당분간 실행 대상에서 빼두기")는 의미가 달라
+                  이 버튼에 합치지 않는다. */}
               <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setTray('move')}>
-                미루기
+                이동
               </button>
             </>
           )}
@@ -189,16 +226,29 @@ export default function ExecutionRow({
           )}
 
           {tray === 'move' && (
-            <div className="exec-tray">
-              <label className="inline-field">
-                <span>언제로</span>
-                <input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
-              </label>
-              <button type="button" className="btn-primary btn-sm" disabled={busy || !moveDate}
-                onClick={() => run('move', { toDate: moveDate })}>
-                <Check size={13} /> 옮기기
+            <div className="exec-tray exec-tray-move">
+              {canMoveLaterToday && (
+                <span className="exec-tray-group">
+                  <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={runLaterToday}>
+                    오늘 뒤로
+                  </button>
+                  <input type="time" step="300" aria-label="오늘 뒤로 옮길 시각"
+                    value={laterTime} onChange={(e) => setLaterTime(e.target.value)} />
+                </span>
+              )}
+              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                onClick={() => run('move', { toDate: shiftDate(item.scheduledDate ?? todayString(), 1) })}>
+                내일로
               </button>
-              <button type="button" className="btn-ghost btn-sm" onClick={() => setTray(null)}>
+              <span className="exec-tray-group">
+                <input type="date" aria-label="옮길 날짜"
+                  value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
+                <button type="button" className="btn-primary btn-sm" disabled={busy || !moveDate}
+                  onClick={() => run('move', { toDate: moveDate })}>
+                  <Check size={13} /> 이 날짜로
+                </button>
+              </span>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => setTray(null)} aria-label="이동 취소">
                 <X size={13} />
               </button>
             </div>

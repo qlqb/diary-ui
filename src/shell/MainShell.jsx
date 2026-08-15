@@ -246,6 +246,7 @@ export default function MainShell({ user, onLogout }) {
               onPatchCard={patchCard}
               onToggleExclude={toggleExclude}
               onOpenAi={() => setAiOpen(true)}
+              onAsk={ask}
             />
           )}
 

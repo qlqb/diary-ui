@@ -114,9 +114,43 @@ describe('useProposalDraft', () => {
       title: '자료구조 복습',
       expectedMinutes: 20,
       scheduledDate: '2026-08-15',
+      // 시각은 "오늘 뒤로"처럼 같은 날 안에서 옮기는 이동에서만 채워진다. 비어 있으면 서버가
+      // 제안에 담겨 있던 값을 그대로 쓴다.
+      scheduledStartAt: null,
+      scheduledEndAt: null,
     });
     // 새 항목을 만드는 필드가 섞여 나가면 안 된다.
     expect(editedItems[0].placementType).toBeUndefined();
+  });
+
+  it('같은 날 안에서 시각만 옮기는 조정은 그 시각을 그대로 보낸다', async () => {
+    const { result } = renderHook(() => useProposalDraft({}));
+    await act(async () => {
+      await result.current.openDraft({
+        proposalId: 9,
+        items: [{
+          proposalItemId: 91,
+          operation: 'MOVE',
+          title: '프로젝트 우선작업',
+          expectedMinutes: 30,
+          priority: 'MUST',
+          targetExecutionItemId: 501,
+          targetDate: '2026-08-15',
+          beforeScheduledDate: '2026-08-15',
+          scheduledStartAt: '2026-08-15T16:00:00',
+          scheduledEndAt: '2026-08-15T16:30:00',
+        }],
+      });
+    });
+
+    await act(async () => { await result.current.apply(); });
+
+    expect(proposalAPI.apply.mock.calls[0][1][0]).toMatchObject({
+      proposalItemId: 91,
+      scheduledDate: '2026-08-15',
+      scheduledStartAt: '2026-08-15T16:00:00',
+      scheduledEndAt: '2026-08-15T16:30:00',
+    });
   });
 
   it('날짜가 정해지지 않은 후보는 서버 배치 결과를 받아 실제 시각을 갖는다', async () => {

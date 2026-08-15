@@ -473,6 +473,179 @@
 
 .focus-slot .exec-row-title { font-size: 17px; }
 
+.exec-tray-move { flex-wrap: wrap; }
+.exec-tray-group { display: inline-flex; align-items: center; gap: 4px; }
+
+.exec-tray input[type='time'],
+.exec-tray input[type='date'] {
+  padding: 4px 7px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13.5px;
+  color: var(--ws-text);
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ws-accent);
+  font-size: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ===================== 지나간 항목 ===================== */
+
+/* 밀렸다는 사실은 경고가 아니라 안내다 — 빨강(위험)이 아니라 노랑(주의) 계열을 쓴다. */
+.overdue-block {
+  border-style: solid;
+  border-color: var(--ws-warn);
+  background: var(--ws-warn-soft);
+}
+
+.overdue-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--ws-warn);
+  border-radius: 9px;
+  background: var(--ws-warn-soft);
+}
+
+.overdue-strip .empty-title { margin: 0; font-size: 14px; color: var(--ws-warn); }
+.overdue-strip .overdue-actions { margin-left: auto; }
+
+.overdue-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.overdue-group {
+  margin-bottom: 10px;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--ws-border);
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.overdue-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.overdue-group-toggle {
+  width: auto;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ws-warn);
+}
+
+.overdue-group-toggle:hover { color: var(--ws-text); }
+.overdue-divider { margin: 12px 0 6px; font-weight: 600; color: var(--ws-text-dim); }
+
+/* ===================== 다시 잡기 검토 영역 ===================== */
+
+.reschedule {
+  margin-bottom: 16px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--ws-accent);
+  border-radius: 10px;
+  background: var(--ws-surface);
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.12);
+}
+
+.reschedule-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reschedule-head .section-title { margin-bottom: 4px; }
+.reschedule-head .section-desc { margin: 0; }
+
+.reschedule-tags {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+  padding: 7px 0;
+  border-top: 1px solid var(--ws-border);
+  border-bottom: 1px solid var(--ws-border);
+}
+
+.reschedule-tags-label { font-size: 13px; font-weight: 600; color: var(--ws-text-faint); }
+
+.reschedule-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* 항목 하나가 한 눈에 들어와야 한다 — 제목·기존 시각·추천을 한 줄, 선택지를 한 줄로 둔다. */
+.reschedule-item {
+  padding: 6px 9px;
+  border: 1px solid var(--ws-border);
+  border-radius: 9px;
+  background: #fcfcfd;
+}
+
+.reschedule-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+  font-size: 13.5px;
+}
+
+.reschedule-item-title { font-size: 14.5px; font-weight: 650; }
+.reschedule-item-actions { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+
+.reschedule-item-actions input[type='time'],
+.reschedule-item-actions input[type='date'] {
+  padding: 4px 7px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13.5px;
+}
+
+.reschedule-preview {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ws-border);
+}
+
+.reschedule-preview-title { margin: 0 0 6px; font-size: 13.5px; font-weight: 650; color: var(--ws-text-dim); }
+
+.reschedule-preview-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13.5px;
+}
+
+.reschedule-preview-list li { display: flex; align-items: center; gap: 8px; }
+.reschedule-preview-time { min-width: 92px; font-weight: 650; color: var(--ws-accent-text); }
+
+.reschedule-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ws-border);
+}
+
+.reschedule-foot .btn-primary { margin-left: auto; }
+
 /* ===================== 빈 상태 ===================== */
 
 .empty-block {

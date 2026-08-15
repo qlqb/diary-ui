@@ -645,11 +645,18 @@ export const executionItemAPI = {
         return toFrontendExecutionItem(data);
     },
 
-    /** 다른 날짜로 이동 */
-    move: async (executionItemId, toDate, version, reason = null) => {
+    /**
+     * 이동 = "언제 할지" 변경. 다른 날짜로 옮기는 것과, 같은 날 안에서 시각만 뒤로 미는 것
+     * ("오늘 뒤로")이 모두 이 액션이고 둘 다 MOVED 이벤트로 남는다.
+     *
+     * options.startTime/endTime('HH:mm')을 주면 그 시각으로 다시 배치한다(시각이 정해진
+     * 항목에만 쓸 수 있다). 주지 않으면 예전처럼 날짜만 옮긴다.
+     */
+    move: async (executionItemId, toDate, version, options = {}) => {
+        const { reason = null, startTime = null, endTime = null } = options;
         const data = await request(`/execution-items/${executionItemId}/move`, {
             method: 'POST',
-            body: JSON.stringify({ toDate, version, reason }),
+            body: JSON.stringify({ toDate, version, reason, startTime, endTime }),
         });
         return toFrontendExecutionItem(data);
     },
