@@ -16,6 +16,7 @@ import { executionItemAPI } from '../api/api.js';
 vi.mock('../api/api.js', () => ({
   executionItemAPI: {
     complete: vi.fn(), partial: vi.fn(), reduce: vi.fn(), move: vi.fn(), hold: vi.fn(), create: vi.fn(),
+    resume: vi.fn(), delete: vi.fn(),
   },
 }));
 
@@ -55,6 +56,8 @@ beforeEach(() => {
   executionItemAPI.move.mockResolvedValue({});
   executionItemAPI.reduce.mockResolvedValue({ version: 1 });
   executionItemAPI.hold.mockResolvedValue({});
+  executionItemAPI.resume.mockResolvedValue({});
+  executionItemAPI.delete.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -200,6 +203,63 @@ describe('다시 잡기 검토', () => {
     expect(onAsk.mock.calls[0][0]).toContain('남은 오늘을 다시 잡아줘');
     expect(onAsk.mock.calls[0][0]).toContain('17:00');
     expect(executionItemAPI.move).not.toHaveBeenCalled();
+  });
+});
+
+describe('보류한 것', () => {
+  const heldItem = () => timed(9, '산책 또는 휴식', '11:30', '11:50', { status: 'HOLD', version: 2 });
+
+  it('완료와 섞지 않고 "보류한 것"으로 따로 보여준다', () => {
+    freezeAt(15, 40);
+    renderToday([heldItem(), timed(8, '아침 루틴', '10:00', '10:15', { status: 'DONE' })]);
+
+    expect(screen.getByText('보류한 것')).toBeInTheDocument();
+    expect(screen.getByText('오늘 정리한 것')).toBeInTheDocument();
+  });
+
+  it('보류 항목에서 다시 시작과 삭제를 할 수 있다 — 손댈 수 없는 유령 항목이 아니다', () => {
+    freezeAt(15, 40);
+    renderToday([heldItem()]);
+
+    expect(screen.getByRole('button', { name: /다시 시작/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /삭제/ })).toBeInTheDocument();
+  });
+
+  it('다시 시작은 resume 액션을 부른다(HOLD -> PLANNED, RESUMED 이벤트)', async () => {
+    freezeAt(15, 40);
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    renderToday([heldItem()], { onRefresh });
+
+    await user.click(screen.getByRole('button', { name: /다시 시작/ }));
+
+    await waitFor(() => expect(executionItemAPI.resume).toHaveBeenCalledWith(9, 2));
+    expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it('삭제는 확인을 거친 뒤 soft delete API를 부른다', async () => {
+    freezeAt(15, 40);
+    const user = userEvent.setup();
+    renderToday([heldItem()], { onRefresh: vi.fn() });
+
+    // 첫 클릭은 확인만 띄운다 — 한 번에 지워지지 않는다.
+    await user.click(screen.getByRole('button', { name: /삭제/ }));
+    expect(executionItemAPI.delete).not.toHaveBeenCalled();
+    expect(screen.getByText('삭제할까요?')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^삭제$/ }));
+
+    await waitFor(() => expect(executionItemAPI.delete).toHaveBeenCalledWith(9, 2));
+  });
+
+  it('완료·취소 항목에는 다시 시작을 노출하지 않는다', () => {
+    freezeAt(15, 40);
+    renderToday([
+      timed(8, '아침 루틴', '10:00', '10:15', { status: 'DONE' }),
+      timed(7, '취소한 것', '09:00', '09:30', { status: 'CANCELLED' }),
+    ]);
+
+    expect(screen.queryByRole('button', { name: /다시 시작/ })).not.toBeInTheDocument();
   });
 });
 

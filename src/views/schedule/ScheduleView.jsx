@@ -78,6 +78,8 @@ export default function ScheduleView({
           endTime: payload.endTime ?? null,
         });
       }
+      else if (action === 'resume') await executionItemAPI.resume(item.executionItemId, item.version);
+      else if (action === 'delete') await executionItemAPI.delete(item.executionItemId, item.version);
       setSelected(null);
       await load();
     } catch (err) {

@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Sparkles, Loader2, Send, List, Plus, MessageCircle, ArrowLeft, PanelRightClose, CircleCheck,
+  Sparkles, Loader2, Send, List, Plus, MessageCircle, ArrowLeft, PanelRightClose, CircleCheck, Trash2,
 } from 'lucide-react';
 import { conversationAPI, proposalAPI, contextSuggestionAPI } from '../api/api.js';
 
@@ -66,6 +66,7 @@ export default function AiPanel({
   prefill,
   onProposal,
   onFocusDraft,
+  onDiscardDraft,
   onCollapse,
 }) {
   const [view, setView] = useState('chat'); // 'chat' | 'list'
@@ -85,6 +86,7 @@ export default function AiPanel({
   const [contextSuggestions, setContextSuggestions] = useState([]);
   const [contextActionState, setContextActionState] = useState({});
   const [appliedNotice, setAppliedNotice] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const bodyRef = useRef(null);
   const inputRef = useRef(null);
@@ -314,6 +316,56 @@ export default function AiPanel({
     });
   };
 
+  /**
+   * 대화 삭제. 지금 보고 있는 대화를 지우면 화면에 그 대화의 흔적(진행 중 스트림, 이력,
+   * 입력 중이던 글, 적용 전 초안 안내)이 남아 있으면 안 된다 — 지운 대화를 계속 보고 있는
+   * 것처럼 보이기 때문이다. 그래서 스트림을 먼저 끊고 턴 상태를 비운 뒤 목록을 다시 읽는다.
+   */
+  const handleDeleteConversation = async (conversationId) => {
+    if (deletingId) return;
+    if (!window.confirm('이 대화를 삭제할까요?')) return;
+
+    const isActive = conversationId === activeConversationId;
+    setDeletingId(conversationId);
+    setLoadError(null);
+    try {
+      await conversationAPI.delete(conversationId);
+    } catch (err) {
+      setLoadError(err.message || '대화를 삭제하지 못했습니다.');
+      setDeletingId(null);
+      return;
+    }
+
+    if (isActive) {
+      // 진행 중이던 SSE를 먼저 끊는다. loadToken도 올려 뒤늦게 도착하는 응답이 화면을
+      // 되살리지 못하게 한다.
+      abortControllerRef.current?.abort();
+      activeStreamConversationIdRef.current = null;
+      loadTokenRef.current += 1;
+      setSending(false);
+      setActiveConversationId(null);
+      resetTurnState();
+      setInputText('');
+      // 이 대화에서 나온 적용 전 초안도 함께 치운다 — 대화는 지웠는데 그 대화가 만든 ghost가
+      // 오늘/일정 화면에 계속 떠 있으면 안 된다. 적용 전이므로 버려도 실제 데이터는 그대로다.
+      onDiscardDraft?.();
+    }
+    delete draftsRef.current[conversationId];
+    setDeletingId(null);
+
+    try {
+      const list = await conversationAPI.list(scope.courseId ?? null);
+      setConversationList(list);
+      if (isActive) {
+        // 남은 대화가 있으면 가장 최근 것을 열고, 없으면 새 대화 준비 상태로 둔다.
+        if (list.length > 0) await selectConversation(list[0].conversationId);
+        else setView('chat');
+      }
+    } catch (err) {
+      setLoadError(err.message || '대화 목록을 불러오지 못했습니다.');
+    }
+  };
+
   const handleContextAction = async (suggestionId, action) => {
     setContextActionState((prev) => ({ ...prev, [suggestionId]: { status: 'working' } }));
     try {
@@ -357,24 +409,44 @@ export default function AiPanel({
           <button type="button" className="btn-ghost ai-panel-back" onClick={() => setView('chat')}>
             <ArrowLeft size={14} /> 대화로 돌아가기
           </button>
+          {/* 목록에서 삭제하다 실패했을 때 아무 말도 없이 그대로 남아 있으면 안 된다. */}
+          {loadError && <p className="ai-error">{loadError}</p>}
           {listLoading && <p className="ai-hint"><Loader2 size={14} className="spin" /> 불러오는 중...</p>}
           {!listLoading && conversationList.length === 0 && (
             <p className="ai-hint">아직 이 범위에서 나눈 대화가 없어요.</p>
           )}
+          {/* 행 전체를 button으로 두면 삭제 버튼을 button 안에 중첩하게 된다 —
+              열기와 삭제는 각각 독립된 조작이므로 container + 두 개의 button으로 나눈다. */}
           {conversationList.map((item) => (
-            <button
+            <div
               key={item.conversationId}
-              type="button"
-              className={`ai-conv-item${item.conversationId === activeConversationId ? ' is-active' : ''}`}
-              onClick={() => selectConversation(item.conversationId)}
+              className={`ai-conv-row${item.conversationId === activeConversationId ? ' is-active' : ''}`}
             >
-              <MessageCircle size={13} />
-              <span className="ai-conv-item-title">{item.title || '(제목 없음)'}</span>
-              {item.pendingProposalCount > 0 && (
-                <span className="ai-conv-item-badge">검토 전 {item.pendingProposalCount}</span>
-              )}
-              <span className="ai-conv-item-time">{formatRelativeTime(item.lastMessageAt)}</span>
-            </button>
+              <button
+                type="button"
+                className="ai-conv-item"
+                onClick={() => selectConversation(item.conversationId)}
+              >
+                <MessageCircle size={13} />
+                <span className="ai-conv-item-title">{item.title || '(제목 없음)'}</span>
+                {item.pendingProposalCount > 0 && (
+                  <span className="ai-conv-item-badge">검토 전 {item.pendingProposalCount}</span>
+                )}
+                <span className="ai-conv-item-time">{formatRelativeTime(item.lastMessageAt)}</span>
+              </button>
+              <button
+                type="button"
+                className="icon-btn ai-conv-delete"
+                aria-label="대화 삭제"
+                title="대화 삭제"
+                disabled={deletingId === item.conversationId}
+                onClick={() => handleDeleteConversation(item.conversationId)}
+              >
+                {deletingId === item.conversationId
+                  ? <Loader2 size={14} className="spin" />
+                  : <Trash2 size={14} />}
+              </button>
+            </div>
           ))}
         </div>
       ) : (

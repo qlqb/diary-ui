@@ -304,6 +304,7 @@ export default function MainShell({ user, onLogout }) {
           prefill={prefill}
           onProposal={handleProposal}
           onFocusDraft={focusDraft}
+          onDiscardDraft={discardDraft}
           onCollapse={() => setAiOpen(false)}
         />
       ) : (

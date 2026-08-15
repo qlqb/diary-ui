@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Upload, Archive, Pencil, Loader2,
+  ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Upload, Trash2, Pencil, Loader2,
 } from 'lucide-react';
 import ExecutionRow from '../../components/ExecutionRow.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
@@ -118,6 +118,10 @@ export default function ProjectWorkspace({
           endTime: payload.endTime ?? null,
         });
       }
+      // 보류 항목은 이 화면에도 그대로 나타난다 — 여기서도 다시 꺼내거나 지울 수 있어야
+      // 오늘 화면에서만 손댈 수 있는 반쪽짜리가 되지 않는다.
+      else if (action === 'resume') await executionItemAPI.resume(item.executionItemId, item.version);
+      else if (action === 'delete') await executionItemAPI.delete(item.executionItemId, item.version);
       await load();
     } catch (err) {
       setError(err.message || '처리하지 못했습니다.');
@@ -152,16 +156,20 @@ export default function ProjectWorkspace({
           <button
             type="button"
             className="icon-btn"
-            aria-label="보관"
-            title="보관 (자료·대화·기록은 남습니다)"
+            aria-label="프로젝트 삭제"
+            title="프로젝트 삭제"
             onClick={async () => {
-              if (!confirm('이 프로젝트를 보관할까요? 자료와 대화는 지워지지 않습니다.')) return;
-              await courseAPI.archive(courseId);
-              await onProjectsChanged?.();
-              onBack();
+              if (!window.confirm('이 프로젝트를 삭제할까요?')) return;
+              try {
+                await courseAPI.delete(courseId);
+                await onProjectsChanged?.();
+                onBack();
+              } catch (err) {
+                setError(err.message || '삭제하지 못했습니다.');
+              }
             }}
           >
-            <Archive size={15} />
+            <Trash2 size={15} />
           </button>
         </div>
       </header>

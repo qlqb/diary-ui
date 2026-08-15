@@ -51,6 +51,10 @@ export default function TodayView({
     nowState, focus, overdue, upcoming, rest, finished, minutesToNext, nextItem, remainingMinutes,
   } = useMemo(() => classifyToday(items, now, today), [items, now, today]);
 
+  // 보류와 완료는 같은 "끝난 것"이 아니다 — 보류는 되돌릴 수 있는 상태이므로 따로 보여준다.
+  const held = finished.filter((i) => i.status === 'HOLD');
+  const done = finished.filter((i) => i.status !== 'HOLD');
+
   // 지나간 항목이 다시 생기면(또는 새로 밀리면) 안내를 다시 보여준다.
   useEffect(() => { setDismissedOverdue(false); }, [overdue.length]);
 
@@ -76,6 +80,10 @@ export default function TodayView({
         });
       } else if (action === 'hold') {
         await executionItemAPI.hold(item.executionItemId, item.version);
+      } else if (action === 'resume') {
+        await executionItemAPI.resume(item.executionItemId, item.version);
+      } else if (action === 'delete') {
+        await executionItemAPI.delete(item.executionItemId, item.version);
       }
       await onRefresh?.();
     } catch (err) {
@@ -292,11 +300,25 @@ export default function TodayView({
           </section>
           )}
 
-          {!rescheduling && finished.length > 0 && (
+          {/* 보류는 끝난 것이 아니라 "당분간 빼둔 것"이다 — 완료와 같은 자리에 묻어두면
+              다시 꺼낼 방법이 없는 유령 항목이 된다. 여기서 바로 다시 시작하거나 지운다. */}
+          {!rescheduling && held.length > 0 && (
+            <section className="view-section">
+              <h2 className="section-title">보류한 것</h2>
+              <p className="section-desc">지금은 하지 않기로 한 것들이에요. 다시 시작하거나 지울 수 있어요.</p>
+              <div className="row-list">
+                {held.map((item) => (
+                  <Row key={item.executionItemId} item={item} {...rowProps} compact />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {!rescheduling && done.length > 0 && (
             <section className="view-section">
               <h2 className="section-title">오늘 정리한 것</h2>
               <div className="row-list">
-                {finished.map((item) => (
+                {done.map((item) => (
                   <Row key={item.executionItemId} item={item} {...rowProps} onAction={undefined} compact />
                 ))}
               </div>

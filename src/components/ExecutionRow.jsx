@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react';
-import { Clock, Sparkles, Check, X } from 'lucide-react';
+import { Clock, Sparkles, Check, X, RotateCcw, Trash2 } from 'lucide-react';
 import {
   ceilToStep, clampToDay, formatDateShort, formatMinutes, hhmmOf, minutesOf, nowMinutes, shiftDate, todayString,
 } from '../lib/datetime.js';
@@ -77,6 +77,10 @@ export default function ExecutionRow({
   const isDone = item.status === 'DONE';
   const isHold = item.status === 'HOLD';
   const canAct = item.status === 'PLANNED' && onAction;
+  // 보류는 "당분간 실행 대상에서 빼둔 것"이지 끝난 것이 아니다 — 여기서 다시 꺼내거나
+  // 지울 수 없으면 사용자가 손댈 방법이 없는 유령 항목이 된다. 반대로 이미 끝난
+  // (DONE/CANCELLED) 항목에는 "다시 시작"을 노출하지 않는다.
+  const canRevive = isHold && Boolean(onAction);
   // 같은 날 안에서 시각만 뒤로 미는 것은 시각이 정해진 항목에만 뜻이 있다.
   const canMoveLaterToday = Boolean(item.startTime && item.endTime && item.scheduledDate === todayString());
 
@@ -165,6 +169,33 @@ export default function ExecutionRow({
           <p className="exec-row-reason">{adjustment.reason}</p>
         )}
       </div>
+
+      {canRevive && (
+        <div className="exec-row-actions">
+          {tray === null ? (
+            <>
+              <button type="button" className="btn-primary btn-sm" disabled={busy}
+                onClick={() => run('resume')}>
+                <RotateCcw size={13} /> 다시 시작
+              </button>
+              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                onClick={() => setTray('delete')}>
+                <Trash2 size={13} /> 삭제
+              </button>
+            </>
+          ) : (
+            <div className="exec-tray">
+              <span>삭제할까요?</span>
+              <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={() => run('delete')}>
+                <Check size={13} /> 삭제
+              </button>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => setTray(null)}>
+                취소
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {canAct && (
         <div className="exec-row-actions">

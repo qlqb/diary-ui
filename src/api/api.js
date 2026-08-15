@@ -691,6 +691,15 @@ export const executionItemAPI = {
         return toFrontendExecutionItem(data);
     },
 
+    /** 보류 해제(다시 시작). HOLD -> PLANNED로 되돌리고 RESUMED 이벤트를 남긴다 */
+    resume: async (executionItemId, version, reason = null) => {
+        const data = await request(`/execution-items/${executionItemId}/resume`, {
+            method: 'POST',
+            body: JSON.stringify({ version, reason }),
+        });
+        return toFrontendExecutionItem(data);
+    },
+
     /** 삭제 (soft delete) */
     delete: (executionItemId, version) => {
         const params = new URLSearchParams({ version });
@@ -787,6 +796,14 @@ export const conversationAPI = {
     getContextSuggestions: (conversationId) => {
         return request(`/ai/conversations/${conversationId}/context-suggestions`);
     },
+
+    /**
+     * 대화 삭제. 목록에서 사라지지만 서버는 status를 ARCHIVED로 내리는 soft delete다 —
+     * 이미 나눈 메시지·제안·승인된 장기 컨텍스트를 함께 지우지 않는다.
+     */
+    delete: (conversationId) => {
+        return request(`/ai/conversations/${conversationId}`, { method: 'DELETE' });
+    },
 };
 
 /**
@@ -847,8 +864,12 @@ export const courseAPI = {
         });
     },
 
-    /** 보관. 실제로 지우지 않는다 — 쌓인 자료·대화·기록은 그대로 남는다 */
-    archive: (courseId) => {
+    /**
+     * 삭제. 목록과 화면에서 사라지지만 서버는 status를 ARCHIVED로 내리는 soft delete다 —
+     * 자료·대화·실행 기록이 이 프로젝트를 참조하고 있어 행을 지우면 그 관계가 끊어진다.
+     * 사용자에게는 "삭제"로만 보이고 별도의 보관함 화면은 두지 않는다.
+     */
+    delete: (courseId) => {
         return request(`/courses/${courseId}`, { method: 'DELETE' });
     },
 };
