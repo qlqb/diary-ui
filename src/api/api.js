@@ -906,6 +906,53 @@ export const materialAPI = {
 };
 
 /**
+ * 전역 자료함 API. 자료는 프로젝트가 아니라 사용자가 소유한다 — 하나의 자료를 여러
+ * 프로젝트에서 참조할 수 있다.
+ *
+ * materialType은 업로드가 아니라 연결 시점에 정해진다("이 프로젝트가 이 자료를 무엇으로
+ * 쓰는가"). 어떤 프로젝트에도 연결되지 않은 자료는 타입이 없는 것이 정상 상태다.
+ */
+export const materialStoreAPI = {
+    /** 내 전체 자료. 각 항목의 links에 연결된 프로젝트가 함께 온다 */
+    list: () => {
+        return request('/materials');
+    },
+
+    /** 프로젝트 없이 업로드. materialType을 보내지 않는다 */
+    upload: (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return requestMultipart('/materials', formData);
+    },
+
+    /** 단건 + 연결 목록 + 분석 이력 */
+    get: (materialId) => {
+        return request(`/materials/${materialId}`);
+    },
+
+    /**
+     * 자료 삭제. 원본 파일까지 지운다 — 연결 해제와는 다른 액션이다.
+     * 이미 적용한 학습 내용과 프로젝트 상태는 그대로 남는다.
+     */
+    delete: (materialId) => {
+        return request(`/materials/${materialId}`, { method: 'DELETE' });
+    },
+
+    /** 프로젝트에 연결. payload: { courseId, materialType } */
+    addLink: (materialId, courseId, materialType) => {
+        return request(`/materials/${materialId}/links`, {
+            method: 'POST',
+            body: JSON.stringify({ courseId, materialType }),
+        });
+    },
+
+    /** 연결만 끊는다. 자료도 다른 프로젝트 연결도 그대로 남는다 */
+    removeLink: (materialId, courseId) => {
+        return request(`/materials/${materialId}/links/${courseId}`, { method: 'DELETE' });
+    },
+};
+
+/**
  * Material Agent 분석 draft/review/apply API. draft 상태는 course_topics에 전혀 영향을
  * 주지 않는다 — apply()를 호출해야만 확정된다.
  */

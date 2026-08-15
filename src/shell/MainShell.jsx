@@ -1,11 +1,15 @@
 /**
  * 앱 셸. 왼쪽 탐색 · 가운데 작업 화면 · 오른쪽 AI.
  *
- * 최상위는 네 곳이다.
+ * 최상위는 다섯 곳이다.
  *   오늘     지금 무엇을 하고, 남은 오늘을 어떻게 조정할까
+ *   자료      내가 가진 파일들. 프로젝트에 종속되지 않는다
  *   프로젝트  내가 AI와 계속 다루는 주제들
  *   일정      앞으로 언제 무엇을 할까
  *   기록      실제로 무슨 일이 있었나
+ *
+ * 자료가 최상위인 이유: 하나의 자료를 여러 프로젝트에서 참조할 수 있어서, 어느 한
+ * 프로젝트 안에만 두면 "그 파일이 어디 있더라"를 프로젝트를 뒤져 찾아야 한다.
  *
  * 예전의 "계획"과 "실행"을 따로 두지 않는다 — 초안과 확정을 다른 탭에 나눠 놓으면 "지금 보는
  * 게 적용된 것인지"가 흐려진다. 일정 화면 하나에서 확정된 배치와 적용 전 초안을 함께 본다.
@@ -17,13 +21,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Sparkles, CalendarCheck2, FolderKanban, CalendarDays, NotebookPen, LogOut, PanelRightOpen,
+  Sparkles, CalendarCheck2, FolderKanban, CalendarDays, NotebookPen, FileText, LogOut, PanelRightOpen,
 } from 'lucide-react';
 
 import AiPanel from '../ai/AiPanel.jsx';
 import { useProposalDraft } from '../ai/useProposalDraft.js';
 import ApplyBar from '../components/ApplyBar.jsx';
 import TodayView from '../views/TodayView.jsx';
+import MaterialsView from '../views/materials/MaterialsView.jsx';
 import ProjectsView from '../views/projects/ProjectsView.jsx';
 import ProjectWorkspace from '../views/projects/ProjectWorkspace.jsx';
 import ScheduleView from '../views/schedule/ScheduleView.jsx';
@@ -33,6 +38,7 @@ import { todayString } from '../lib/datetime.js';
 
 const TABS = [
   { key: 'today', label: '오늘', icon: CalendarCheck2 },
+  { key: 'materials', label: '자료', icon: FileText },
   { key: 'projects', label: '프로젝트', icon: FolderKanban },
   { key: 'schedule', label: '일정', icon: CalendarDays },
   { key: 'record', label: '기록', icon: NotebookPen },
@@ -248,6 +254,10 @@ export default function MainShell({ user, onLogout }) {
               onOpenAi={() => setAiOpen(true)}
               onAsk={ask}
             />
+          )}
+
+          {tab === 'materials' && (
+            <MaterialsView projects={projects} onProjectsChanged={loadProjects} />
           )}
 
           {tab === 'projects' && !openProjectId && (
