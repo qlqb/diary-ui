@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Upload, Trash2, Pencil, Loader2, Link2, X,
+  ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Upload, Archive, Pencil, Loader2, Link2, X,
 } from 'lucide-react';
 import ExecutionRow from '../../components/ExecutionRow.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
@@ -156,20 +156,20 @@ export default function ProjectWorkspace({
           <button
             type="button"
             className="icon-btn"
-            aria-label="프로젝트 삭제"
-            title="프로젝트 삭제"
+            aria-label="프로젝트 보관"
+            title="프로젝트 보관"
             onClick={async () => {
-              if (!window.confirm('이 프로젝트를 삭제할까요?')) return;
+              if (!window.confirm('보관할까요? 나중에 다시 꺼낼 수 있어요')) return;
               try {
                 await courseAPI.delete(courseId);
                 await onProjectsChanged?.();
                 onBack();
               } catch (err) {
-                setError(err.message || '삭제하지 못했습니다.');
+                setError(err.message || '보관하지 못했습니다.');
               }
             }}
           >
-            <Trash2 size={15} />
+            <Archive size={15} />
           </button>
         </div>
       </header>
