@@ -6,8 +6,8 @@
  * "만들기"다. 제목 하나만 있으면 되고, 만든 즉시 그 안에서 AI와 이야기할 수 있다.
  */
 
-import { useState } from 'react';
-import { Plus, FolderOpen, ArrowRight } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus, FolderOpen, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { courseAPI } from '../../api/api.js';
 
 const UNGROUPED = '__ungrouped__';
@@ -132,7 +132,81 @@ export default function ProjectsView({ projects, loading, error, onReload, onOpe
           </div>
         </section>
       ))}
+
+      <ArchiveBox onRestored={onReload} />
     </div>
+  );
+}
+
+/**
+ * 보관함. 이 화면 맨 아래 접기 영역이면 충분하고, 별도 페이지를 만들지 않는다 —
+ * 보관은 자주 하는 일이 아니고, 꺼내는 것도 마찬가지다.
+ *
+ * 보관은 숨김이지 삭제가 아니다. 다시 꺼내면 학습 구조도 자료 연결도 그대로 돌아온다 —
+ * 서버가 status만 되돌리기 때문이고, 여기서 복구할 것은 아무것도 없다.
+ *
+ * 목록은 비어 있어도 한 번은 불러온다. 개수를 먼저 알아야 "보관된 프로젝트 2"를 적을 수 있고,
+ * 보관한 것이 없으면 이 영역 자체를 그리지 않는다.
+ */
+function ArchiveBox({ onRestored }) {
+  const [archived, setArchived] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setArchived(await courseAPI.list('ARCHIVED'));
+    } catch (err) {
+      setError(err.message || '보관함을 불러오지 못했습니다.');
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleRestore = async (courseId) => {
+    setBusyId(courseId);
+    setError(null);
+    try {
+      await courseAPI.restore(courseId);
+      await load();
+      await onRestored?.();
+    } catch (err) {
+      setError(err.message || '다시 꺼내지 못했습니다.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (archived.length === 0) {
+    return error ? <p className="view-error">{error}</p> : null;
+  }
+
+  return (
+    <section className="view-section archive-box">
+      <button type="button" className="collapse-head" onClick={() => setOpen((v) => !v)}>
+        {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        <span className="section-title">보관된 프로젝트</span>
+        <span className="archive-count">{archived.length}</span>
+      </button>
+      {error && <p className="view-error">{error}</p>}
+      {open && (
+        <ul className="material-list">
+          {archived.map((project) => (
+            <li key={project.courseId} className="material-item">
+              <span className="material-name">{project.title}</span>
+              <span className="chip">보관됨</span>
+              <span className="material-actions">
+                <button type="button" className="btn-ghost btn-sm" disabled={busyId === project.courseId}
+                  onClick={() => handleRestore(project.courseId)}>
+                  다시 꺼내기
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

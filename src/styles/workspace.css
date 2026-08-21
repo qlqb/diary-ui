@@ -955,6 +955,33 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
   background: var(--ws-surface);
 }
 
+/*
+  역할 선택 옆에 붙는 설명 한 줄. 폼 전체 폭을 차지해 select 바로 아래에 오게 한다 —
+  라벨("강의계획서")만 보면 파일의 종류로 읽히므로 이 문장이 항상 같이 보여야 한다.
+*/
+.material-form-hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ws-text-faint);
+}
+
+/* 자료 상세의 분석 이력 — 어느 프로젝트 맥락의 해석인지가 먼저 읽혀야 한다. */
+.analysis-history-item { align-items: baseline; }
+.analysis-history-course { font-weight: 650; }
+.analysis-history-summary {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ws-text-dim);
+  line-height: 1.5;
+}
+
+/* 보관함 — 프로젝트 목록 맨 아래 접기 영역. 별도 페이지를 만들지 않는다. */
+.archive-box { margin-top: 22px; }
+.archive-box .material-list { margin-top: 8px; }
+.archive-count { color: var(--ws-text-faint); font-size: 13.5px; }
+
 .material-confirm {
   margin-top: 12px;
   padding: 14px;

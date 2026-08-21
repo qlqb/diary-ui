@@ -11,8 +11,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText, Upload, Loader2, ArrowLeft, Link2, Trash2, X } from 'lucide-react';
 
 import { materialStoreAPI } from '../../api/api.js';
+import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import {
-  MaterialType, MATERIAL_TYPE_LABEL, ExtractionStatus, EXTRACTION_STATUS_LABEL,
+  MaterialType, MATERIAL_TYPE_HINT, ExtractionStatus, EXTRACTION_STATUS_LABEL, MaterialAnalysisStatus,
 } from '../../types/learning.js';
 
 /**
@@ -234,6 +235,24 @@ function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) 
   const linkedCourseIds = new Set(links.map((l) => l.courseId));
   const linkable = (projects ?? []).filter((p) => !linkedCourseIds.has(p.courseId));
 
+  /**
+   * 이 프로젝트에서의 역할만 바꾼다. 예전에는 연결 해제 후 재연결이 유일한 우회로였다.
+   * 보관된 프로젝트로의 연결은 애초에 이 목록에 나오지 않으므로 여기서 마주칠 일이 없다.
+   */
+  const handleRoleChange = async (courseId, materialType) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await materialStoreAPI.updateLinkType(materialId, courseId, materialType);
+      await load();
+      await onChanged();
+    } catch (err) {
+      setError(err.message || '자료 역할을 바꾸지 못했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleRemoveLink = async (courseId) => {
     setBusy(true);
     setError(null);
@@ -296,7 +315,12 @@ function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) 
             {links.map((l) => (
               <li key={l.courseId} className="material-item">
                 <span className="material-name">{l.courseTitle}</span>
-                <span className="chip">{MATERIAL_TYPE_LABEL[l.materialType]}</span>
+                <MaterialTypeSelect
+                  value={l.materialType ?? MaterialType.OTHER}
+                  disabled={busy}
+                  label={`${l.courseTitle}에서의 자료 역할`}
+                  onChange={(t) => handleRoleChange(l.courseId, t)}
+                />
                 <span className="material-actions">
                   <button type="button" className="btn-ghost btn-sm" disabled={busy}
                     onClick={() => handleRemoveLink(l.courseId)}>
@@ -307,7 +331,10 @@ function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) 
             ))}
           </ul>
         )}
+        {links.length > 0 && <p className="section-desc">{MATERIAL_TYPE_HINT}</p>}
       </section>
+
+      <AnalysisHistory analyses={detail?.analyses ?? []} />
 
       <div className="material-detail-actions">
         <button type="button" className="btn-ghost btn-sm" disabled={busy || linkable.length === 0}
@@ -353,6 +380,58 @@ function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) 
   );
 }
 
+const ANALYSIS_STATUS_LABEL = Object.freeze({
+  [MaterialAnalysisStatus.DRAFT]: '검토 대기',
+  [MaterialAnalysisStatus.APPLIED]: '적용됨',
+  [MaterialAnalysisStatus.DISMISSED]: '폐기함',
+  [MaterialAnalysisStatus.FAILED]: '분석 실패',
+});
+
+/**
+ * 이 자료가 지금까지 어디서 어떻게 해석됐는지 — 프로젝트를 가리지 않은 전체 이력이다.
+ *
+ * 프로젝트 화면의 이력과 정반대 책임을 진다. 거기는 지금 그 프로젝트 맥락만 보여주고,
+ * 여기는 전부 보여주되 각 줄이 어느 프로젝트의 해석인지 먼저 말한다. 프로젝트명이 없으면
+ * "분석 3건"만 남아 어느 맥락의 것인지 알 수 없고, 맥락을 좁혀서 없앤 혼란이 그대로 재발한다.
+ *
+ * 연결을 끊어도, 프로젝트를 보관해도 이 이력은 사라지지 않는다 — 분석 레코드는 지우지 않기
+ * 때문이다. 다만 그 상태에서 적용(apply)은 막힌다.
+ */
+function AnalysisHistory({ analyses }) {
+  if (analyses.length === 0) {
+    return (
+      <section className="view-section">
+        <h2 className="section-title">분석 이력</h2>
+        <p className="view-dim">아직 이 자료를 구조 분석한 적이 없어요.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="view-section">
+      <h2 className="section-title">분석 이력 {analyses.length}</h2>
+      <p className="section-desc">
+        같은 자료라도 프로젝트마다 따로 해석돼요. 어느 프로젝트에서 만든 결과인지 함께 표시합니다.
+      </p>
+      <ul className="material-list">
+        {analyses.map((a) => (
+          <li key={a.analysisId} className="material-item analysis-history-item">
+            <span className="analysis-history-course">{a.courseTitle ?? '알 수 없는 프로젝트'}</span>
+            <span className="chip">{ANALYSIS_STATUS_LABEL[a.status] ?? a.status}</span>
+            <span className="material-row-meta">{formatDate(a.createdAt)}</span>
+            {a.payload?.summary && (
+              <p className="analysis-history-summary">{a.payload.summary}</p>
+            )}
+            {a.failureReason && (
+              <p className="analysis-history-summary">{a.failureReason}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** 연결할 때 비로소 materialType을 고른다. */
 function LinkForm({ projects, onCancel, onSubmit }) {
   const [courseId, setCourseId] = useState(projects[0]?.courseId ?? '');
@@ -367,14 +446,10 @@ function LinkForm({ projects, onCancel, onSubmit }) {
         onChange={(e) => setCourseId(e.target.value)}>
         {projects.map((p) => <option key={p.courseId} value={p.courseId}>{p.title}</option>)}
       </select>
-      <select className="material-type" value={materialType} aria-label="이 프로젝트에서의 자료 종류"
-        onChange={(e) => setMaterialType(e.target.value)}>
-        {Object.values(MaterialType).map((t) => (
-          <option key={t} value={t}>{MATERIAL_TYPE_LABEL[t]}</option>
-        ))}
-      </select>
+      <MaterialTypeSelect value={materialType} onChange={setMaterialType} />
       <button type="submit" className="btn-ghost btn-sm" disabled={!courseId}>연결</button>
       <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>취소</button>
+      <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
     </form>
   );
 }

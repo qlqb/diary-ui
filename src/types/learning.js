@@ -4,7 +4,11 @@
  * 여기 나열된 enum 값은 실제 DB 체크 제약과 1:1이며, 화면은 임의로 다른 값을 쓰지 않는다.
  */
 
-/** 업로드한 자료의 종류. 실제 course_materials.material_type 체크 제약과 1:1 대응한다. */
+/**
+ * 프로젝트 안에서 이 자료가 맡는 역할.
+ * 실제 material_links.material_type CHECK 제약과 1:1 대응한다.
+ * 동일한 Material도 프로젝트마다 다른 값을 가질 수 있다.
+ */
 export const MaterialType = Object.freeze({
   SYLLABUS: 'SYLLABUS',
   TEXTBOOK_TOC: 'TEXTBOOK_TOC',
@@ -18,6 +22,15 @@ export const MATERIAL_TYPE_LABEL = Object.freeze({
   [MaterialType.PROFESSOR_SLIDE]: '교수 자료(PPT 등)',
   [MaterialType.OTHER]: '기타',
 });
+
+/**
+ * 역할을 고르는 UI 옆에 항상 함께 붙이는 한 줄.
+ *
+ * 라벨만 보면 "이 파일이 무엇인가"로 읽히는데 실제 의미는 "이 프로젝트가 이걸 무엇으로
+ * 쓰는가"다. 같은 PDF가 프로젝트마다 다른 값을 갖는 게 사용자에게도 말이 되려면 이 문장이
+ * 선택 UI 근처에 있어야 한다.
+ */
+export const MATERIAL_TYPE_HINT = '이 프로젝트에서 이 자료를 어떻게 사용할지 정합니다.';
 
 /** 텍스트 추출 결과. 스캔 이미지 등 텍스트 레이어가 없으면 FAILED_NO_TEXT로 명확히 구분한다. */
 export const ExtractionStatus = Object.freeze({
@@ -117,22 +130,55 @@ export const RecommendationStatus = Object.freeze({
  * @typedef {Object} CourseDto
  * @property {number} courseId
  * @property {string} title
+ * @property {string|null} groupLabel
  * @property {string|null} textbookTitle
  * @property {string|null} textbookAuthor
  * @property {string|null} textbookPublisher
  * @property {string|null} textbookIsbn
- * @property {'ACTIVE'|'ARCHIVED'} status
+ * @property {'ACTIVE'|'ARCHIVED'} status ARCHIVED는 보관(숨김)이지 삭제가 아니다 — topic/연결/분석은 그대로 남는다
  * @property {number} topicCount
+ * @property {number} learnedTopicCount
+ * @property {string|null} currentTopicTitle
  */
 
 /**
- * @typedef {Object} MaterialDto
+ * @typedef {Object} MaterialDto 프로젝트 화면이 읽는 "이 프로젝트가 참고하는 자료" 한 줄
+ *
+ * Material 본체와 그 프로젝트로의 MaterialLink를 한 줄로 합쳐 놓은 화면용 형태다.
+ * courseId/materialType은 Material의 속성이 아니라 링크에서 온 값이므로, 같은 materialId를
+ * 다른 프로젝트에서 읽으면 이 두 값만 다르게 나온다. 전역 자료함은 이 형태를 쓰지 않는다 —
+ * 거기서는 MaterialStoreItemDto처럼 연결이 배열로 붙는다.
+ *
  * @property {number} materialId
- * @property {number} courseId
- * @property {string} materialType
+ * @property {number} courseId 이 응답을 만든 프로젝트 (링크 쪽 값)
+ * @property {string} materialType 그 프로젝트에서 맡는 역할 (링크 쪽 값)
  * @property {string} originalFilename
  * @property {string} extractionStatus
  * @property {string|null} extractionError
+ */
+
+/**
+ * @typedef {Object} MaterialLinkDto 자료 ↔ 프로젝트 연결 한 줄
+ * @property {number} courseId
+ * @property {string} courseTitle
+ * @property {string} materialType 이 프로젝트에서 맡는 역할. 같은 자료의 다른 연결과 값이 달라도 정상이다
+ * @property {string} linkedAt
+ */
+
+/**
+ * @typedef {Object} MaterialStoreItemDto 전역 자료함이 읽는 자료 한 건
+ *
+ * 자료는 프로젝트가 아니라 사용자가 소유한다 — 그래서 여기에는 courseId도 materialType도
+ * 없고, 대신 연결이 links 배열로 붙는다. 어느 프로젝트에도 연결되지 않아 links가 비어 있는
+ * 것은 정상 상태이지 결함이 아니다. 보관된 프로젝트로의 연결은 행이 남아 있어도 links에
+ * 나타나지 않는다(복원하면 다시 보인다).
+ *
+ * @property {number} materialId
+ * @property {string} originalFilename
+ * @property {string|null} contentType
+ * @property {string} extractionStatus
+ * @property {MaterialLinkDto[]} links
+ * @property {string} createdAt
  */
 
 /**
@@ -170,13 +216,21 @@ export const RecommendationStatus = Object.freeze({
 
 /**
  * @typedef {Object} MaterialAnalysisDto
+ *
+ * 분석은 Material 하나가 아니라 (Material, Project) 쌍에 대해 만들어진다 — 같은 자료를 A와
+ * B에서 각각 해석할 수 있고 그 결과는 서로 섞이지 않는다. 그래서 프로젝트 화면의 이력은
+ * 그 프로젝트 맥락만 오고, 전역 자료 상세는 전체가 오되 각 행에 courseTitle이 붙는다.
+ *
  * @property {number} analysisId
- * @property {number} courseId
+ * @property {number} courseId 이 해석이 만들어진 프로젝트 맥락
+ * @property {string|null} courseTitle 전역 자료 상세에서 채워진다. DB에 중복 저장하지 않고 응답 조립 시 붙는 값
  * @property {number} materialId
  * @property {string} status DRAFT|APPLIED|DISMISSED|FAILED
  * @property {MaterialAnalysisPayload|null} payload
  * @property {string|null} failureReason
  * @property {number|null} createdTopicCount
+ * @property {string} createdAt
+ * @property {string|null} appliedAt
  */
 
 /**

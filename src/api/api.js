@@ -838,9 +838,12 @@ export const contextSuggestionAPI = {
  * 생성에는 제목만 있으면 된다. 자료가 없는 프로젝트도 완전히 사용 가능한 공간이다.
  */
 export const courseAPI = {
-    /** 내 프로젝트 목록. 카드 요약(자료 수/학습 구조/진행 중 주제)까지 한 번에 온다 */
-    list: () => {
-        return request('/courses');
+    /**
+     * 내 프로젝트 목록. 카드 요약(자료 수/학습 구조/진행 중 주제)까지 한 번에 온다.
+     * status를 주지 않으면 ACTIVE만 온다 — 보관함은 같은 경로에 'ARCHIVED'로 읽는다.
+     */
+    list: (status = null) => {
+        return request(status ? `/courses?status=${status}` : '/courses');
     },
 
     /** 프로젝트 상세 */
@@ -865,12 +868,20 @@ export const courseAPI = {
     },
 
     /**
-     * 삭제. 목록과 화면에서 사라지지만 서버는 status를 ARCHIVED로 내리는 soft delete다 —
-     * 자료·대화·실행 기록이 이 프로젝트를 참조하고 있어 행을 지우면 그 관계가 끊어진다.
-     * 사용자에게는 "삭제"로만 보이고 별도의 보관함 화면은 두지 않는다.
+     * 보관. 목록에서 사라지지만 지우는 것이 아니라 status를 ARCHIVED로 내린다 —
+     * 자료 연결·대화·실행 기록이 이 프로젝트를 참조하고 있어 행을 지우면 그 관계가 끊어진다.
+     * 사용자에게도 "보관"으로 보이고, 보관함에서 restore로 다시 꺼낼 수 있다.
      */
-    delete: (courseId) => {
+    archive: (courseId) => {
         return request(`/courses/${courseId}`, { method: 'DELETE' });
+    },
+
+    /**
+     * 보관 해제. 별도의 복구 절차가 없다 — 자료 연결(material_links)은 애초에 지우지 않고
+     * 조회에서만 숨겨져 있었으므로 ACTIVE로 되돌리면 저절로 다시 보인다.
+     */
+    restore: (courseId) => {
+        return request(`/courses/${courseId}/restore`, { method: 'POST' });
     },
 };
 
@@ -890,7 +901,9 @@ export const courseNoteAPI = {
  */
 export const materialAPI = {
     /**
-     * 자료 업로드. materialType: SYLLABUS|TEXTBOOK_TOC|PROFESSOR_SLIDE|OTHER
+     * 자료 업로드 + 이 프로젝트에 연결까지 한 번에. materialType은 자료의 종류가 아니라
+     * 이 프로젝트에서 맡는 역할이고, 만들어지는 material_links 행에 붙는다.
+     * SYLLABUS|TEXTBOOK_TOC|PROFESSOR_SLIDE|OTHER
      */
     upload: (courseId, materialType, file) => {
         const formData = new FormData();
@@ -946,6 +959,19 @@ export const materialStoreAPI = {
         });
     },
 
+    /**
+     * 그 프로젝트에서 이 자료가 맡는 역할만 바꾼다. payload: { materialType }
+     *
+     * 연결 해제 후 재연결이 유일한 우회로가 되지 않게 하는 경로다. 보관된 프로젝트의
+     * 링크는 신규 연결과 같은 이유로 막힌다(409).
+     */
+    updateLinkType: (materialId, courseId, materialType) => {
+        return request(`/materials/${materialId}/links/${courseId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ materialType }),
+        });
+    },
+
     /** 연결만 끊는다. 자료도 다른 프로젝트 연결도 그대로 남는다 */
     removeLink: (materialId, courseId) => {
         return request(`/materials/${materialId}/links/${courseId}`, { method: 'DELETE' });
@@ -962,7 +988,11 @@ export const materialAnalysisAPI = {
         return request(`/courses/${courseId}/materials/${materialId}/analyses`, { method: 'POST' });
     },
 
-    /** 특정 자료의 분석 이력 */
+    /**
+     * 이 프로젝트 맥락의 분석 이력만. 같은 자료가 다른 프로젝트에도 걸려 있어도 그쪽 해석은
+     * 오지 않는다 — 전체 이력은 전역 자료 상세(materialStoreAPI.get)가 맡는다.
+     * 연결되지 않은 자료면 빈 배열이 아니라 404 MATERIAL_NOT_LINKED_TO_COURSE다.
+     */
     listByMaterial: (courseId, materialId) => {
         return request(`/courses/${courseId}/materials/${materialId}/analyses`);
     },

@@ -25,7 +25,10 @@ import { adjustmentFor } from '../../ai/useProposalDraft.js';
 import {
   courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI, materialStoreAPI, topicAPI,
 } from '../../api/api.js';
-import { MaterialType, MATERIAL_TYPE_LABEL, EXTRACTION_STATUS_LABEL, ExtractionStatus } from '../../types/learning.js';
+import {
+  MaterialType, MATERIAL_TYPE_HINT, EXTRACTION_STATUS_LABEL, ExtractionStatus,
+} from '../../types/learning.js';
+import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import { todayString } from '../../lib/datetime.js';
 
 function flatten(topics) {
@@ -159,9 +162,14 @@ export default function ProjectWorkspace({
             aria-label="프로젝트 보관"
             title="프로젝트 보관"
             onClick={async () => {
-              if (!window.confirm('보관할까요? 나중에 다시 꺼낼 수 있어요')) return;
+              // 보관함(C-3)이 실제로 있으므로 "다시 꺼낼 수 있다"는 말이 지켜진다.
+              // 복원 UI가 없던 시절의 "나중에 다시 꺼낼 수 있어요"는 거짓말이었다.
+              if (!window.confirm(
+                '보관할까요? 현재 프로젝트 목록에서 숨겨져요.\n'
+                + '보관함에서 다시 꺼낼 수 있고, 기존 기록은 그대로 유지됩니다.',
+              )) return;
               try {
-                await courseAPI.delete(courseId);
+                await courseAPI.archive(courseId);
                 await onProjectsChanged?.();
                 onBack();
               } catch (err) {
@@ -334,29 +342,27 @@ function RenameForm({ project, onCancel, onSaved }) {
  * 그다음에 원할 때 누르는 선택지이고, 분석 결과를 전부 검수해야 질문할 수 있는 구조가 아니다.
  */
 function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [analyses, setAnalyses] = useState({});
   const [analyzingId, setAnalyzingId] = useState(null);
   const [picking, setPicking] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [busyId, setBusyId] = useState(null);
 
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || uploading) return;
-    setUploading(true);
+  /**
+   * 이 프로젝트에서의 역할을 바꾼다. 연결 해제 후 재연결이 아니라 링크만 고치는 것이라
+   * linked_at도 분석 이력도 그대로 남는다.
+   */
+  const handleRoleChange = async (materialId, materialType) => {
+    setBusyId(materialId);
     setError(null);
     try {
-      // 새로 올리는 자료의 성격은 이 프로젝트 기준이다. 자료함에서 고르는 경로와 달리
-      // 여기서는 업로드와 연결이 한 번에 일어나므로 기본값으로 시작하고, 성격은
-      // 자료 상세에서 바꾼다.
-      await materialAPI.upload(courseId, MaterialType.OTHER, file);
+      await materialStoreAPI.updateLinkType(materialId, courseId, materialType);
       await onChanged();
     } catch (err) {
-      setError(err.message || '업로드하지 못했습니다.');
+      setError(err.message || '자료 역할을 바꾸지 못했습니다.');
     } finally {
-      setUploading(false);
-      e.target.value = '';
+      setBusyId(null);
     }
   };
 
@@ -412,7 +418,13 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
             <li key={m.materialId} className="material-item">
               <FileText size={14} />
               <span className="material-name">{m.originalFilename}</span>
-              <span className="chip">{MATERIAL_TYPE_LABEL[m.materialType]}</span>
+              {/* 역할은 자료가 아니라 이 연결의 속성이라 여기서 바로 바꿀 수 있어야 한다. */}
+              <MaterialTypeSelect
+                value={m.materialType ?? MaterialType.OTHER}
+                disabled={busyId === m.materialId}
+                label={`${m.originalFilename}의 자료 역할`}
+                onChange={(t) => handleRoleChange(m.materialId, t)}
+              />
               {m.extractionStatus === ExtractionStatus.SUCCESS ? (
                 <span className="chip chip-ok">AI가 사용할 수 있어요</span>
               ) : (
@@ -457,19 +469,21 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
       )}
 
       <div className="material-detail-actions">
-        {/*
-          파일 input을 hidden으로 감추면 접근성 트리에서 완전히 사라져 키보드·스크린리더로
-          도달할 수 없다. 시각적으로만 가리고 포커스는 받을 수 있게 둔다.
-        */}
-        <label className={`btn-ghost btn-sm${uploading ? ' is-disabled' : ''}`}>
-          {uploading ? <><Loader2 size={13} className="spin" /> 올리는 중</> : <><Upload size={13} /> 새 자료 업로드</>}
-          <input type="file" accept=".pdf,.pptx" className="visually-hidden" disabled={uploading}
-            aria-label="새 자료 업로드" onChange={handleUpload} />
-        </label>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => setUploadOpen((v) => !v)}>
+          <Upload size={13} /> 새 자료 업로드
+        </button>
         <button type="button" className="btn-ghost btn-sm" onClick={() => setPicking(true)}>
           <Link2 size={13} /> 내 자료에서 연결
         </button>
       </div>
+
+      {uploadOpen && (
+        <UploadForm
+          courseId={courseId}
+          onCancel={() => setUploadOpen(false)}
+          onUploaded={async () => { setUploadOpen(false); await onChanged(); }}
+        />
+      )}
 
       {picking && (
         <MaterialPicker
@@ -480,6 +494,49 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
         />
       )}
     </section>
+  );
+}
+
+/**
+ * 새 자료를 올리면서 이 프로젝트에 바로 연결한다. 역할을 여기서 고를 수 있게 한 이유는
+ * 예전 경로가 사용자에게 묻지도 않고 OTHER로 확정한 뒤 "성격은 자료 상세에서 바꾼다"고만
+ * 적어뒀는데, 그 기능이 실제로는 없었기 때문이다.
+ *
+ * 다만 필수 입력으로 만들지는 않는다 — 파일 하나 올리는 데 선택을 강제하면 마찰이 크다.
+ * 기본값 OTHER로 두고 그대로 올려도 되고, 나중에 목록에서 바꿔도 된다.
+ */
+function UploadForm({ courseId, onCancel, onUploaded }) {
+  const [file, setFile] = useState(null);
+  const [materialType, setMaterialType] = useState(MaterialType.OTHER);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file || uploading) return;
+    setUploading(true);
+    setError(null);
+    try {
+      await materialAPI.upload(courseId, materialType, file);
+      await onUploaded();
+    } catch (err) {
+      setError(err.message || '업로드하지 못했습니다.');
+      setUploading(false);
+    }
+  };
+
+  return (
+    <form className="material-link-form" onSubmit={handleSubmit}>
+      <input type="file" accept=".pdf,.pptx" aria-label="새 자료 파일" disabled={uploading}
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+      <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={uploading} />
+      <button type="submit" className="btn-ghost btn-sm" disabled={!file || uploading}>
+        {uploading ? <><Loader2 size={13} className="spin" /> 올리는 중</> : '업로드'}
+      </button>
+      <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={uploading}>취소</button>
+      <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
+      {error && <p className="view-error">{error}</p>}
+    </form>
   );
 }
 
@@ -544,14 +601,10 @@ function MaterialPicker({ courseId, linkedIds, onCancel, onLinked }) {
           <option key={m.materialId} value={m.materialId}>{m.originalFilename}</option>
         ))}
       </select>
-      <select className="material-type" value={materialType} aria-label="이 프로젝트에서의 자료 종류"
-        onChange={(e) => setMaterialType(e.target.value)}>
-        {Object.values(MaterialType).map((t) => (
-          <option key={t} value={t}>{MATERIAL_TYPE_LABEL[t]}</option>
-        ))}
-      </select>
+      <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={busy} />
       <button type="submit" className="btn-ghost btn-sm" disabled={busy || !materialId}>연결</button>
       <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}>취소</button>
+      <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
     </form>
   );
 }
