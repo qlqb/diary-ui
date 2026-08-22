@@ -378,157 +378,6 @@ export const diaryAPI = {
 };
 
 /**
- * Todo API
- */
-export const todoAPI = {
-    /**
-     * 오늘 날짜 문자열 반환 (UTC 밀림 방지, 로컬 기준)
-     */
-    getTodayString,
-
-    /**
-     * 날짜별 Todo 목록 조회
-     * status 파라미터는 선택 (TODO / DONE / null=전체)
-     */
-    getTodosByDate: (date, status = null) => {
-        const params = new URLSearchParams({ date });
-        if (status) params.append('status', status);
-        return request(`/todos?${params.toString()}`);
-    },
-
-    /**
-     * Todo 생성
-     */
-    createTodo: (todoData) => {
-        return request('/todos', {
-            method: 'POST',
-            body: JSON.stringify(todoData),
-        });
-    },
-
-    /**
-     * Todo 완료 처리 (TODO → DONE)
-     */
-    markDone: (todoId) => {
-        return request(`/todos/${todoId}/done`, {
-            method: 'PATCH',
-        });
-    },
-
-    /**
-     * Todo 미완료 처리 (DONE → TODO)
-     */
-    markTodo: (todoId) => {
-        return request(`/todos/${todoId}/todo`, {
-            method: 'PATCH',
-        });
-    },
-
-    /**
-     * Todo 삭제 (소프트 삭제)
-     */
-    deleteTodo: (todoId) => {
-        return request(`/todos/${todoId}`, {
-            method: 'DELETE',
-        });
-    },
-};
-
-/**
- * ScheduleBlock API
- */
-export const scheduleBlockAPI = {
-    /**
-     * 오늘 날짜 문자열 반환 (UTC 밀림 방지, 로컬 기준)
-     */
-    getTodayString,
-
-    /**
-     * 날짜별 오늘 해볼 것 조회
-     */
-    getByDate: (date) => {
-        const params = new URLSearchParams({ date });
-        return request(`/schedule-blocks?${params.toString()}`);
-    },
-
-    /**
-     * 오늘 해볼 것 생성
-     */
-    create: (scheduleBlockData) => {
-        return request('/schedule-blocks', {
-            method: 'POST',
-            body: JSON.stringify(scheduleBlockData),
-        });
-    },
-
-    /**
-     * 완료 처리
-     */
-    complete: (scheduleBlockId) => {
-        return request(`/schedule-blocks/${scheduleBlockId}/complete`, {
-            method: 'POST',
-        });
-    },
-
-    /**
-     * 완료 취소
-     */
-    uncomplete: (scheduleBlockId) => {
-        return request(`/schedule-blocks/${scheduleBlockId}/uncomplete`, {
-            method: 'POST',
-        });
-    },
-
-    /**
-     * 내일 또는 다른 날짜로 이동
-     */
-    move: (scheduleBlockId, toDate, memo = null) => {
-        return request(`/schedule-blocks/${scheduleBlockId}/move`, {
-            method: 'POST',
-            body: JSON.stringify({ toDate, memo }),
-        });
-    },
-
-    /**
-     * 작게 줄이기
-     */
-    reduce: (scheduleBlockId, payload) => {
-        return request(`/schedule-blocks/${scheduleBlockId}/reduce`, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        });
-    },
-
-    /**
-     * 보류
-     */
-    hold: (scheduleBlockId, memo = null) => {
-        return request(`/schedule-blocks/${scheduleBlockId}/hold`, {
-            method: 'POST',
-            body: JSON.stringify({ memo }),
-        });
-    },
-
-    /**
-     * 삭제
-     */
-    delete: (scheduleBlockId) => {
-        return request(`/schedule-blocks/${scheduleBlockId}`, {
-            method: 'DELETE',
-        });
-    },
-
-    /**
-     * 지난 계획 정리(pending) 조회.
-     * date는 pending 판단 기준 운영일이며, 이전 block_date의 PLANNED 블록을 반환한다.
-     */
-    getPending: (date) => {
-        const params = new URLSearchParams({ date });
-        return request(`/schedule-blocks/pending?${params.toString()}`);
-    },
-};
-
-/**
  * 백엔드 ExecutionItemResponse(camelCase)를 화면이 쓰는 ExecutionItemDto 모양으로 맞춘다.
  * scheduledStartAt/scheduledEndAt(ISO datetime)을 startTime/endTime('HH:mm')으로 슬라이스하고,
  * expectedMinutes/orderIndex/sourceExecutionItemId 같은 실제 컬럼명을
@@ -548,7 +397,6 @@ function toFrontendExecutionItem(raw) {
     return {
         executionItemId: pick('executionItemId', 'execution_item_id'),
         userId: pick('userId', 'user_id'),
-        planItemId: pick('planItemId', 'plan_item_id') ?? null,
         // 어느 프로젝트의 실행인지. 화면에서 프로젝트 이름표를 붙이는 데 쓴다.
         courseId: pick('courseId', 'course_id') ?? null,
         topicId: pick('topicId', 'topic_id') ?? null,
@@ -579,7 +427,6 @@ function toFrontendExecutionItem(raw) {
 
 /**
  * ExecutionItem API. Today/Execution 화면의 공식 실행 원본이다.
- * scheduleBlockAPI를 대체한다 — schedule_blocks에는 더 이상 쓰지 않는다.
  */
 export const executionItemAPI = {
     getTodayString,

@@ -134,7 +134,6 @@ export const EVENT_TYPE_LABEL = Object.freeze({
  * @typedef {Object} ExecutionItemDto
  * @property {number}  executionItemId
  * @property {number}  userId
- * @property {number|null} planItemId            어떤 계획 항목을 실행하는지
  * @property {number|null} routineId
  * @property {number|null} parentExecutionItemId 분할로 생긴 조각의 부모
  * @property {string}  title
