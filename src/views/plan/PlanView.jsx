@@ -114,9 +114,14 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
             <li key={item.executionItemId} className="plan-item">
               <span className="plan-item-title">{item.title}</span>
               <span className="plan-item-meta">
+                {/*
+                  executionItemAPI가 내려주는 항목은 toFrontendExecutionItem을 거치며
+                  expectedMinutes → estimatedMinutes, scheduledStartAt → startTime('HH:mm')로
+                  이름이 바뀐다. 원래 이름을 쓰면 조용히 undefined가 되어 값이 사라진다.
+                */}
                 {formatDateKo(item.scheduledDate)}
-                {item.scheduledStartAt && <> · {item.scheduledStartAt.slice(11, 16)}</>}
-                {item.expectedMinutes != null && <> · {item.expectedMinutes}분</>}
+                {item.startTime && <> · {item.startTime}</>}
+                {item.estimatedMinutes != null && <> · {item.estimatedMinutes}분</>}
                 {item.courseId != null && projectTitles[item.courseId] && <> · {projectTitles[item.courseId]}</>}
               </span>
             </li>
@@ -132,7 +137,7 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
             <li key={item.executionItemId} className="plan-item">
               <span className="plan-item-title">{item.title}</span>
               <span className="plan-item-meta">
-                {item.expectedMinutes != null && <>{item.expectedMinutes}분</>}
+                {item.estimatedMinutes != null && <>{item.estimatedMinutes}분</>}
                 {item.courseId != null && projectTitles[item.courseId] && <> · {projectTitles[item.courseId]}</>}
               </span>
             </li>

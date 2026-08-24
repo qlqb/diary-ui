@@ -256,7 +256,7 @@ export default function ProjectWorkspace({
             <span className="project-status-value">
               {nextPlanItem.title}
               {nextPlanItem.scheduledDate && <> · {formatDateKo(nextPlanItem.scheduledDate)}</>}
-              {nextPlanItem.expectedMinutes != null && <> · {nextPlanItem.expectedMinutes}분</>}
+              {nextPlanItem.estimatedMinutes != null && <> · {nextPlanItem.estimatedMinutes}분</>}
             </span>
           </div>
         )}

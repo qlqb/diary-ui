@@ -259,11 +259,22 @@ export default function PlanCreateView({ projectTitles = {}, onConfirmed, onCanc
 function IntensityPicker({ intensity, draftIntensity, draftMinutes, open, onToggle, onSelect, firstPlan }) {
   const shown = intensity ?? draftIntensity;
 
+  /*
+   * 첫 계획이면 "직전 계획과 같은 강도"라고 말하지 않는다 — 직전 계획이 없기 때문이다.
+   * 빈 상태에서 존재하지 않는 것을 근거로 대면 사용자가 "내가 뭘 놓쳤나" 하고 찾게 된다.
+   * 서버가 이력이 없을 때 NORMAL로 떨어뜨리므로 그 값을 그대로 말한다.
+   */
+  const summary = shown
+    ? PLAN_INTENSITY_LABEL[shown]
+    : firstPlan
+      ? PLAN_INTENSITY_LABEL[PlanIntensity.NORMAL]
+      : '직전 계획과 같은 강도';
+
   return (
     <div className="plan-intensity">
       <div className="plan-intensity-summary">
         <span>
-          {shown ? PLAN_INTENSITY_LABEL[shown] : '직전 계획과 같은 강도'}
+          {summary}
           {draftMinutes != null && <> · 약 {formatMinutes(draftMinutes)}</>}
         </span>
         <button type="button" className="btn-ghost btn-sm" onClick={onToggle}>
@@ -278,7 +289,8 @@ function IntensityPicker({ intensity, draftIntensity, draftMinutes, open, onTogg
               <input
                 type="radio"
                 name="plan-intensity"
-                checked={shown === value}
+                checked={shown ? shown === value
+                  : firstPlan && value === PlanIntensity.NORMAL}
                 onChange={() => onSelect(value)}
               />
               <span className="plan-intensity-name">{PLAN_INTENSITY_LABEL[value]}</span>
@@ -286,7 +298,7 @@ function IntensityPicker({ intensity, draftIntensity, draftMinutes, open, onTogg
             </label>
           ))}
           <p className="hint">이번 기간에 어느 정도 시간을 쓸지 정합니다. 나중에 조정할 수 있어요.</p>
-          {firstPlan && <p className="hint">처음이라면 `보통`으로 그냥 넘어가도 괜찮아요.</p>}
+          {firstPlan && <p className="hint">처음이라면 보통으로 그냥 넘어가도 괜찮아요.</p>}
         </div>
       )}
     </div>
