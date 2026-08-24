@@ -351,7 +351,16 @@ function PlanDraftGroup({ group, excluded, collapsed, onToggleCollapse, onToggle
                 />
                 <span className="plan-item-title">{item.title}</span>
                 <span className="plan-item-meta">
-                  {item.expectedMinutes}분 · {item.targetDate ? formatDateKo(item.targetDate) : '날짜 미정'}
+                  {/*
+                    targetDate가 아니라 placementType으로 판단한다. 제안의 targetDate는 서버가
+                    요청 기간의 시작일로 강제하는 값이라(AiProposalService.validateAndNormalize)
+                    미배치 항목에도 값이 들어 있다 — 그걸 그대로 보여주면 "날짜 미정"인 항목이
+                    전부 계획 첫날로 잡힌 것처럼 보인다.
+                  */}
+                  {item.expectedMinutes}분 ·{' '}
+                  {item.placementType === 'UNSCHEDULED' || !item.targetDate
+                    ? '날짜 미정'
+                    : formatDateKo(item.targetDate)}
                 </span>
               </label>
               {item.description && <p className="plan-item-reason">{item.description}</p>}
@@ -394,7 +403,8 @@ function initialCollapsed(draft, projectTitles, todayIso) {
   const collapsed = new Set();
   for (const group of groupItems(draft.proposal?.items ?? [], projectTitles)) {
     const hasSoon = group.items.some(
-      (item) => !item.targetDate || (item.targetDate >= todayIso && item.targetDate <= soonEnd),
+      (item) => item.placementType === 'UNSCHEDULED' || !item.targetDate
+        || (item.targetDate >= todayIso && item.targetDate <= soonEnd),
     );
     if (!hasSoon) collapsed.add(group.key);
   }
