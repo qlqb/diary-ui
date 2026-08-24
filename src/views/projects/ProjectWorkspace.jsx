@@ -23,13 +23,15 @@ import TopicDetail from '../learning/TopicDetail.jsx';
 import MaterialReview from '../learning/MaterialReview.jsx';
 import { adjustmentFor } from '../../ai/useProposalDraft.js';
 import {
-  courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI, materialStoreAPI, topicAPI,
+  courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI, materialStoreAPI,
+  planAPI, topicAPI,
 } from '../../api/api.js';
 import {
   MaterialType, MATERIAL_TYPE_HINT, EXTRACTION_STATUS_LABEL, ExtractionStatus,
 } from '../../types/learning.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import { todayString } from '../../lib/datetime.js';
+import { formatDateKo, toIsoDate } from '../../lib/planTime.js';
 
 function flatten(topics) {
   const out = [];
@@ -51,8 +53,12 @@ function findAncestors(topics, targetId, path = []) {
 
 export default function ProjectWorkspace({
   courseId, onBack, onAsk, draft, onPatchCard, onToggleExclude, onProjectsChanged, refreshToken,
+  onCreatePlan, onOpenPlan,
 }) {
   const [project, setProject] = useState(null);
+  const [currentPlan, setCurrentPlan] = useState(null);
+  const [planItems, setPlanItems] = useState([]);
+  const [planLoading, setPlanLoading] = useState(true);
   const [materials, setMaterials] = useState([]);
   const [topics, setTopics] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -90,11 +96,36 @@ export default function ProjectWorkspace({
 
   useEffect(() => { load(); }, [load, refreshToken]);
 
+  /*
+   * 대표 계획. 서버가 기간 짧은 순으로 정렬해 주므로 첫 번째를 그대로 쓴다 —
+   * 화면이 재정렬하지 않는다. courseId를 반드시 넘긴다: 안 넘기면 이 프로젝트와 무관한,
+   * 기간이 더 짧은 다른 계획이 대표로 뜬다.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    setPlanLoading(true);
+    const today = toIsoDate(new Date());
+    planAPI.findCoveringDate(today, courseId)
+      .then(async (plans) => {
+        if (cancelled) return;
+        const first = plans[0] ?? null;
+        setCurrentPlan(first);
+        if (!first) { setPlanItems([]); return; }
+        // 계획 화면과 같은 규칙 — 스냅샷이 아니라 현재 execution_items를 본다.
+        const items = await executionItemAPI.getByDateRange(first.startDate, first.endDate, true);
+        if (!cancelled) setPlanItems(items.filter((i) => i.courseId === courseId));
+      })
+      .catch(() => { if (!cancelled) { setCurrentPlan(null); setPlanItems([]); } })
+      .finally(() => { if (!cancelled) setPlanLoading(false); });
+    return () => { cancelled = true; };
+  }, [courseId, refreshToken]);
+
+  /* 아직 안 끝난 것 중 가장 이른 것. 날짜 없는 항목은 뒤로 보낸다. */
+  const nextPlanItem = [...planItems]
+    .filter((i) => i.status === 'PLANNED')
+    .sort((a, b) => String(a.scheduledDate ?? '9999').localeCompare(String(b.scheduledDate ?? '9999')))[0] ?? null;
+
   const flatTopics = flatten(topics);
-  const currentTopic = flatTopics.find((t) => t.progressStatus === 'IN_PROGRESS')
-    ?? flatTopics.find((t) => t.progressStatus === 'NOT_STARTED')
-    ?? null;
-  const learnedCount = flatTopics.filter((t) => t.progressStatus === 'LEARNED').length;
   const selectedTopic = flatTopics.find((t) => t.topicId === selectedTopicId) ?? null;
   const assessments = notes.filter((n) => n.category === 'ASSESSMENT');
 
@@ -193,19 +224,42 @@ export default function ProjectWorkspace({
       {error && <p className="view-error">{error}</p>}
 
       <section className="project-status">
+        {/*
+          목차 순서를 학습 순서로 쓰던 자리를 계획이 대신한다.
+          find(IN_PROGRESS) ?? find(NOT_STARTED)는 "다음에 뭘 하지"에 목차 순서로만 답할 수
+          있었다 — 기간도 우선순위도 모르는 답이다. 이제는 이 프로젝트 항목을 담은 계획 중
+          기간이 가장 짧은 것을 대표로 삼고, 그 계획의 다음 항목을 보여준다.
+        */}
         <div className="project-status-line">
-          <span className="project-status-label">현재 상태</span>
+          <span className="project-status-label">이번 계획</span>
           <span className="project-status-value">
-            {currentTopic
-              ? `${currentTopic.progressStatus === 'IN_PROGRESS' ? '진행 중' : '다음'} · ${currentTopic.title}`
-              : materials.length > 0
-                ? '자료는 있고, 아직 학습 구조는 정하지 않았어요'
-                : '이제 막 시작했어요'}
+            {planLoading
+              ? '불러오는 중…'
+              : currentPlan
+                ? `${currentPlan.title} (${formatDateKo(currentPlan.startDate)}~${formatDateKo(currentPlan.endDate)})`
+                : '아직 계획을 세우지 않았어요'}
           </span>
-          {flatTopics.length > 0 && (
-            <span className="chip">{learnedCount}/{flatTopics.length} 완료</span>
+          {!planLoading && !currentPlan && onCreatePlan && (
+            <button type="button" className="btn-primary btn-sm" onClick={() => onCreatePlan(courseId)}>
+              계획 만들기
+            </button>
+          )}
+          {currentPlan && onOpenPlan && (
+            <button type="button" className="btn-ghost btn-sm" onClick={() => onOpenPlan(currentPlan.planVersionId)}>
+              계획 열기
+            </button>
           )}
         </div>
+        {nextPlanItem && (
+          <div className="project-status-line">
+            <span className="project-status-label">다음</span>
+            <span className="project-status-value">
+              {nextPlanItem.title}
+              {nextPlanItem.scheduledDate && <> · {formatDateKo(nextPlanItem.scheduledDate)}</>}
+              {nextPlanItem.expectedMinutes != null && <> · {nextPlanItem.expectedMinutes}분</>}
+            </span>
+          </div>
+        )}
         {assessments.length > 0 && (
           <div className="project-status-line">
             <span className="project-status-label">중요 일정</span>
@@ -215,9 +269,9 @@ export default function ProjectWorkspace({
           </div>
         )}
         <div className="project-ask-row">
-          {currentTopic && (
+          {nextPlanItem && (
             <button type="button" className="btn-primary btn-sm"
-              onClick={() => onAsk(`${currentTopic.title} 이어서 공부하려고 해. 어디부터 보면 좋을까?`)}>
+              onClick={() => onAsk(`${nextPlanItem.title} 이어서 하려고 해. 어디부터 보면 좋을까?`)}>
               <Sparkles size={13} /> 이어하기
             </button>
           )}

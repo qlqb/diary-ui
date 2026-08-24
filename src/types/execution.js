@@ -199,3 +199,52 @@ export const EVENT_TYPE_LABEL = Object.freeze({
  */
 
 export {};
+
+/** 계획 강도. 서버 PlanIntensity와 값이 같아야 한다. */
+export const PlanIntensity = Object.freeze({
+  LIGHT: 'LIGHT',
+  NORMAL: 'NORMAL',
+  FOCUSED: 'FOCUSED',
+});
+
+/**
+ * 강도 라벨과 보조 설명.
+ *
+ * "가볍게"가 게으름으로 읽히지 않게 한다 — 최소/느슨하게/저강도 같은 말을 쓰지 않는다.
+ * 주당 시간을 함께 보여줘야 고를 수 있다: 라벨만으로는 "집중"이 얼마나 집중인지 모른다.
+ */
+export const PLAN_INTENSITY_LABEL = Object.freeze({
+  LIGHT: '가볍게',
+  NORMAL: '보통',
+  FOCUSED: '집중',
+});
+
+export const PLAN_INTENSITY_HINT = Object.freeze({
+  LIGHT: '주 4시간쯤',
+  NORMAL: '주 10시간쯤',
+  FOCUSED: '주 18시간쯤',
+});
+
+/**
+ * 회고 분류 라벨. 서버 PlanReviewCategory와 키가 같아야 한다.
+ *
+ * 실패 프레이밍 금지 — 미완료/실패/못 함/부족/밀림을 쓰지 않는다. 안 한 것은
+ * "아직" 으로 말한다.
+ */
+export const PLAN_REVIEW_CATEGORY_LABEL = Object.freeze({
+  DONE: '했어요',
+  PARTIAL_DONE: '일부 진행했어요',
+  REMAINING: '아직 남아 있어요',
+  UNPLACED: '아직 시작하지 않았어요',
+  HOLD: '잠시 멈춰뒀어요',
+  EXCLUDED: '계획에서 뺐어요',
+  OUTSIDE_PLAN: '계획 밖에서 한 일',
+  LEFTOVER: '남은 분량',
+});
+
+/** 부가 플래그. 배치는 이동이 아니다 — "옮겼다"고 쓰면 어긋난 것처럼 읽힌다. */
+export const PLAN_REVIEW_MOVE_FLAG_LABEL = Object.freeze({
+  MOVED: '다른 날로 옮겨서',
+  SCHEDULED: '날짜를 정해서',
+  UNPLACED_AGAIN: '날짜를 다시 뗐어요',
+});

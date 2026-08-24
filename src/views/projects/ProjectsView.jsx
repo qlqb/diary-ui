@@ -210,11 +210,15 @@ function ArchiveBox({ onRestored }) {
   );
 }
 
+/**
+ * 프로젝트 카드.
+ *
+ * ★ 진행률 %를 보여주지 않는다. 자료를 추가하면 분모(topicCount)가 늘어 어제 60%가 오늘
+ * 35%가 된다 — 사용자가 아무것도 잘못하지 않았는데 숫자가 내려가는 화면은 실패 프레이밍이다.
+ * 대신 계획 기준의 개수("3개 중 1개 완료")를 프로젝트 화면에서 보여준다.
+ */
 function ProjectCard({ project, onOpen }) {
   const hasStructure = project.topicCount > 0;
-  const progress = hasStructure
-    ? Math.round((project.learnedTopicCount / project.topicCount) * 100)
-    : null;
 
   return (
     <button type="button" className="project-card" onClick={onOpen}>
@@ -227,12 +231,6 @@ function ProjectCard({ project, onOpen }) {
             ? <>학습 구조 {project.topicCount}개 · 아직 시작 안 함</>
             : <>아직 정해진 구조가 없어요</>}
       </span>
-
-      {progress !== null && (
-        <span className="project-card-progress">
-          <span className="project-card-progress-fill" style={{ width: `${progress}%` }} />
-        </span>
-      )}
 
       <span className="project-card-foot">
         {project.textbookTitle && <span className="chip">{project.textbookTitle}</span>}

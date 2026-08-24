@@ -1414,3 +1414,76 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 
 .learning-map,
 .topic-detail { font-size: 14px; }
+
+/* ===== 기간 계획 ===== */
+
+.plan-create,
+.plan-view { display: flex; flex-direction: column; gap: 18px; }
+
+.plan-period { display: flex; flex-direction: column; gap: 8px; }
+.plan-period-label { font-size: 13px; color: var(--ws-text-dim); }
+.plan-period-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-period-presets .chip { cursor: pointer; border: 1px solid var(--ws-border); background: transparent; }
+.plan-period-presets .chip.is-active { background: var(--ws-accent-soft); color: var(--ws-accent-text); border-color: transparent; }
+.plan-period-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plan-period-range input { padding: 6px 8px; border: 1px solid var(--ws-border); border-radius: 8px; }
+.plan-period-days { font-size: 13px; color: var(--ws-text-dim); }
+
+.plan-intensity { border: 1px solid var(--ws-border); border-radius: 10px; padding: 10px 12px; }
+.plan-intensity-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.plan-intensity-options { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.plan-intensity-option { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.plan-intensity-name { min-width: 64px; }
+.plan-intensity-hint { font-size: 13px; color: var(--ws-text-dim); }
+
+.plan-instruction { display: flex; flex-direction: column; gap: 6px; }
+.plan-instruction input,
+.plan-title-field input { padding: 8px 10px; border: 1px solid var(--ws-border); border-radius: 8px; }
+.plan-title-field { display: flex; flex-direction: column; gap: 6px; }
+
+.plan-draft { display: flex; flex-direction: column; gap: 14px; }
+.plan-draft-head { display: flex; flex-direction: column; gap: 6px; }
+.plan-draft-period { font-size: 14px; color: var(--ws-text-dim); }
+/* AI가 기준선을 조정했을 때만 나타나는 줄. 경고가 아니라 설명이다. */
+.plan-draft-reason { font-size: 13px; color: var(--ws-text-dim); margin: 0; }
+
+.plan-gauge { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.plan-gauge-label { font-size: 13px; color: var(--ws-text-dim); }
+.plan-gauge-bar {
+  flex: 1 1 160px; min-width: 120px; height: 8px; border-radius: 999px;
+  background: var(--ws-border); overflow: hidden;
+}
+.plan-gauge-fill { display: block; height: 100%; background: var(--ws-accent); }
+/* 목표를 넘어도 경고 문구를 두지 않는다 — 색만 바꾼다. */
+.plan-gauge-bar.is-over .plan-gauge-fill { background: #d97706; }
+.plan-gauge-value { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.plan-group { border: 1px solid var(--ws-border); border-radius: 10px; }
+.plan-group-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+.plan-group-toggle {
+  display: flex; align-items: center; gap: 6px; flex: 1;
+  background: none; border: none; cursor: pointer; text-align: left; padding: 0;
+}
+.plan-group-title { font-weight: 600; }
+.plan-group-meta { font-size: 13px; color: var(--ws-text-dim); }
+.plan-group-items { list-style: none; margin: 0; padding: 0 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+
+.plan-item { display: flex; flex-direction: column; gap: 2px; }
+.plan-item label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.plan-item-title { flex: 1; }
+.plan-item-meta { font-size: 13px; color: var(--ws-text-dim); }
+.plan-item-reason { margin: 0 0 0 24px; font-size: 13px; color: var(--ws-text-dim); }
+
+.plan-draft-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.plan-view-period, .plan-view-goal, .plan-view-progress { margin: 2px 0; font-size: 14px; color: var(--ws-text-dim); }
+.plan-section { display: flex; flex-direction: column; gap: 8px; }
+.plan-section h2 { font-size: 15px; margin: 0; }
+.plan-item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.plan-item-list .plan-item { flex-direction: row; align-items: baseline; gap: 8px; }
+.plan-place-result { border: 1px solid var(--ws-border); border-radius: 10px; padding: 10px 12px; }
+.plan-place-result p { margin: 0; }
+
+.plan-review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.plan-review-item { display: flex; gap: 8px; align-items: baseline; }
+.plan-review-summary { font-size: 15px; }

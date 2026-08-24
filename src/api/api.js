@@ -452,8 +452,16 @@ export const executionItemAPI = {
     },
 
     /** 날짜 범위 실행 조각 조회 (주간 시간표용). getByDate와 같은 원본을 여러 날짜에 걸쳐 투영한다 */
-    getByDateRange: async (startDate, endDate) => {
+    /**
+     * 날짜 범위 조회.
+     *
+     * includeUnscheduled=true면 아직 날짜를 정하지 않은 항목도 함께 온다 — 계획 기간이
+     * 이 범위와 겹치는 것들이다. 주간 시간표는 날짜 칸에 그리므로 이 값을 켜지 않는다
+     * (날짜 없는 항목은 놓을 자리가 없다). 계획 화면만 켠다.
+     */
+    getByDateRange: async (startDate, endDate, includeUnscheduled = false) => {
         const params = new URLSearchParams({ startDate, endDate });
+        if (includeUnscheduled) params.append('includeUnscheduled', 'true');
         const data = await request(`/execution-items/range?${params.toString()}`);
         return (data ?? []).map(toFrontendExecutionItem);
     },
@@ -960,6 +968,54 @@ export const orchestrationAPI = {
         return request(`/courses/${courseId}/learning/recommend-and-plan`, {
             method: 'POST',
             body: JSON.stringify({ planningInstruction }),
+        });
+    },
+};
+
+/**
+ * 기간 계획 API.
+ *
+ * 초안은 아무것도 저장하지 않는다 — 확정해야 execution_items와 plan_versions가 생긴다.
+ * 확정 요청은 기간·강도·목표를 보내지 않는다: 서버가 초안 시점의 값을 갖고 있고,
+ * 다시 보내면 초안과 다른 값으로 확정될 수 있다.
+ */
+export const planAPI = {
+    /** 초안 생성. intensity를 생략하면 서버가 직전 계획에서 승계한다. */
+    createDraft: ({ startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null }) => {
+        return request('/plans/draft', {
+            method: 'POST',
+            body: JSON.stringify({ startDate, endDate, intensity, title, instruction, courseIds }),
+        });
+    },
+
+    confirm: (proposalId, { editedItems = null, excludedItemIds = null, title = null, goalSummary = null }) => {
+        return request(`/plans/proposals/${proposalId}/confirm`, {
+            method: 'POST',
+            body: JSON.stringify({ editedItems, excludedItemIds, title, goalSummary }),
+        });
+    },
+
+    /**
+     * 그 날짜를 포함하는 계획 목록. 기간 짧은 순으로 정렬돼 오므로 첫 번째가 대표다 —
+     * 화면이 재정렬하지 않는다.
+     *
+     * courseId를 넘기지 않으면 프로젝트 화면에 기간이 더 짧은 남의 계획이 뜬다.
+     */
+    findCoveringDate: (date, courseId = null) => {
+        const params = new URLSearchParams({ date });
+        if (courseId != null) params.append('courseId', String(courseId));
+        return request(`/plans?${params.toString()}`);
+    },
+
+    get: (planVersionId) => request(`/plans/${planVersionId}`),
+
+    review: (planVersionId) => request(`/plans/${planVersionId}/review`),
+
+    /** 롤링 배치. 결과는 바로 적용된다 — 시각은 unschedule로 즉시 되돌릴 수 있다. */
+    place: (planVersionId, windowStart = null) => {
+        return request(`/plans/${planVersionId}/place`, {
+            method: 'POST',
+            body: JSON.stringify({ windowStart }),
         });
     },
 };

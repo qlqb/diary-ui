@@ -21,7 +21,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Sparkles, CalendarCheck2, FolderKanban, CalendarDays, NotebookPen, FileText, LogOut, PanelRightOpen,
+  Sparkles, CalendarCheck2, FolderKanban, CalendarDays, CalendarRange, NotebookPen, FileText,
+  LogOut, PanelRightOpen,
 } from 'lucide-react';
 
 import AiPanel from '../ai/AiPanel.jsx';
@@ -32,6 +33,8 @@ import MaterialsView from '../views/materials/MaterialsView.jsx';
 import ProjectsView from '../views/projects/ProjectsView.jsx';
 import ProjectWorkspace from '../views/projects/ProjectWorkspace.jsx';
 import ScheduleView from '../views/schedule/ScheduleView.jsx';
+import PlanCreateView from '../views/plan/PlanCreateView.jsx';
+import PlanView from '../views/plan/PlanView.jsx';
 import RecordView from '../views/RecordView.jsx';
 import { courseAPI, executionItemAPI } from '../api/api.js';
 import { todayString } from '../lib/datetime.js';
@@ -40,6 +43,7 @@ const TABS = [
   { key: 'today', label: '오늘', icon: CalendarCheck2 },
   { key: 'materials', label: '자료', icon: FileText },
   { key: 'projects', label: '프로젝트', icon: FolderKanban },
+  { key: 'plan', label: '계획', icon: CalendarRange },
   { key: 'schedule', label: '일정', icon: CalendarDays },
   { key: 'record', label: '기록', icon: NotebookPen },
 ];
@@ -91,6 +95,8 @@ function resolveScope(tab, openProject) {
 
 export default function MainShell({ user, onLogout }) {
   const [tab, setTab] = useState('today');
+  /** 계획 탭의 상태: null이면 만들기 화면, 값이 있으면 그 계획을 본다. */
+  const [openPlanId, setOpenPlanId] = useState(null);
   const [openProjectId, setOpenProjectId] = useState(null);
   const [aiOpen, setAiOpen] = useState(true);
   const [prefill, setPrefill] = useState(null);
@@ -204,6 +210,7 @@ export default function MainShell({ user, onLogout }) {
                 onClick={() => {
                   setTab(t.key);
                   if (t.key === 'projects') setOpenProjectId(null);
+                  if (t.key === 'plan') setOpenPlanId(null);
                 }}
                 aria-current={tab === t.key ? 'page' : undefined}
               >
@@ -270,9 +277,31 @@ export default function MainShell({ user, onLogout }) {
             />
           )}
 
+          {tab === 'plan' && !openPlanId && (
+            <PlanCreateView
+              projectTitles={projectTitles}
+              onConfirmed={(plan) => {
+                // 확정하면 바로 그 계획으로 들어간다 — 확정 직후 할 일은 "이번 주 배치하기"다.
+                setOpenPlanId(plan.planVersionId);
+                refreshAll();
+              }}
+            />
+          )}
+
+          {tab === 'plan' && openPlanId && (
+            <PlanView
+              planVersionId={openPlanId}
+              projectTitles={projectTitles}
+              onBack={() => setOpenPlanId(null)}
+              onChanged={refreshAll}
+            />
+          )}
+
           {tab === 'projects' && openProjectId && (
             <ProjectWorkspace
               courseId={openProjectId}
+              onCreatePlan={() => { setTab('plan'); setOpenPlanId(null); }}
+              onOpenPlan={(planVersionId) => { setTab('plan'); setOpenPlanId(planVersionId); }}
               onBack={() => setOpenProjectId(null)}
               onAsk={ask}
               draft={draft}
