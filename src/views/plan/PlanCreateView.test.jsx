@@ -118,6 +118,28 @@ describe('계획 초안 검토', () => {
     expect(body).not.toHaveProperty('targetMinutes');
   });
 
+  it('프로젝트 범위로 들어오면 그 사실을 보여주고 courseIds를 함께 보낸다', async () => {
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} scopeCourseId={6} onClearScope={() => {}} />);
+
+    // 범위를 조용히 적용하면 "왜 다른 프로젝트 항목이 안 나오지"를 알 방법이 없다.
+    expect(await screen.findByText(/자료구조 항목만 제안받아요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '전체 프로젝트로' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /초안 만들기/ }));
+
+    await waitFor(() => expect(planAPI.createDraft).toHaveBeenCalled());
+    expect(planAPI.createDraft.mock.calls[0][0].courseIds).toEqual([6]);
+  });
+
+  it('범위가 없으면 courseIds를 보내지 않는다', async () => {
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+
+    await waitFor(() => expect(planAPI.createDraft).toHaveBeenCalled());
+    expect(planAPI.createDraft.mock.calls[0][0].courseIds).toBeNull();
+    expect(screen.queryByText(/항목만 제안받아요/)).not.toBeInTheDocument();
+  });
+
   it('항목을 전부 빼면 확정할 수 없다', async () => {
     await openDraft();
 

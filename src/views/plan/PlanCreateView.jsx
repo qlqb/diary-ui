@@ -20,7 +20,9 @@ import {
 const MAX_PLAN_DAYS = 31;
 const UNGROUPED_KEY = '__other__';
 
-export default function PlanCreateView({ projectTitles = {}, onConfirmed, onCancel }) {
+export default function PlanCreateView({
+  projectTitles = {}, scopeCourseId = null, onClearScope, onConfirmed, onCancel,
+}) {
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const presets = useMemo(() => periodPresets(todayIso), [todayIso]);
 
@@ -72,6 +74,9 @@ export default function PlanCreateView({ projectTitles = {}, onConfirmed, onCanc
       const result = await planAPI.createDraft({
         startDate, endDate, intensity,
         instruction: instruction.trim() || null,
+        // 프로젝트 화면에서 들어왔으면 그 프로젝트만 대상으로 한다. 안 넘기면 서버가
+        // 전체 ACTIVE 프로젝트를 대상으로 잡아, 누른 버튼과 결과가 어긋난다.
+        courseIds: scopeCourseId != null ? [scopeCourseId] : null,
       });
       setDraft(result);
       setTitle(result.suggestedTitle || '');
@@ -128,11 +133,32 @@ export default function PlanCreateView({ projectTitles = {}, onConfirmed, onCanc
   return (
     <section className="plan-create">
       <header className="view-head">
-        <h1><CalendarRange size={20} /> 계획 만들기</h1>
+        <h1>
+          <CalendarRange size={20} />
+          {scopeCourseId != null && projectTitles[scopeCourseId]
+            ? `${projectTitles[scopeCourseId]} 계획 만들기`
+            : ' 계획 만들기'}
+        </h1>
         {onCancel && (
           <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>그만두기</button>
         )}
       </header>
+
+      {/*
+        범위가 좁혀져 있으면 그 사실과 해제 수단을 함께 보여준다. 범위를 조용히 적용하면
+        "왜 다른 프로젝트 항목이 안 나오지"를 사용자가 알 방법이 없다.
+      */}
+      {scopeCourseId != null && (
+        <p className="plan-scope">
+          {projectTitles[scopeCourseId] ?? '이 프로젝트'} 항목만 제안받아요.
+          {onClearScope && (
+            <button type="button" className="btn-ghost btn-sm"
+              onClick={() => { onClearScope(); setDraft(null); }}>
+              전체 프로젝트로
+            </button>
+          )}
+        </p>
+      )}
 
       <div className="plan-period">
         <span className="plan-period-label">기간</span>

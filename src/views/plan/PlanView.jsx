@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarClock, RefreshCw } from 'lucide-react';
-import { executionItemAPI, planAPI } from '../../api/api.js';
+import { planAPI } from '../../api/api.js';
 import {
   PLAN_INTENSITY_LABEL, PLAN_REVIEW_CATEGORY_LABEL, PLAN_REVIEW_MOVE_FLAG_LABEL,
 } from '../../types/execution.js';
@@ -23,6 +23,7 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState(null);
   const [placeResult, setPlaceResult] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,10 +31,9 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
     try {
       const loaded = await planAPI.get(planVersionId);
       setPlan(loaded);
-      // 계획 기간 안의 현재 상태를 그대로 읽는다. 미배치 항목도 포함해야 하므로
-      // includeUnscheduled를 켠다 — 이게 없으면 날짜 없는 항목이 통째로 사라진다.
-      const current = await executionItemAPI.getByDateRange(loaded.startDate, loaded.endDate, true);
-      setItems(current);
+      // ★ 이 계획의 항목만 읽는다. 기간만으로 거르면 같은 기간의 다른 계획 항목이
+      // 섞여 "이번 주에 뭐 하지"에 남의 계획이 끼어든다. 서버가 planKey로 걸러준다.
+      setItems(await planAPI.items(planVersionId));
     } catch (err) {
       setError(err.message || '계획을 불러오지 못했습니다.');
     } finally {
@@ -53,6 +53,27 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
   /** 다음 창이 계획 범위 밖이면 배치할 것이 없으므로 버튼을 숨긴다. */
   const windowStart = plan && todayIso < plan.startDate ? plan.startDate : todayIso;
   const canPlace = plan && windowStart <= plan.endDate && unplaced.length > 0;
+
+  /** 배치 해제. 계획 기간을 함께 보내 계획 안에 남게 한다(미분류로 내보내지 않는다). */
+  const handleUnschedule = async (item) => {
+    if (!plan || busyId) return;
+    setBusyId(item.executionItemId);
+    setError(null);
+    try {
+      await planAPI.unschedule(item.executionItemId, {
+        planningStartDate: plan.startDate,
+        planningEndDate: plan.endDate,
+        version: item.version,
+        reason: '날짜를 다시 뗐어요',
+      });
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(err.message || '날짜를 떼지 못했습니다.');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const handlePlace = async () => {
     if (!canPlace || placing) return;
@@ -124,6 +145,11 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
                 {item.estimatedMinutes != null && <> · {item.estimatedMinutes}분</>}
                 {item.courseId != null && projectTitles[item.courseId] && <> · {projectTitles[item.courseId]}</>}
               </span>
+              <button type="button" className="btn-ghost btn-sm"
+                disabled={busyId === item.executionItemId}
+                onClick={() => handleUnschedule(item)}>
+                날짜 떼기
+              </button>
             </li>
           ))}
         </ul>

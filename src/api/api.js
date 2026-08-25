@@ -1009,7 +1009,29 @@ export const planAPI = {
 
     get: (planVersionId) => request(`/plans/${planVersionId}`),
 
+    /**
+     * 이 계획의 현재 항목. execution-items/range로 기간만 걸러 오면 같은 기간의 다른
+     * 계획 항목이 섞이므로 계획 화면은 이 경로를 쓴다.
+     */
+    items: async (planVersionId) => {
+        const data = await request(`/plans/${planVersionId}/items`);
+        return (data ?? []).map(toFrontendExecutionItem);
+    },
+
     review: (planVersionId) => request(`/plans/${planVersionId}/review`),
+
+    /**
+     * 배치 해제. 롤링 배치를 되돌린다.
+     *
+     * planningStartDate/EndDate를 함께 보낸다 — 서버가 "그 계획의 기간"을 추론할 수 없다
+     * (같은 날짜에 계획이 여럿 걸린다). 안 보내면 미분류로 나가 기간 조회에서 사라진다.
+     */
+    unschedule: (executionItemId, { planningStartDate, planningEndDate, version, reason = null }) => {
+        return request(`/execution-items/${executionItemId}/unschedule`, {
+            method: 'PATCH',
+            body: JSON.stringify({ planningStartDate, planningEndDate, version, reason }),
+        });
+    },
 
     /** 롤링 배치. 결과는 바로 적용된다 — 시각은 unschedule로 즉시 되돌릴 수 있다. */
     place: (planVersionId, windowStart = null) => {

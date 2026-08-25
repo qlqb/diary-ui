@@ -1487,3 +1487,9 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .plan-review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .plan-review-item { display: flex; gap: 8px; align-items: baseline; }
 .plan-review-summary { font-size: 15px; }
+
+/* 계획 만들기의 범위 안내. 조용히 좁히지 않고 사실과 해제 수단을 함께 보여준다. */
+.plan-scope {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0; font-size: 13px; color: var(--ws-text-dim);
+}

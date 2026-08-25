@@ -97,6 +97,12 @@ export default function MainShell({ user, onLogout }) {
   const [tab, setTab] = useState('today');
   /** 계획 탭의 상태: null이면 만들기 화면, 값이 있으면 그 계획을 본다. */
   const [openPlanId, setOpenPlanId] = useState(null);
+  /**
+   * 계획 만들기의 범위. 프로젝트 화면에서 들어오면 그 프로젝트로 좁힌다 —
+   * "자료구조 계획을 만들려고 [계획 만들기]를 눌렀는데 전체 프로젝트가 대상"이면
+   * 사용자가 누른 버튼과 결과가 어긋난다. null이면 전체 프로젝트다.
+   */
+  const [planScopeCourseId, setPlanScopeCourseId] = useState(null);
   const [openProjectId, setOpenProjectId] = useState(null);
   const [aiOpen, setAiOpen] = useState(true);
   const [prefill, setPrefill] = useState(null);
@@ -210,7 +216,7 @@ export default function MainShell({ user, onLogout }) {
                 onClick={() => {
                   setTab(t.key);
                   if (t.key === 'projects') setOpenProjectId(null);
-                  if (t.key === 'plan') setOpenPlanId(null);
+                  if (t.key === 'plan') { setOpenPlanId(null); setPlanScopeCourseId(null); }
                 }}
                 aria-current={tab === t.key ? 'page' : undefined}
               >
@@ -280,6 +286,8 @@ export default function MainShell({ user, onLogout }) {
           {tab === 'plan' && !openPlanId && (
             <PlanCreateView
               projectTitles={projectTitles}
+              scopeCourseId={planScopeCourseId}
+              onClearScope={() => setPlanScopeCourseId(null)}
               onConfirmed={(plan) => {
                 // 확정하면 바로 그 계획으로 들어간다 — 확정 직후 할 일은 "이번 주 배치하기"다.
                 setOpenPlanId(plan.planVersionId);
@@ -300,7 +308,11 @@ export default function MainShell({ user, onLogout }) {
           {tab === 'projects' && openProjectId && (
             <ProjectWorkspace
               courseId={openProjectId}
-              onCreatePlan={() => { setTab('plan'); setOpenPlanId(null); }}
+              onCreatePlan={(courseId) => {
+                setTab('plan');
+                setOpenPlanId(null);
+                setPlanScopeCourseId(courseId ?? null);
+              }}
               onOpenPlan={(planVersionId) => { setTab('plan'); setOpenPlanId(planVersionId); }}
               onBack={() => setOpenProjectId(null)}
               onAsk={ask}
