@@ -272,6 +272,19 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [openId, setOpenId] = useState(null);
+
+  /**
+   * 목록에서 바로 연결하기. 한 번에 한 행만 연다 — 여러 폼이 동시에 열려 있으면 어느 행에
+   * 대한 조작인지가 흐려지고, 에러 문구도 어디에 붙는지 모호해진다.
+   *
+   * openId(상세 보기)와는 무관한 축이다. 상세로 들어가면 목록이 언마운트되지만, 돌아왔을 때
+   * 폼이 열린 채로 남아 있으면 어색하므로 상세로 갈 때 함께 닫는다.
+   */
+  const [linkingId, setLinkingId] = useState(null);
+  const [linkError, setLinkError] = useState(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  /** 취소했을 때 포커스를 되돌릴 곳. 행마다 연결 버튼 하나씩이다. */
+  const linkButtonRefs = useRef({});
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
 
@@ -393,6 +406,42 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
       // 자동 경로는 어떤 실패도 표시하지 않는다(사용량 한도 초과 포함).
     }
   }, [load, requestProposal]);
+
+  const openDetail = (materialId) => {
+    setLinkingId(null);
+    setLinkError(null);
+    setOpenId(materialId);
+  };
+
+  const toggleLinking = (materialId) => {
+    setLinkError(null);
+    setLinkingId((prev) => (prev === materialId ? null : materialId));
+  };
+
+  const cancelLinking = (materialId) => {
+    setLinkingId(null);
+    setLinkError(null);
+    linkButtonRefs.current[materialId]?.focus();
+  };
+
+  /**
+   * onProjectsChanged를 부르는 이유는 사이드바의 프로젝트별 자료 수가 바뀌기 때문이다.
+   * 업로드 경로에서는 부르지 않았는데, 거기서는 연결이 생기지 않아서다.
+   */
+  const handleLink = async (materialId, courseId, materialType) => {
+    setLinkBusy(true);
+    setLinkError(null);
+    try {
+      await materialStoreAPI.addLink(materialId, courseId, materialType);
+      setLinkingId(null);
+      await load();
+      await onProjectsChanged?.();
+    } catch (err) {
+      setLinkError(err.message || '연결하지 못했습니다.');
+    } finally {
+      setLinkBusy(false);
+    }
+  };
 
   const uploader = useUploadQueue({ onBatchDone: handleBatchDone });
   const { addFiles } = uploader;
@@ -594,33 +643,81 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
             <EmptyState filter={filter} total={materials.length} onPick={uploader.openPicker} />
         ) : (
             <ul className="material-list">
-              {visible.map((m) => (
-                  <li key={m.materialId}>
-                    <button type="button" className="material-row" onClick={() => setOpenId(m.materialId)}>
-                <span className="material-row-main">
-                  <span className="material-row-name">
-                    <FileText size={14} /> {m.originalFilename}
-                  </span>
-                  <span className="material-row-meta">
-                    {fileKind(m.originalFilename, m.contentType)} · {formatDate(m.createdAt)}
-                  </span>
-                </span>
-                      <span className="material-row-links">
-                  {(m.links ?? []).length > 0 ? (
-                      <>
-                        <span className="material-row-links-label">연결</span>
-                        {m.links.map((l) => l.courseTitle).join(' · ')}
-                      </>
-                  ) : (
-                      <span className="view-sub-dim">연결 안 된 자료</span>
-                  )}
-                </span>
-                      {m.extractionStatus !== ExtractionStatus.SUCCESS && (
-                          <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</span>
-                      )}
-                    </button>
+              {visible.map((m) => {
+                // 이미 연결된 프로젝트는 뺀다 — material_links의 UNIQUE 제약 때문에 서버가
+                // 어차피 거부한다. 자료 상세와 같은 계산이다.
+                const linkedCourseIds = new Set((m.links ?? []).map((l) => l.courseId));
+                const linkable = (projects ?? []).filter((p) => !linkedCourseIds.has(p.courseId));
+                const isLinking = linkingId === m.materialId;
+
+                return (
+                  <li key={m.materialId} className="material-item-row">
+                    {/*
+                      행 전체를 하나의 <button>으로 두면 그 안에 연결 버튼을 넣을 수 없다.
+                      컨테이너를 <div>로 바꾸고 제목 영역과 연결 버튼을 각각 버튼으로 둔다.
+                      role="button"을 쓴 <div>를 만들지 않는다 — Enter/Space와 포커스 링을
+                      직접 구현해야 한다.
+                    */}
+                    <div className="material-row">
+                      <button
+                          type="button"
+                          className="material-row-main"
+                          onClick={() => openDetail(m.materialId)}
+                      >
+                        <span className="material-row-name">
+                          <FileText size={14} /> {m.originalFilename}
+                        </span>
+                        <span className="material-row-meta">
+                          {fileKind(m.originalFilename, m.contentType)} · {formatDate(m.createdAt)}
+                        </span>
+                      </button>
+
+                      <div className="material-row-side">
+                        {/*
+                          연결 안 된 자료라는 회색 문구는 뺐다. 프로젝트 이름이 없고 연결
+                          버튼이 있다는 것으로 같은 정보가 전달되고, 그쪽이 할 일까지 말해준다.
+                        */}
+                        {(m.links ?? []).length > 0 && (
+                            <span className="material-row-links">
+                              <span className="material-row-links-label">연결</span>
+                              {m.links.map((l) => l.courseTitle).join(' · ')}
+                            </span>
+                        )}
+                        {m.extractionStatus !== ExtractionStatus.SUCCESS && (
+                            <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</span>
+                        )}
+                        <button
+                            type="button"
+                            className="btn-ghost btn-sm"
+                            ref={(el) => { linkButtonRefs.current[m.materialId] = el; }}
+                            disabled={linkable.length === 0}
+                            title={linkable.length === 0 ? '연결할 수 있는 프로젝트가 없어요' : undefined}
+                            aria-expanded={isLinking}
+                            aria-controls={`link-form-${m.materialId}`}
+                            onClick={() => toggleLinking(m.materialId)}
+                        >
+                          <Link2 size={13} /> 프로젝트 연결
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 폼을 같은 li 안에 둔다 — 목록이 재정렬되거나 필터가 바뀌어도 자기 행을 따라간다. */}
+                    {isLinking && (
+                        <div id={`link-form-${m.materialId}`}>
+                          <LinkForm
+                              projects={linkable}
+                              busy={linkBusy}
+                              autoFocus
+                              onCancel={() => cancelLinking(m.materialId)}
+                              onSubmit={(courseId, materialType) =>
+                                  handleLink(m.materialId, courseId, materialType)}
+                          />
+                          {linkError && <p className="view-error">{linkError}</p>}
+                        </div>
+                    )}
                   </li>
-              ))}
+                );
+              })}
             </ul>
         )}
 
@@ -894,6 +991,7 @@ function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) 
         {linking && (
             <LinkForm
                 projects={linkable}
+                busy={busy}
                 onCancel={() => setLinking(false)}
                 onSubmit={async (courseId, materialType) => {
                   setBusy(true);
@@ -976,8 +1074,16 @@ function AnalysisHistory({ analyses }) {
   );
 }
 
-/** 연결할 때 비로소 materialType을 고른다. */
-function LinkForm({ projects, onCancel, onSubmit }) {
+/**
+ * 연결할 때 비로소 materialType을 고른다.
+ *
+ * busy는 목록에서 쓰기 위해 필요하다. 상세 화면에서는 바깥에서 전체를 막고 있었지만,
+ * 목록에서는 폼이 행마다 따로 열리므로 폼 자체가 제출 중인지 알아야 한다.
+ *
+ * autoFocus는 목록 전용이다. 버튼을 눌러 그 자리에서 폼이 펼쳐지므로 포커스가 따라가야
+ * 하지만, 상세 화면에서는 폼이 화면의 주 내용이라 필요 없다.
+ */
+function LinkForm({ projects, onCancel, onSubmit, busy = false, autoFocus = false }) {
   const [courseId, setCourseId] = useState(projects[0]?.courseId ?? '');
   const [materialType, setMaterialType] = useState(MaterialType.OTHER);
 
@@ -985,14 +1091,23 @@ function LinkForm({ projects, onCancel, onSubmit }) {
       <form
           className="material-link-form"
           onSubmit={(e) => { e.preventDefault(); onSubmit(Number(courseId), materialType); }}
+          onKeyDown={(e) => {
+            // 목록에서는 폼이 행 안에 펼쳐지므로 Esc로 접을 수 있어야 한다. 바깥 요소가
+            // Esc를 함께 처리하지 않도록 여기서 멈춘다.
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              onCancel();
+            }
+          }}
       >
         <select className="material-type" value={courseId} aria-label="연결할 프로젝트"
+                autoFocus={autoFocus} disabled={busy}
                 onChange={(e) => setCourseId(e.target.value)}>
           {projects.map((p) => <option key={p.courseId} value={p.courseId}>{p.title}</option>)}
         </select>
-        <MaterialTypeSelect value={materialType} onChange={setMaterialType} />
-        <button type="submit" className="btn-ghost btn-sm" disabled={!courseId}>연결</button>
-        <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>취소</button>
+        <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={busy} />
+        <button type="submit" className="btn-ghost btn-sm" disabled={busy || !courseId}>연결</button>
+        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onCancel}>취소</button>
         <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
       </form>
   );

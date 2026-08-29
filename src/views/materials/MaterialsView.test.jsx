@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MaterialsView from './MaterialsView.jsx';
 import { materialStoreAPI } from '../../api/api.js';
@@ -121,5 +121,148 @@ describe('프로젝트로 정리하기 버튼', () => {
 
     expect(await screen.findByText('자료구조.pdf')).toBeInTheDocument();
     expect(tidyButton()).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 목록에서 바로 연결하기. 행 전체가 <button>이던 것을 갈랐으므로 클릭이 새지 않는지가
+ * 특히 중요하다 — 연결 버튼을 눌렀는데 상세로 넘어가면 두 조작이 겹친 것이다.
+ */
+describe('자료 목록에서 바로 프로젝트 연결', () => {
+  const LINKED = MATERIAL;
+  const UNLINKED = {
+    ...MATERIAL, materialId: 7, originalFilename: '네트워크.pdf', links: [],
+  };
+  const PROJECTS = [
+    { courseId: 6, title: '자료구조' },
+    { courseId: 9, title: '네트워크' },
+  ];
+
+  let onProjectsChanged;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onProjectsChanged = vi.fn();
+    materialStoreAPI.list.mockResolvedValue([LINKED, UNLINKED]);
+    materialStoreAPI.get.mockResolvedValue(DETAIL);
+    materialStoreAPI.addLink.mockResolvedValue({});
+  });
+
+  const renderList = async (projects = PROJECTS) => {
+    const user = userEvent.setup();
+    render(<MaterialsView projects={projects} onProjectsChanged={onProjectsChanged} />);
+    await screen.findByText('네트워크.pdf');
+    return user;
+  };
+
+  const linkButtons = () => screen.getAllByRole('button', { name: /프로젝트 연결/ });
+
+  it('미연결 자료 행에 프로젝트 연결 버튼이 있다', async () => {
+    await renderList();
+    expect(linkButtons()).toHaveLength(2);
+  });
+
+  it('연결된 자료 행에는 프로젝트 이름과 연결 버튼이 함께 있다', async () => {
+    await renderList();
+
+    expect(screen.getByText('연결')).toBeInTheDocument();
+    expect(screen.getByText('자료구조')).toBeInTheDocument();
+    expect(linkButtons()[0]).toBeEnabled();
+  });
+
+  it('연결 안 된 자료 회색 문구는 행에서 사라졌다 — 필터 라벨은 남는다', async () => {
+    await renderList();
+
+    // 탭 라벨은 그대로 있고, 행 안의 상태 문구만 없다.
+    expect(screen.getByRole('tab', { name: '연결 안 된 자료' })).toBeInTheDocument();
+    expect(screen.queryByText((_, el) =>
+        el?.className === 'view-sub-dim' && el?.textContent === '연결 안 된 자료')).toBeNull();
+  });
+
+  it('버튼을 누르면 그 행 아래에 폼이 열리고 aria-expanded가 켜진다', async () => {
+    const user = await renderList();
+
+    const button = linkButtons()[1];
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(button);
+
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('연결할 프로젝트')).toBeInTheDocument();
+  });
+
+  it('다른 행의 버튼을 누르면 이전 폼이 닫히고 새 폼만 열린다', async () => {
+    const user = await renderList();
+
+    await user.click(linkButtons()[1]);
+    await user.click(linkButtons()[0]);
+
+    expect(screen.getAllByLabelText('연결할 프로젝트')).toHaveLength(1);
+    expect(linkButtons()[0]).toHaveAttribute('aria-expanded', 'true');
+    expect(linkButtons()[1]).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('같은 버튼을 다시 누르면 닫힌다', async () => {
+    const user = await renderList();
+
+    await user.click(linkButtons()[1]);
+    await user.click(linkButtons()[1]);
+
+    expect(screen.queryByLabelText('연결할 프로젝트')).not.toBeInTheDocument();
+  });
+
+  it('이미 연결된 프로젝트는 고를 수 없다', async () => {
+    const user = await renderList();
+
+    // 첫 행(자료구조.pdf)은 이미 자료구조(6)에 연결돼 있다.
+    await user.click(linkButtons()[0]);
+
+    // 폼에는 select가 둘이다(프로젝트 / 자료 역할) — 프로젝트 쪽만 본다.
+    const options = within(screen.getByLabelText('연결할 프로젝트'))
+        .getAllByRole('option').map((o) => o.textContent);
+    expect(options).toEqual(['네트워크']);
+  });
+
+  it('연결할 수 있는 프로젝트가 없으면 버튼이 비활성이다', async () => {
+    await renderList([]);
+
+    expect(linkButtons()[0]).toBeDisabled();
+    expect(linkButtons()[0]).toHaveAttribute('title', '연결할 수 있는 프로젝트가 없어요');
+  });
+
+  it('연결에 성공하면 폼이 닫히고 목록과 사이드바가 갱신된다', async () => {
+    const user = await renderList();
+
+    await user.click(linkButtons()[1]);
+    await user.selectOptions(screen.getByLabelText('연결할 프로젝트'), '9');
+    await user.selectOptions(screen.getByLabelText('자료 역할'), 'SYLLABUS');
+    await user.click(screen.getByRole('button', { name: '연결' }));
+
+    expect(materialStoreAPI.addLink).toHaveBeenCalledWith(7, 9, 'SYLLABUS');
+    expect(screen.queryByLabelText('연결할 프로젝트')).not.toBeInTheDocument();
+    // 사이드바의 프로젝트별 자료 수가 바뀌므로 알려야 한다.
+    expect(onProjectsChanged).toHaveBeenCalled();
+    expect(materialStoreAPI.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('연결에 실패하면 폼이 열린 채로 그 행에 이유가 뜬다', async () => {
+    materialStoreAPI.addLink.mockRejectedValue(new Error('이미 이 프로젝트에 연결된 자료입니다'));
+    const user = await renderList();
+
+    await user.click(linkButtons()[1]);
+    await user.click(screen.getByRole('button', { name: '연결' }));
+
+    expect(await screen.findByText('이미 이 프로젝트에 연결된 자료입니다')).toBeInTheDocument();
+    expect(screen.getByLabelText('연결할 프로젝트')).toBeInTheDocument();
+  });
+
+  it('연결 버튼 클릭은 상세로 새지 않는다 — 제목을 눌렀을 때만 상세로 간다', async () => {
+    const user = await renderList();
+
+    await user.click(linkButtons()[1]);
+    expect(materialStoreAPI.get).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /자료구조\.pdf/ }));
+    expect(materialStoreAPI.get).toHaveBeenCalledWith(4);
   });
 });
