@@ -27,7 +27,7 @@ import { executionItemAPI } from '../api/api.js';
 
 export default function TodayView({
   items, loading, error, onRefresh, projectTitles,
-  draft, onPatchCard, onToggleExclude, onOpenAi, onAsk,
+  draft, onPatchCard, onToggleExclude, onOpenAi, onAsk, onItemDeleted,
 }) {
   const today = todayString();
   const [busyId, setBusyId] = useState(null);
@@ -84,6 +84,8 @@ export default function TodayView({
         await executionItemAPI.resume(item.executionItemId, item.version);
       } else if (action === 'delete') {
         await executionItemAPI.delete(item.executionItemId, item.version);
+        // 되돌릴 수 있게 알린다. 확인을 묻지 않는 대신 지운 뒤에 되돌릴 길을 준다.
+        onItemDeleted?.(item);
       }
       await onRefresh?.();
     } catch (err) {

@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Sparkles, CalendarCheck2, FolderKanban, CalendarDays, CalendarRange, NotebookPen, FileText,
-  LogOut, PanelRightOpen,
+  LogOut, PanelRightOpen, RotateCcw,
 } from 'lucide-react';
 
 import AiPanel from '../ai/AiPanel.jsx';
@@ -37,6 +37,7 @@ import PlanCreateView from '../views/plan/PlanCreateView.jsx';
 import PlanView from '../views/plan/PlanView.jsx';
 import RecordView from '../views/RecordView.jsx';
 import { courseAPI, executionItemAPI } from '../api/api.js';
+import useUndoDelete from './useUndoDelete.js';
 import { todayString } from '../lib/datetime.js';
 
 const TABS = [
@@ -157,6 +158,10 @@ export default function MainShell({ user, onLogout }) {
   }, [loadToday, loadProjects]);
 
   const {
+    undoTarget, undoBusy, rememberDeleted, undoDelete,
+  } = useUndoDelete({ onRestored: refreshAll });
+
+  const {
     draft, openDraft, patchCard, toggleExclude, discardDraft, apply, applying, applyError, placing,
   } = useProposalDraft({ onApplied: refreshAll });
 
@@ -260,6 +265,7 @@ export default function MainShell({ user, onLogout }) {
               loading={todayLoading}
               error={todayError}
               onRefresh={loadToday}
+              onItemDeleted={rememberDeleted}
               projectTitles={projectTitles}
               draft={draft}
               onPatchCard={patchCard}
@@ -320,6 +326,7 @@ export default function MainShell({ user, onLogout }) {
               onPatchCard={patchCard}
               onToggleExclude={toggleExclude}
               onProjectsChanged={loadProjects}
+              onItemDeleted={rememberDeleted}
               refreshToken={refreshToken}
             />
           )}
@@ -330,6 +337,7 @@ export default function MainShell({ user, onLogout }) {
               onPatchCard={patchCard}
               onToggleExclude={toggleExclude}
               onOpenAi={() => setAiOpen(true)}
+              onItemDeleted={rememberDeleted}
               refreshToken={refreshToken}
               projectTitles={projectTitles}
             />
@@ -337,6 +345,22 @@ export default function MainShell({ user, onLogout }) {
 
           {tab === 'record' && <RecordView projectTitles={projectTitles} refreshToken={refreshToken} />}
         </div>
+
+        {/*
+          삭제 확인을 없앤 대신 여기서 되돌릴 수 있다고 말한다. 이 안내가 곧 되돌릴 수 있는
+          시간이다 — 사라지면 단축키도 함께 꺼진다.
+        */}
+        {undoTarget && (
+          <div className="undo-toast" role="status">
+            <span className="undo-toast-text">
+              <strong>{undoTarget.title}</strong> 지웠어요
+            </span>
+            <button type="button" className="undo-toast-btn" disabled={undoBusy} onClick={undoDelete}>
+              <RotateCcw size={13} /> 되돌리기
+              <kbd className="undo-toast-kbd">Ctrl+Z</kbd>
+            </button>
+          </div>
+        )}
 
         <ApplyBar
           draft={draft}

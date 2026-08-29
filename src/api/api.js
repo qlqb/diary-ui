@@ -562,6 +562,20 @@ export const executionItemAPI = {
             method: 'DELETE',
         });
     },
+
+    /**
+     * 삭제 되돌리기. 지운 항목은 행이 그대로 남아 있어 플래그만 되돌리면 된다.
+     *
+     * version은 삭제가 올려준 값이다 — 서버의 모든 *WithVersion 갱신이 version을 정확히
+     * 1 올리므로 호출부가 `삭제 직전 version + 1`을 넘긴다. 그 사이 항목이 다른 경로로
+     * 또 바뀌었다면 409가 나고, 그때 사용자가 할 일은 화면을 다시 읽는 것뿐이다.
+     */
+    restore: (executionItemId, version) => {
+        const params = new URLSearchParams({ version });
+        return request(`/execution-items/${executionItemId}/restore?${params.toString()}`, {
+            method: 'POST',
+        });
+    },
 };
 
 /**

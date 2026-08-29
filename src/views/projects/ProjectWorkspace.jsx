@@ -53,7 +53,7 @@ function findAncestors(topics, targetId, path = []) {
 
 export default function ProjectWorkspace({
   courseId, onBack, onAsk, draft, onPatchCard, onToggleExclude, onProjectsChanged, refreshToken,
-  onCreatePlan, onOpenPlan,
+  onCreatePlan, onOpenPlan, onItemDeleted,
 }) {
   const [project, setProject] = useState(null);
   const [currentPlan, setCurrentPlan] = useState(null);
@@ -155,7 +155,11 @@ export default function ProjectWorkspace({
       // 보류 항목은 이 화면에도 그대로 나타난다 — 여기서도 다시 꺼내거나 지울 수 있어야
       // 오늘 화면에서만 손댈 수 있는 반쪽짜리가 되지 않는다.
       else if (action === 'resume') await executionItemAPI.resume(item.executionItemId, item.version);
-      else if (action === 'delete') await executionItemAPI.delete(item.executionItemId, item.version);
+      else if (action === 'delete') {
+        await executionItemAPI.delete(item.executionItemId, item.version);
+        // 되돌릴 수 있게 알린다. 확인을 묻지 않는 대신 지운 뒤에 되돌릴 길을 준다.
+        onItemDeleted?.(item);
+      }
       await load();
     } catch (err) {
       setError(err.message || '처리하지 못했습니다.');

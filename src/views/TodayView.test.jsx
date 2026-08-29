@@ -237,19 +237,27 @@ describe('보류한 것', () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
-  it('삭제는 확인을 거친 뒤 soft delete API를 부른다', async () => {
+  it('삭제는 확인 없이 바로 지우고, 되돌릴 수 있게 알린다', async () => {
     freezeAt(15, 40);
     const user = userEvent.setup();
-    renderToday([heldItem()], { onRefresh: vi.fn() });
+    const onItemDeleted = vi.fn();
+    renderToday([heldItem()], { onRefresh: vi.fn(), onItemDeleted });
 
-    // 첫 클릭은 확인만 띄운다 — 한 번에 지워지지 않는다.
+    // 확인 관문을 두지 않는다 — 되돌릴 수 있으므로 잘못 눌러도 비용이 0에 가깝다.
     await user.click(screen.getByRole('button', { name: /삭제/ }));
-    expect(executionItemAPI.delete).not.toHaveBeenCalled();
-    expect(screen.getByText('삭제할까요?')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /^삭제$/ }));
 
     await waitFor(() => expect(executionItemAPI.delete).toHaveBeenCalledWith(9, 2));
+    expect(screen.queryByText('삭제할까요?')).not.toBeInTheDocument();
+    // 되돌리기가 무엇을 되살릴지 알아야 하므로 지운 항목을 그대로 넘긴다.
+    await waitFor(() => expect(onItemDeleted).toHaveBeenCalledWith(
+        expect.objectContaining({ executionItemId: 9, version: 2 })));
+  });
+
+  it('계획된 항목에도 삭제가 있다 — 보류로 내린 뒤에야 지울 수 있게 하지 않는다', () => {
+    freezeAt(15, 40);
+    renderToday([timed(9, '계획한 일', '16:00', '16:30')], { onRefresh: vi.fn() });
+
+    expect(screen.getByRole('button', { name: /삭제/ })).toBeInTheDocument();
   });
 
   it('완료·취소 항목에는 다시 시작을 노출하지 않는다', () => {

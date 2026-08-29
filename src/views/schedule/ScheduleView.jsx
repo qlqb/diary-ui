@@ -16,7 +16,7 @@ import { executionItemAPI } from '../../api/api.js';
 import { formatDateShort, todayString, weekDates, weekOffsetOf } from '../../lib/datetime.js';
 
 export default function ScheduleView({
-  draft, onPatchCard, onToggleExclude, onOpenAi, refreshToken, projectTitles,
+  draft, onPatchCard, onToggleExclude, onOpenAi, refreshToken, projectTitles, onItemDeleted,
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const dates = useMemo(() => weekDates(weekOffset), [weekOffset]);
@@ -79,7 +79,11 @@ export default function ScheduleView({
         });
       }
       else if (action === 'resume') await executionItemAPI.resume(item.executionItemId, item.version);
-      else if (action === 'delete') await executionItemAPI.delete(item.executionItemId, item.version);
+      else if (action === 'delete') {
+        await executionItemAPI.delete(item.executionItemId, item.version);
+        // 되돌릴 수 있게 알린다. 확인을 묻지 않는 대신 지운 뒤에 되돌릴 길을 준다.
+        onItemDeleted?.(item);
+      }
       setSelected(null);
       await load();
     } catch (err) {

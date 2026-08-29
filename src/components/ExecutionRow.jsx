@@ -58,6 +58,25 @@ function suggestLaterStart(item) {
   return hhmmOf(clampToDay(ceilToStep(nowMinutes(), 5)));
 }
 
+/**
+ * 삭제 버튼.
+ *
+ * 확인을 묻지 않는다. 되돌리기가 있기 때문이다 — 확인 창은 "지우기 전에 한 번 더 생각하게"
+ * 하지만, 실제로는 매번 누르는 관문이 되어 읽히지 않는다. 지운 뒤 되돌릴 수 있으면
+ * 잘못 눌러도 비용이 0에 가깝고, 맞게 누른 사람은 방해받지 않는다.
+ *
+ * 되돌리기를 못 쓰게 되는 순간(다른 항목을 또 지우거나, 안내가 사라진 뒤)에도 항목은
+ * soft delete라 서버에 남아 있다 — 여기서 사라지는 것은 되돌릴 "길"이지 데이터가 아니다.
+ */
+function DeleteButton({ busy, onDelete }) {
+  return (
+    <button type="button" className="btn-ghost btn-sm exec-row-delete" disabled={busy}
+      title="삭제 (Ctrl+Z로 되돌릴 수 있어요)" onClick={onDelete}>
+      <Trash2 size={13} /> 삭제
+    </button>
+  );
+}
+
 export default function ExecutionRow({
   item,
   projectTitle,
@@ -172,28 +191,11 @@ export default function ExecutionRow({
 
       {canRevive && (
         <div className="exec-row-actions">
-          {tray === null ? (
-            <>
-              <button type="button" className="btn-primary btn-sm" disabled={busy}
-                onClick={() => run('resume')}>
-                <RotateCcw size={13} /> 다시 시작
-              </button>
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                onClick={() => setTray('delete')}>
-                <Trash2 size={13} /> 삭제
-              </button>
-            </>
-          ) : (
-            <div className="exec-tray">
-              <span>삭제할까요?</span>
-              <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={() => run('delete')}>
-                <Check size={13} /> 삭제
-              </button>
-              <button type="button" className="btn-ghost btn-sm" onClick={() => setTray(null)}>
-                취소
-              </button>
-            </div>
-          )}
+          <button type="button" className="btn-primary btn-sm" disabled={busy}
+            onClick={() => run('resume')}>
+            <RotateCcw size={13} /> 다시 시작
+          </button>
+          <DeleteButton busy={busy} onDelete={() => run('delete')} />
         </div>
       )}
 
@@ -216,6 +218,7 @@ export default function ExecutionRow({
               <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setTray('move')}>
                 이동
               </button>
+              <DeleteButton busy={busy} onDelete={() => run('delete')} />
             </>
           )}
 
