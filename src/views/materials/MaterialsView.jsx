@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { materialStoreAPI } from '../../api/api.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
-import ProposalCard from './ProposalCard.jsx';
+import ProposalDialog from './ProposalDialog.jsx';
 import usePendingDelete from './usePendingDelete.js';
 import UndoToast from '../../components/UndoToast.jsx';
 import {
@@ -327,6 +327,12 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
    */
   const [proposal, setProposal] = useState(null);
   const [proposalOrigin, setProposalOrigin] = useState(null);
+  /** 배너 문구가 호출 경로에 따라 달라진다 — 자동은 방금 올린 배치, 수동은 미연결 전체다. */
+  const [proposalTrigger, setProposalTrigger] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  /** 자동 제안이 도는 동안 배너로 알린다. 모델 호출이 십수 초라 아무 말도 없으면 멈춘 것처럼 보인다. */
+  const [proposalPending, setProposalPending] = useState(false);
+  const reviewButtonRef = useRef(null);
   const [proposalKey, setProposalKey] = useState(0);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [proposalMessage, setProposalMessage] = useState(null);
@@ -361,6 +367,8 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
       } else {
         setProposal(result);
         setProposalOrigin(origin);
+        // RETRY는 직전 문구를 유지한다 — 다시 시도는 범위를 바꾸지 않는다.
+        if (trigger !== ProposalTrigger.RETRY) setProposalTrigger(trigger);
         setProposalKey((prev) => prev + 1);
       }
     } catch (err) {
@@ -372,13 +380,31 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     }
   }, [requestProposal]);
 
+  /** 배너의 × — 자동으로 뜬 배너를 닫으면 그 세션 동안 자동 제안이 꺼진다. */
   const closeProposal = useCallback(() => {
     if (proposalOrigin === 'auto') {
       autoProposalOffRef.current = true;
     }
     setProposal(null);
     setProposalOrigin(null);
+    setProposalTrigger(null);
+    setDialogOpen(false);
   }, [proposalOrigin]);
+
+  const proposalTotalCount = (proposal?.groups ?? [])
+      .reduce((sum, g) => sum + (g.members?.length ?? 0), 0);
+
+  const bannerSubtitle = (() => {
+    if (proposalTrigger === ProposalTrigger.AUTO) return '방금 올린 자료에서 과목을 확인했어요.';
+    if (proposalTrigger === ProposalTrigger.REMAINING) return `이어서 자료 ${proposalTotalCount}개를 확인했어요.`;
+    return `연결 안 된 자료 ${proposalTotalCount}개를 확인했어요.`;
+  })();
+
+  /** 다이얼로그만 닫는다. 배너는 남아 있어 다시 열 수 있다. */
+  const closeDialog = useCallback(() => {
+    setDialogOpen(false);
+    reviewButtonRef.current?.focus();
+  }, []);
 
   /**
    * 자동 경로. 사용자가 요청하지 않은 것이므로 보여줄 게 확실할 때만 뜨고, 아니면 아무 일도
@@ -390,17 +416,21 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
    *   버리는 것이 아니다 — 자료는 `연결 안 된 자료`에 그대로 남는다.
    */
   const runAutoProposal = useCallback(async (materialIds) => {
+    setProposalPending(true);
     try {
       const result = await requestProposal(materialIds, ProposalTrigger.AUTO);
       if (result.status !== ProposalStatus.GENERATED) return;
       if (!(result.groups ?? []).some((g) => g.defaultSelected)) return;
       setProposal(result);
       setProposalOrigin('auto');
+      setProposalTrigger(ProposalTrigger.AUTO);
       setProposalKey((prev) => prev + 1);
       setProposalMessage(null);
       setProposalRetryable(false);
     } catch {
       // 자동 경로는 어떤 실패도 표시하지 않는다(사용량 한도 초과 포함).
+    } finally {
+      setProposalPending(false);
     }
   }, [requestProposal]);
 
@@ -624,16 +654,59 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
             </p>
         )}
 
+        {/*
+          자동 제안이 도는 동안. 모델 호출이 십수 초 걸리는데 아무 말도 없으면 멈춘 것처럼
+          보인다 — 업로드는 이미 끝났고 뒤에서 다른 일을 하고 있다는 것을 알려준다.
+        */}
+        {proposalPending && !proposal && (
+            <div className="proposal-banner is-pending" role="status">
+              <Loader2 size={15} className="spin proposal-banner-icon" />
+              <span className="proposal-banner-body">
+                <strong className="proposal-banner-title">자료를 살펴보는 중</strong>
+                <span className="proposal-banner-sub">
+                  방금 올린 자료가 어느 프로젝트에 맞는지 확인하고 있어요. 십여 초 걸려요.
+                </span>
+              </span>
+            </div>
+        )}
+
+        {/*
+          배너는 카드의 자리를 대신할 뿐 노출 규칙을 바꾸지 않는다(v6 §7.2).
+          문구가 호출 경로에 따라 다른 이유: 자동은 방금 올린 배치만 보고 수동은 미연결
+          자료 전체를 본다. 범위가 다른데 문구가 같으면, 수동으로 눌렀을 때 지난주 자료가
+          섞여 나오는 것이 고장처럼 읽힌다.
+        */}
         {proposal && (
-            <ProposalCard
+            <div className="proposal-banner">
+              <Sparkles size={15} className="proposal-banner-icon" />
+              <span className="proposal-banner-body">
+                <strong className="proposal-banner-title">
+                  프로젝트 연결 제안 {proposalTotalCount}개
+                </strong>
+                <span className="proposal-banner-sub">{bannerSubtitle}</span>
+              </span>
+              <button type="button" className="btn-ghost btn-sm" ref={reviewButtonRef}
+                      onClick={() => setDialogOpen(true)}>
+                검토하기
+              </button>
+              <button type="button" className="icon-btn" aria-label="제안 닫기" onClick={closeProposal}>
+                <X size={14} />
+              </button>
+            </div>
+        )}
+
+        {proposal && dialogOpen && (
+            <ProposalDialog
                 key={proposalKey}
                 proposal={proposal}
                 loading={proposalLoading}
-                onClose={closeProposal}
+                onClose={closeDialog}
                 onShowRemaining={(ids) => showProposal(ids, 'manual', ProposalTrigger.REMAINING)}
                 onApplied={async () => {
                   setProposal(null);
                   setProposalOrigin(null);
+                  setProposalTrigger(null);
+                  setDialogOpen(false);
                   // 이 자료들은 이제 연결됐다 — 같은 id로 다시 물으면 후보가 0개다.
                   lastProposalMaterialIds.current = [];
                   await load();

@@ -1,5 +1,16 @@
 /**
- * 자료 연결 제안 검토 카드.
+ * 자료 연결 제안 검토 다이얼로그.
+ *
+ * 목록 위에 펼쳐지던 카드를 화면 중앙 다이얼로그로 옮겼다. 이 작업은 원자적이다 —
+ * 전부 보고 한 번에 승인하거나 전부 미루거나이지, 절반만 적용되는 상태가 없다.
+ * 다이얼로그는 정확히 그런 작업에 쓰는 도구다. 인라인 확장은 "언제든 다른 걸 하다
+ * 돌아올 수 있다"는 느낌을 주는데 실제로는 그렇지 않다.
+ *
+ * 우측 패널을 쓰지 않은 이유는 AI 상담 패널이 이미 그 자리를 쓰기 때문이다. 상호 배제를
+ * 만들면 "검토하려면 상담이 닫힌다"가 되고, 사용자는 왜 닫혔는지 모른다.
+ *
+ * 오버레이 클릭으로 닫지 않는다. 제목을 편집하다 바깥을 잘못 누르면 작업이 통째로
+ * 날아간다. `나중에 하기`와 `×`만 닫는다.
  *
  * 앱에서 세 번째 검토 카드다(MaterialReview, AI 패널 proposal 카드에 이어). 공통
  * 컴포넌트를 아직 뽑지 않는 것은 의도다 — 표본이 셋이 되어야 "같은 부분과 다른 부분"이
@@ -12,7 +23,7 @@
  * - 적용은 원자적이다. 사용자가 승인한 단위는 화면에 보인 묶음 전체다.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FileText, Loader2, X, ChevronRight, AlertCircle, Scissors, Undo2 } from 'lucide-react';
 import { materialStoreAPI } from '../../api/api.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
@@ -58,12 +69,11 @@ function memberNote(member) {
   return '제안의 근거를 확인하지 못했어요';
 }
 
-export default function ProposalCard({
+export default function ProposalDialog({
   proposal,
   onApplied,
   onClose,
   onShowRemaining,
-  onRetry,
   loading = false,
 }) {
   /**
@@ -207,6 +217,56 @@ export default function ProposalCard({
 
   const busy = applying || loading;
 
+  const dialogRef = useRef(null);
+  const titleRef = useRef(null);
+
+  /*
+    열리면 제목에 포커스를 준다. 첫 체크박스에 주지 않는다 — 스페이스를 잘못 누르면
+    선택이 바뀐다.
+  */
+  useEffect(() => { titleRef.current?.focus(); }, []);
+
+  /*
+    body 스크롤 잠금. 복원을 cleanup에 두는 것이 핵심이다 — apply가 실패해 다이얼로그가
+    열린 채로 남거나, 어떤 경로로 언마운트되더라도 스크롤이 잠긴 채 남지 않는다.
+  */
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, []);
+
+  /** 다이얼로그이므로 Tab이 안에서 순환해야 한다. */
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      // 편집 중이면 그 편집에서 빠져나올 뿐, 다이얼로그는 유지한다. 제목을 고치다 Esc를
+      // 눌렀는데 작업 전체가 닫히면 그때까지 고른 것이 통째로 날아간다.
+      const el = e.target;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el?.tagName)) {
+        e.stopPropagation();
+        el.blur();
+        return;
+      }
+      e.stopPropagation();
+      if (!busy) onClose?.();
+      return;
+    }
+
+    if (e.key !== 'Tab') return;
+    const focusable = dialogRef.current?.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="-1"][data-focus-start]');
+    if (!focusable || focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   /** 쪼갠 묶음들 중 마지막인지. `되돌리기`를 그 묶음 아래 한 번만 띄우기 위한 판정이다. */
   const isLastOfSplit = (group) => {
     const family = actionable.filter((g) => g.splitFrom === group.splitFrom);
@@ -224,16 +284,29 @@ export default function ProposalCard({
   })();
 
   return (
-    <div className="proposal-card">
-      <div className="proposal-card-head">
-        <h2 className="proposal-card-title">자료 {totalCount}개를 정리할까요?</h2>
-        <button type="button" className="icon-btn" aria-label="제안 닫기" disabled={busy} onClick={onClose}>
-          <X size={14} />
-        </button>
-      </div>
+    <div className="proposal-dialog-overlay" role="presentation">
+      <div
+        className="proposal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="proposal-dialog-title"
+        ref={dialogRef}
+        onKeyDown={handleKeyDown}
+      >
+        <div className="proposal-dialog-head">
+          <h2 className="proposal-dialog-title" id="proposal-dialog-title"
+              tabIndex={-1} data-focus-start ref={titleRef}>
+            프로젝트 연결 제안 <span className="proposal-dialog-count">{totalCount}</span>
+          </h2>
+          <button type="button" className="icon-btn" aria-label="제안 닫기" disabled={busy} onClick={onClose}>
+            <X size={14} />
+          </button>
+          <p className="proposal-dialog-sub">확인 후 필요한 항목만 연결할 수 있어요.</p>
+        </div>
 
+        <div className="proposal-dialog-body">
       {actionable.length === 0 && (
-        <p className="view-dim proposal-card-empty">지금은 묶어서 제안할 만한 게 없어요.</p>
+        <p className="view-dim proposal-dialog-empty">지금은 묶어서 제안할 만한 게 없어요.</p>
       )}
 
       <ul className="proposal-group-list">
@@ -389,42 +462,39 @@ export default function ProposalCard({
         </div>
       )}
 
-      {actionable.length > 0 && <p className="proposal-card-hint">{MATERIAL_TYPE_HINT}</p>}
+      {actionable.length > 0 && <p className="proposal-dialog-hint">{MATERIAL_TYPE_HINT}</p>}
+        </div>
 
       {/*
         서버의 동명 검사는 제안을 만든 시점에만 돈다. 쪼개기와 제목 편집으로 그 뒤에
         같은 이름이 생길 수 있어 여기서 한 번 더 본다. 막지는 않는다 — 사용자가 의도한
         것일 수 있다.
       */}
-      {duplicateSelectedTitle && (
-        <p className="proposal-notice">
-          <AlertCircle size={13} /> 같은 이름의 프로젝트가 두 개 만들어져요.
-        </p>
-      )}
-
-      {error && <p className="view-error">{error}</p>}
-
-      <div className="proposal-card-foot">
-        {remaining.length > 0 && (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                  onClick={() => onShowRemaining?.(remaining)}>
-            남은 {remaining.length}개 보기
-          </button>
+        {duplicateSelectedTitle && (
+          <p className="proposal-notice proposal-dialog-warn">
+            <AlertCircle size={13} /> 같은 이름의 프로젝트가 두 개 만들어져요.
+          </p>
         )}
-        {onRetry && (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onRetry}>
-            다시 시도
+
+        {error && <p className="view-error proposal-dialog-warn">{error}</p>}
+
+        <div className="proposal-dialog-foot">
+          {remaining.length > 0 && (
+            <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                    onClick={() => onShowRemaining?.(remaining)}>
+              남은 {remaining.length}개 보기
+            </button>
+          )}
+          <button type="button" className="btn-ghost btn-sm proposal-dialog-later" disabled={busy} onClick={onClose}>
+            나중에 하기
           </button>
-        )}
-        <button type="button" className="btn-ghost btn-sm proposal-card-later" disabled={busy} onClick={onClose}>
-          나중에
-        </button>
-        <button type="button" className="btn-primary" disabled={busy || selectedGroups.length === 0}
-                onClick={handleApply}>
-          {applying
-            ? <><Loader2 size={13} className="spin" /> 정리하는 중</>
-            : <>{selectedGroups.length}개 프로젝트 정리</>}
-        </button>
+          <button type="button" className="btn-primary" disabled={busy || selectedGroups.length === 0}
+                  onClick={handleApply}>
+            {applying
+              ? <><Loader2 size={13} className="spin" /> 정리하는 중</>
+              : <>선택 항목 연결하기 ({selectedGroups.length})</>}
+          </button>
+        </div>
       </div>
     </div>
   );

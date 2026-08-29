@@ -485,3 +485,93 @@ describe('업로드 직후 대기열 정리', () => {
     await waitFor(() => expect(materialStoreAPI.list).toHaveBeenCalledTimes(2));
   });
 });
+
+/**
+ * 배너. 카드가 목록 위에 펼쳐지던 자리를 한 줄로 대신한다 — 노출 규칙(v6 §7.2)은
+ * 그대로이고, 바뀐 것은 자리와 형태다.
+ */
+describe('연결 제안 배너', () => {
+  const UNLINKED = { ...MATERIAL, materialId: 7, originalFilename: '네트워크.pdf', links: [] };
+
+  const generated = (extra = {}) => ({
+    status: 'GENERATED',
+    remainingMaterialIds: [],
+    groups: [{
+      groupId: 'g1',
+      action: 'CREATE_AND_LINK',
+      existingCourseId: null,
+      proposedTitle: '네트워크',
+      reason: '본문에 과목명이 있어요',
+      defaultSelected: true,
+      notices: [],
+      matchingProjects: [],
+      members: [{
+        materialId: 7, originalFilename: '네트워크.pdf', materialType: 'SYLLABUS',
+        evidence: '네트워크', evidenceSource: 'CONTENT', evidenceVerified: true,
+      }],
+    }],
+    ...extra,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    materialStoreAPI.list.mockResolvedValue([UNLINKED]);
+    materialStoreAPI.get.mockResolvedValue(DETAIL);
+    materialStoreAPI.proposeLinks.mockResolvedValue(generated());
+  });
+
+  const openManually = async () => {
+    const user = userEvent.setup();
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+    await screen.findByText('네트워크.pdf');
+    await user.click(screen.getByRole('button', { name: /프로젝트로 정리하기/ }));
+    return user;
+  };
+
+  it('수동으로 부르면 미연결 자료 전체를 봤다고 말한다', async () => {
+    await openManually();
+
+    expect(await screen.findByText('연결 안 된 자료 1개를 확인했어요.')).toBeInTheDocument();
+    // 자동은 방금 올린 배치만 본다 — 범위가 다르므로 문구도 달라야 한다.
+    expect(screen.queryByText('방금 올린 자료에서 과목을 확인했어요.')).not.toBeInTheDocument();
+  });
+
+  it('검토하기를 눌러야 다이얼로그가 열린다 — 배너만으로는 안 열린다', async () => {
+    const user = await openManually();
+    await screen.findByText('연결 안 된 자료 1개를 확인했어요.');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '검토하기' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('수동 배너를 닫아도 세션 스위치는 그대로다 — 다시 부를 수 있다', async () => {
+    const user = await openManually();
+    await screen.findByText('연결 안 된 자료 1개를 확인했어요.');
+
+    await user.click(screen.getByRole('button', { name: '제안 닫기' }));
+    expect(screen.queryByText(/연결 안 된 자료 1개를 확인했어요/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /프로젝트로 정리하기/ }));
+    expect(await screen.findByText('연결 안 된 자료 1개를 확인했어요.')).toBeInTheDocument();
+  });
+
+  it('제안이 도는 동안 진행 중임을 알린다 — 십수 초를 조용히 기다리게 두지 않는다', async () => {
+    materialStoreAPI.upload.mockResolvedValue({ materialId: 7, extractionStatus: 'SUCCESS' });
+    materialStoreAPI.proposeLinks.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+
+    const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+    const input = container.querySelector('input[type="file"]');
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [
+        new File(['x'], '가.pdf', { type: 'application/pdf' }),
+        new File(['x'], '나.pdf', { type: 'application/pdf' }),
+      ] } });
+    });
+    await user.click(screen.getByRole('button', { name: /2개 올리기/ }));
+
+    expect(await screen.findByText('자료를 살펴보는 중')).toBeInTheDocument();
+  });
+});
