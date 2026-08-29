@@ -7386,3 +7386,227 @@ body {
   left: 0.2rem;
   color: #9ca3af;
 }
+
+/* =====================================================================
+   자료 업로드 (MaterialsView)
+
+   src/styles/workspace.css 맨 뒤에 그대로 붙이세요.
+
+   기존 .material-upload는 지우지 않습니다 — ProjectWorkspace의 UploadForm이
+   아직 그 클래스를 씁니다(그쪽은 materialType을 함께 고르는 별개 흐름).
+   ===================================================================== */
+
+/*
+  .view-head를 전역으로 flex로 바꾸지 않습니다. 다른 뷰가 전부 그 클래스를 쓰고 있어서
+  한 화면 때문에 레이아웃을 흔들 이유가 없습니다. 나누는 화면만 수식자를 붙입니다.
+*/
+.view-head-split {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 드래그 오버레이를 이 영역 안에만 띄우기 위한 기준점. */
+.materials-view { position: relative; }
+
+/* ---------- 빈 상태 = 드롭존 ---------- */
+
+/*
+  <p>를 <button> 안에 넣을 수 없어 전부 <span>입니다. div[role=button]로 만들면
+  Enter/Space와 포커스 링을 직접 구현해야 하는데, button은 공짜로 다 됩니다.
+*/
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 38px 22px;
+  border: 1.5px dashed var(--ws-border-strong);
+  border-radius: 12px;
+  background: var(--ws-surface);
+  color: var(--ws-text);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropzone:hover,
+.dropzone:focus-visible {
+  border-color: var(--ws-accent);
+  background: var(--ws-accent-soft);
+}
+
+.dropzone-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 2px;
+  border-radius: 11px;
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+}
+
+.dropzone-title { font-size: 15px; font-weight: 650; }
+.dropzone-hint { font-size: 13px; color: var(--ws-text-faint); }
+.dropzone-desc {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--ws-text-dim);
+  line-height: 1.55;
+  max-width: 46ch;
+}
+
+/* ---------- 드래그 오버레이 ---------- */
+
+/*
+  pointer-events: none이 핵심입니다. 오버레이가 포인터를 먹으면 drop 이벤트가
+  컨테이너까지 오지 않아서, 보기에는 드롭 영역인데 실제로는 아무 일도 안 일어납니다.
+*/
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--ws-accent);
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.07);
+  pointer-events: none;
+}
+
+.drop-overlay-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--ws-accent);
+  color: var(--ws-accent-text);
+  font-size: 14.5px;
+  font-weight: 650;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.1);
+}
+
+/* ---------- 고른 파일 목록 ---------- */
+
+.upload-tray {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 11px;
+  background: var(--ws-surface);
+}
+
+.upload-tray-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.upload-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 8px 11px;
+  border: 1px solid var(--ws-border);
+  border-radius: 9px;
+  background: #fcfcfd;
+  font-size: 14px;
+}
+
+.upload-item.is-rejected,
+.upload-item.is-failed { border-color: #f0c9c4; background: #fdf7f6; }
+.upload-item.is-done { border-color: #cfe6d4; background: #f8fcf9; }
+
+.upload-item-icon { flex-shrink: 0; color: var(--ws-text-faint); }
+
+.upload-item-name {
+  min-width: 0;
+  flex: 1 1 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-item-size {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--ws-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-item-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--ws-text-dim);
+}
+
+.upload-item-status.is-done { color: #2f7d4f; }
+.upload-item-status.is-problem { color: var(--ws-danger); }
+
+.upload-item-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/*
+  "파일은 저장됐다"를 말해주는 줄. 폭 전체를 차지해야 파일명 옆에 끼어들지 않습니다 —
+  이 문장을 못 보면 사용자가 같은 파일을 계속 다시 올립니다.
+*/
+.upload-item-note {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ws-text-dim);
+  line-height: 1.5;
+}
+
+.upload-tray-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ws-text-faint);
+}
+
+.upload-tray-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ws-border);
+}
+
+.upload-tray-hint {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--ws-text-faint);
+}
+
+/* App.css의 .btn-primary는 큰 폼 기준 크기라 이 줄에서는 조금 줄입니다. */
+.upload-tray-foot .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13.5px;
+}
+
+.upload-tray-foot .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
