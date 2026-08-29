@@ -806,6 +806,33 @@ export const materialStoreAPI = {
         return request(`/materials/${materialId}`, { method: 'DELETE' });
     },
 
+    /**
+     * 미연결 자료를 어느 프로젝트에 넣을지 제안받는다. 아무것도 저장하지 않는다.
+     *
+     * materialIds를 비워 보내면 미연결 자료 전체가 대상이다. 값을 주는 경로는 둘 —
+     * 방금 올린 배치, 그리고 직전 응답의 remainingMaterialIds(`남은 N개 보기`).
+     *
+     * 모델 호출 실패는 200 + status='UNAVAILABLE'로 온다. 던지는 것은 사용량 한도 초과처럼
+     * 다시 눌러도 결과가 같은 실패뿐이다.
+     */
+    proposeLinks: (materialIds) => {
+        return request('/materials/link-proposal', {
+            method: 'POST',
+            body: JSON.stringify({ materialIds: materialIds ?? [] }),
+        });
+    },
+
+    /**
+     * 승인한 묶음을 적용한다. 서버가 단일 트랜잭션으로 처리하므로 부분 적용이 없다 —
+     * 제안 응답을 그대로 돌려보내지 않고 사용자가 실제로 고친 값만 보낸다.
+     */
+    applyLinkProposal: (groups) => {
+        return request('/materials/link-proposal/apply', {
+            method: 'POST',
+            body: JSON.stringify({ groups }),
+        });
+    },
+
     /** 프로젝트에 연결. payload: { courseId, materialType } */
     addLink: (materialId, courseId, materialType) => {
         return request(`/materials/${materialId}/links`, {

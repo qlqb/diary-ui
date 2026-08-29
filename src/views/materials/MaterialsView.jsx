@@ -14,10 +14,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, Upload, Loader2, ArrowLeft, Link2, Trash2, X,
-  Plus, Check, AlertCircle, UploadCloud,
+  Plus, Check, AlertCircle, UploadCloud, Sparkles,
 } from 'lucide-react';
 import { materialStoreAPI } from '../../api/api.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
+import ProposalCard from './ProposalCard.jsx';
 import {
   MaterialType, MATERIAL_TYPE_HINT, ExtractionStatus, EXTRACTION_STATUS_LABEL, MaterialAnalysisStatus,
 } from '../../types/learning.js';
@@ -34,6 +35,23 @@ const FILTERS = [
   { key: 'recent', label: '최근 추가' },
   { key: 'unlinked', label: '연결 안 된 자료' },
 ];
+
+/**
+ * 배치 업로드 직후 자동으로 제안을 부를 최소 개수. 자동 제안의 노출 빈도를 줄이기 위한
+ * 초기값이고, 관찰된 근거는 아직 없다. 수동 진입(`프로젝트로 정리하기`)이 항상 있으므로
+ * 낮게 잡아도 잃는 것이 없다 — 실사용 중 너무 자주/드물게 뜨면 이 값을 조정한다.
+ *
+ * 실제로 "필요할 때만 뜨게" 하는 장치는 이 숫자가 아니라 §품질 게이트다(아래 참고).
+ * 배치 크기는 "제안이 있을 법하다"의 대리 지표일 뿐, 제안이 쓸 만한지는 만들어보기 전에는
+ * 모른다.
+ */
+const AUTO_LINK_PROPOSAL_MIN_MATERIALS = 2;
+
+const ProposalStatus = Object.freeze({
+  GENERATED: 'GENERATED',
+  NO_CANDIDATES: 'NO_CANDIDATES',
+  UNAVAILABLE: 'UNAVAILABLE',
+});
 
 /**
  * 업로드 제약. 서버(FileStorageService)와 같은 값을 들고 있어야 한다.
@@ -182,7 +200,9 @@ function useUploadQueue({ onBatchDone }) {
     setRunning(true);
     setSkipped(0);
 
-    let uploadedAny = false;
+    // 이번 배치에서 실제로 올라간 것만 모은다 — 연결 제안이 "방금 올린 자료"를 대상으로
+    // 삼으려면 목록 전체가 아니라 이 배치의 id를 알아야 한다.
+    const uploaded = [];
     try {
       for (;;) {
         const next = itemsRef.current.find((it) => it.state === 'staged');
@@ -191,7 +211,10 @@ function useUploadQueue({ onBatchDone }) {
         patch(next.id, { state: 'uploading', error: null });
         try {
           const res = await materialStoreAPI.upload(next.file);
-          uploadedAny = true;
+          uploaded.push({
+            materialId: res?.materialId ?? null,
+            extractionStatus: res?.extractionStatus ?? null,
+          });
           patch(next.id, { state: 'done', error: null, extractionStatus: res?.extractionStatus ?? null });
         } catch (err) {
           patch(next.id, { state: 'failed', error: err.message || '올리지 못했어요' });
@@ -202,8 +225,8 @@ function useUploadQueue({ onBatchDone }) {
       setRunning(false);
     }
 
-    if (uploadedAny) {
-      await onBatchDone();
+    if (uploaded.length > 0) {
+      await onBatchDone(uploaded);
       // 본문까지 읽힌 파일은 아래 목록에 그대로 나타나므로 대기열에서 비운다.
       // 추출이 안 된 것은 남긴다 — "저장은 됐다"는 말을 바로 그 자리에서 해줘야 한다.
       applyItems(itemsRef.current.filter(
@@ -253,7 +276,112 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const uploader = useUploadQueue({ onBatchDone: load });
+  /**
+   * 연결 제안 상태.
+   *
+   * lastProposalMaterialIds가 필요한 이유: `다시 시도`가 원래 보려던 자료로 돌아가야 한다.
+   * 이게 없으면 `남은 N개 보기`가 실패했을 때 다시 시도가 proposeLinks([])로 돌아가 최신
+   * 12개부터 다시 시작하고, 사용자는 보려던 나머지 자료로 영영 못 간다.
+   *
+   * autoProposalOffRef는 세션 범위 스위치다. 자동으로 뜬 카드를 한 번 닫았다는 것은 지금은
+   * 정리할 생각이 없다는 뜻이고, 그 뒤로 연달아 세 배치를 올려도 다시 뜨지 않아야 한다.
+   * 영구 설정으로 만들지 않는 이유는 껐다는 사실을 잊고 "왜 안 뜨지"가 되기 때문이다.
+   * 수동 버튼은 이 스위치와 무관하게 항상 동작한다.
+   */
+  const [proposal, setProposal] = useState(null);
+  const [proposalOrigin, setProposalOrigin] = useState(null);
+  const [proposalKey, setProposalKey] = useState(0);
+  const [proposalLoading, setProposalLoading] = useState(false);
+  const [proposalMessage, setProposalMessage] = useState(null);
+  const [proposalRetryable, setProposalRetryable] = useState(false);
+  const [postUploadIds, setPostUploadIds] = useState([]);
+  const lastProposalMaterialIds = useRef([]);
+  const autoProposalOffRef = useRef(false);
+
+  /** 모든 제안 요청이 지나가는 한 곳. 여기서만 "직전에 무엇을 봤는지"를 갱신한다. */
+  const requestProposal = useCallback(async (materialIds) => {
+    lastProposalMaterialIds.current = materialIds;
+    return materialStoreAPI.proposeLinks(materialIds);
+  }, []);
+
+  const showProposal = useCallback(async (materialIds, origin) => {
+    setProposalLoading(true);
+    setProposalMessage(null);
+    setProposalRetryable(false);
+    setPostUploadIds([]);
+    try {
+      const result = await requestProposal(materialIds);
+      if (result.status === ProposalStatus.NO_CANDIDATES) {
+        setProposal(null);
+        setProposalMessage('정리할 자료가 없어요');
+      } else if (result.status === ProposalStatus.UNAVAILABLE) {
+        setProposal(null);
+        setProposalMessage('지금은 제안을 만들지 못했어요');
+        setProposalRetryable(true);
+      } else if ((result.groups ?? []).length === 0) {
+        setProposal(null);
+        setProposalMessage('지금은 묶어서 제안할 만한 게 없어요');
+      } else {
+        setProposal(result);
+        setProposalOrigin(origin);
+        setProposalKey((prev) => prev + 1);
+      }
+    } catch (err) {
+      // 한도 초과처럼 다시 눌러도 결과가 같은 실패다 — 안내만 하고 다시 시도를 주지 않는다.
+      setProposal(null);
+      setProposalMessage(err.message || '지금은 제안을 만들지 못했어요');
+    } finally {
+      setProposalLoading(false);
+    }
+  }, [requestProposal]);
+
+  const closeProposal = useCallback(() => {
+    if (proposalOrigin === 'auto') {
+      autoProposalOffRef.current = true;
+    }
+    setProposal(null);
+    setProposalOrigin(null);
+  }, [proposalOrigin]);
+
+  /**
+   * 자동 경로. 사용자가 요청하지 않은 것이므로 보여줄 게 확실할 때만 뜨고, 아니면 아무 일도
+   * 없었던 것처럼 지나간다 — 실패도 표시하지 않는다.
+   *
+   * ★ 품질 게이트: status가 GENERATED여도 켤 그룹이 하나도 없으면 띄우지 않는다. 체크가
+   *   하나도 안 켜진 카드는 "당신이 알아서 다 정하세요"라는 뜻이고, 그게 정확히 성가신
+   *   카드다. 새 임계값을 만들지 않고 서버가 이미 계산한 defaultSelected를 그대로 쓴다.
+   *   버리는 것이 아니다 — 자료는 `연결 안 된 자료`에 그대로 남는다.
+   */
+  const handleBatchDone = useCallback(async (uploaded) => {
+    await load();
+
+    const ready = (uploaded ?? []).filter(
+        (u) => u.materialId != null && u.extractionStatus === ExtractionStatus.SUCCESS);
+    if (ready.length === 0) return;
+
+    const materialIds = ready.map((u) => u.materialId);
+    if (ready.length < AUTO_LINK_PROPOSAL_MIN_MATERIALS) {
+      // 자동으로 부르지 않는다. 대신 방금 올린 자료로 바로 들어갈 통로만 남긴다.
+      setPostUploadIds(materialIds);
+      return;
+    }
+    if (autoProposalOffRef.current) return;
+
+    try {
+      const result = await requestProposal(materialIds);
+      if (result.status !== ProposalStatus.GENERATED) return;
+      if (!(result.groups ?? []).some((g) => g.defaultSelected)) return;
+      setProposal(result);
+      setProposalOrigin('auto');
+      setProposalKey((prev) => prev + 1);
+      setProposalMessage(null);
+      setProposalRetryable(false);
+    } catch {
+      // 자동 경로는 어떤 실패도 표시하지 않는다(사용량 한도 초과 포함).
+    }
+  }, [load, requestProposal]);
+
+  const uploader = useUploadQueue({ onBatchDone: handleBatchDone });
   const { addFiles } = uploader;
 
   const visible = useMemo(() => {
@@ -357,6 +485,58 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
             onClear={uploader.clearSettled}
         />
 
+        {/*
+          배치가 자동 임계값에 못 미치면 제안을 부르지 않는다. 대신 방금 올린 자료로 바로
+          들어갈 통로만 한 줄 남긴다 — 모델을 부르는 것은 여기서도 사용자가 누른 뒤다.
+        */}
+        {postUploadIds.length > 0 && !proposal && (
+            <p className="proposal-inline-hint">
+              방금 올린 자료를 프로젝트에 연결할까요?
+              <button type="button" className="btn-ghost btn-sm" disabled={proposalLoading}
+                      onClick={() => showProposal(postUploadIds, 'manual')}>
+                <Sparkles size={13} /> 프로젝트에 연결
+              </button>
+              <button type="button" className="icon-btn" aria-label="이 안내 닫기"
+                      onClick={() => setPostUploadIds([])}>
+                <X size={13} />
+              </button>
+            </p>
+        )}
+
+        {proposal && (
+            <ProposalCard
+                key={proposalKey}
+                proposal={proposal}
+                loading={proposalLoading}
+                onClose={closeProposal}
+                onShowRemaining={(ids) => showProposal(ids, 'manual')}
+                onApplied={async () => {
+                  setProposal(null);
+                  setProposalOrigin(null);
+                  // 이 자료들은 이제 연결됐다 — 같은 id로 다시 물으면 후보가 0개다.
+                  lastProposalMaterialIds.current = [];
+                  await load();
+                  await onProjectsChanged?.();
+                }}
+            />
+        )}
+
+        {proposalMessage && (
+            <p className="proposal-inline-hint">
+              {proposalMessage}
+              {proposalRetryable && (
+                  <button type="button" className="btn-ghost btn-sm" disabled={proposalLoading}
+                          onClick={() => showProposal(lastProposalMaterialIds.current, 'manual')}>
+                    다시 시도
+                  </button>
+              )}
+              <button type="button" className="icon-btn" aria-label="이 안내 닫기"
+                      onClick={() => setProposalMessage(null)}>
+                <X size={13} />
+              </button>
+            </p>
+        )}
+
         {error && <p className="view-error">{error}</p>}
 
         <div className="material-filters" role="tablist" aria-label="자료 필터">
@@ -372,6 +552,16 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                 {f.label}
               </button>
           ))}
+          {/* 수동 진입. 자동 제안을 껐어도 이 버튼은 항상 동작한다. */}
+          {filter === 'unlinked' && visible.length > 0 && (
+              <button type="button" className="btn-ghost btn-sm material-filters-action"
+                      disabled={proposalLoading}
+                      onClick={() => showProposal([], 'manual')}>
+                {proposalLoading
+                    ? <><Loader2 size={13} className="spin" /> 살펴보는 중</>
+                    : <><Sparkles size={13} /> 프로젝트로 정리하기</>}
+              </button>
+          )}
         </div>
 
         {loading && materials.length === 0 ? (

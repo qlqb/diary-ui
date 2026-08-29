@@ -7610,3 +7610,203 @@ body {
 }
 
 .upload-tray-foot .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ---------- 자료 연결 제안 카드 ---------- */
+
+/*
+  앱에서 세 번째 검토 카드입니다(MaterialReview, AI 패널 proposal 카드에 이어). 공통
+  컴포넌트를 아직 뽑지 않는 대신 클래스 이름과 구조를 upload-tray에 의도적으로 맞춰 둡니다 —
+  세 번째가 실제로 생겼을 때 "같은 부분과 다른 부분"이 코드로 드러나 있어야 추출이
+  기계적인 작업이 됩니다.
+*/
+.proposal-card {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--ws-accent);
+  border-radius: 11px;
+  background: var(--ws-surface);
+}
+
+.proposal-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.proposal-card-title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.proposal-card-empty { margin: 0 0 8px; }
+
+.proposal-group-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/*
+  꺼진 묶음이 기본입니다. 근거가 약하면 서버가 defaultSelected를 false로 내려보내고,
+  화면은 그 판단을 그대로 씁니다 — 여기서 다시 계산하지 않습니다.
+*/
+.proposal-group {
+  padding: 10px 11px;
+  border: 1px solid var(--ws-border);
+  border-radius: 9px;
+  background: #fcfcfd;
+}
+
+.proposal-group.is-selected {
+  border-color: var(--ws-accent);
+  background: var(--ws-accent-soft);
+}
+
+.proposal-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.proposal-group-label { flex: 1; }
+
+.proposal-title-input {
+  width: 100%;
+  margin-top: 7px;
+}
+
+.proposal-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ws-text-dim);
+}
+
+.proposal-notice svg { flex-shrink: 0; margin-top: 2px; }
+
+.proposal-destinations {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0 19px;
+}
+
+.proposal-destination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.proposal-member-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0 0 0 19px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.proposal-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+}
+
+.proposal-member-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 근거 한 줄. 폭 전체를 차지해야 파일명 옆에 끼어들지 않습니다. */
+.proposal-member-note {
+  flex-basis: 100%;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ws-text-faint);
+}
+
+.proposal-group-reason {
+  margin: 8px 0 0 19px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ws-text-dim);
+}
+
+.proposal-leave { margin-top: 10px; }
+
+.proposal-leave-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13.5px;
+  color: var(--ws-text-dim);
+  cursor: pointer;
+}
+
+.proposal-leave-caret { transition: transform 0.12s ease; }
+.proposal-leave-caret.is-open { transform: rotate(90deg); }
+
+.proposal-card-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--ws-text-faint);
+}
+
+.proposal-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ws-border);
+}
+
+.proposal-card-later { margin-left: auto; }
+
+.proposal-card-foot .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13.5px;
+}
+
+.proposal-card-foot .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* 카드를 띄우지 않는 경우의 한 줄 안내(빈 결과, 실패, 배치가 작을 때의 통로). */
+.proposal-inline-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  color: var(--ws-text-dim);
+}
+
+.material-filters-action { margin-left: auto; }
