@@ -47,6 +47,19 @@ const FILTERS = [
  */
 const AUTO_LINK_PROPOSAL_MIN_MATERIALS = 2;
 
+/**
+ * 이 호출이 어느 경로에서 왔는지. 서버 로그에만 쓰이고 동작을 바꾸지 않는다.
+ *
+ * console.info로 남기지 않는 이유: 개발자 도구를 열어둬야만 남아서 며칠 단위 관찰에
+ * 쓸 수 없다. 자동 제안이 실제로 카드로 이어졌는지는 서버 로그 한 줄로 세야 한다.
+ */
+const ProposalTrigger = Object.freeze({
+  AUTO: 'AUTO',
+  MANUAL: 'MANUAL',
+  REMAINING: 'REMAINING',
+  RETRY: 'RETRY',
+});
+
 const ProposalStatus = Object.freeze({
   GENERATED: 'GENERATED',
   NO_CANDIDATES: 'NO_CANDIDATES',
@@ -299,18 +312,18 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   const autoProposalOffRef = useRef(false);
 
   /** 모든 제안 요청이 지나가는 한 곳. 여기서만 "직전에 무엇을 봤는지"를 갱신한다. */
-  const requestProposal = useCallback(async (materialIds) => {
+  const requestProposal = useCallback(async (materialIds, trigger) => {
     lastProposalMaterialIds.current = materialIds;
-    return materialStoreAPI.proposeLinks(materialIds);
+    return materialStoreAPI.proposeLinks(materialIds, trigger);
   }, []);
 
-  const showProposal = useCallback(async (materialIds, origin) => {
+  const showProposal = useCallback(async (materialIds, origin, trigger) => {
     setProposalLoading(true);
     setProposalMessage(null);
     setProposalRetryable(false);
     setPostUploadIds([]);
     try {
-      const result = await requestProposal(materialIds);
+      const result = await requestProposal(materialIds, trigger);
       if (result.status === ProposalStatus.NO_CANDIDATES) {
         setProposal(null);
         setProposalMessage('정리할 자료가 없어요');
@@ -368,7 +381,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     if (autoProposalOffRef.current) return;
 
     try {
-      const result = await requestProposal(materialIds);
+      const result = await requestProposal(materialIds, ProposalTrigger.AUTO);
       if (result.status !== ProposalStatus.GENERATED) return;
       if (!(result.groups ?? []).some((g) => g.defaultSelected)) return;
       setProposal(result);
@@ -493,7 +506,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
             <p className="proposal-inline-hint">
               방금 올린 자료를 프로젝트에 연결할까요?
               <button type="button" className="btn-ghost btn-sm" disabled={proposalLoading}
-                      onClick={() => showProposal(postUploadIds, 'manual')}>
+                      onClick={() => showProposal(postUploadIds, 'manual', ProposalTrigger.MANUAL)}>
                 <Sparkles size={13} /> 프로젝트에 연결
               </button>
               <button type="button" className="icon-btn" aria-label="이 안내 닫기"
@@ -509,7 +522,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                 proposal={proposal}
                 loading={proposalLoading}
                 onClose={closeProposal}
-                onShowRemaining={(ids) => showProposal(ids, 'manual')}
+                onShowRemaining={(ids) => showProposal(ids, 'manual', ProposalTrigger.REMAINING)}
                 onApplied={async () => {
                   setProposal(null);
                   setProposalOrigin(null);
@@ -526,7 +539,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
               {proposalMessage}
               {proposalRetryable && (
                   <button type="button" className="btn-ghost btn-sm" disabled={proposalLoading}
-                          onClick={() => showProposal(lastProposalMaterialIds.current, 'manual')}>
+                          onClick={() => showProposal(lastProposalMaterialIds.current, 'manual', ProposalTrigger.RETRY)}>
                     다시 시도
                   </button>
               )}
@@ -556,7 +569,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
           {filter === 'unlinked' && visible.length > 0 && (
               <button type="button" className="btn-ghost btn-sm material-filters-action"
                       disabled={proposalLoading}
-                      onClick={() => showProposal([], 'manual')}>
+                      onClick={() => showProposal([], 'manual', ProposalTrigger.MANUAL)}>
                 {proposalLoading
                     ? <><Loader2 size={13} className="spin" /> 살펴보는 중</>
                     : <><Sparkles size={13} /> 프로젝트로 정리하기</>}

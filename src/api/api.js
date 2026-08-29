@@ -814,11 +814,15 @@ export const materialStoreAPI = {
      *
      * 모델 호출 실패는 200 + status='UNAVAILABLE'로 온다. 던지는 것은 사용량 한도 초과처럼
      * 다시 눌러도 결과가 같은 실패뿐이다.
+     *
+     * trigger는 이 호출이 어느 경로에서 왔는지를 서버 로그에 남기기 위한 것이다. 동작을
+     * 바꾸지 않는다 — 서버가 이걸로 카드를 띄울지 판정하지도 않는다. 자동 호출이
+     * selectable=0으로 끝났는지를 로그만으로 세려면 서버가 경로를 알아야 한다.
      */
-    proposeLinks: (materialIds) => {
+    proposeLinks: (materialIds, trigger) => {
         return request('/materials/link-proposal', {
             method: 'POST',
-            body: JSON.stringify({ materialIds: materialIds ?? [] }),
+            body: JSON.stringify({ materialIds: materialIds ?? [], trigger }),
         });
     },
 
