@@ -17,6 +17,12 @@ const verifiedMember = (materialId, filename) => ({
   evidenceVerified: true,
 });
 
+/** 그룹 체크박스만. 첫 번째는 헤더의 `전체 선택`이다. */
+const groupBoxes = () => screen.getAllByRole('checkbox').slice(1);
+
+/** 접힌 줄을 펼친다. 제목은 이제 텍스트라 편집하려면 먼저 펼쳐야 한다. */
+const expand = (user, title) => user.click(screen.getByRole('button', { name: `${title} 자세히` }));
+
 const proposal = {
   status: 'GENERATED',
   remainingMaterialIds: [],
@@ -80,11 +86,14 @@ describe('ProposalDialog - 자료 연결 제안 검토', () => {
   it('체크 초기값은 서버의 defaultSelected를 그대로 쓴다 — 프론트가 재계산하지 않는다', () => {
     render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
 
-    const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes).toHaveLength(2); // LEAVE 묶음에는 체크박스가 없다
-    expect(checkboxes[0]).toBeChecked();
-    expect(checkboxes[1]).not.toBeChecked();
+    const boxes = groupBoxes();
+    expect(boxes).toHaveLength(2); // LEAVE 묶음에는 체크박스가 없다
+    expect(boxes[0]).toBeChecked();
+    expect(boxes[1]).not.toBeChecked();
     expect(screen.getByRole('button', { name: /선택 항목 연결하기 \(1\)/ })).toBeEnabled();
+    // 전체 선택은 현재 상태를 반영한다 — 처음부터 전부 켜놓지 않는다.
+    expect(screen.getByLabelText(/전체 선택/)).toHaveProperty('indeterminate', true);
+    expect(screen.getByText('(1/2)')).toBeInTheDocument();
   });
 
   it('판단하지 못한 자료를 숨기지 않는다 — LEAVE 묶음으로 접어서 보여준다', async () => {
@@ -102,6 +111,7 @@ describe('ProposalDialog - 자료 연결 제안 검토', () => {
     const user = userEvent.setup();
     render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
 
+    await expand(user, '운영체제');
     const titleInput = screen.getByDisplayValue('운영체제');
     await user.clear(titleInput);
     await user.type(titleInput, '운영체제 2026');
@@ -125,9 +135,10 @@ describe('ProposalDialog - 자료 연결 제안 검토', () => {
     render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
 
     // 근거가 약해 꺼진 채로 왔으므로 사용자가 직접 켠다.
-    await user.click(screen.getAllByRole('checkbox')[1]);
+    await user.click(groupBoxes()[1]);
+    // notices가 붙은 묶음은 펼친 채로 온다 — 확인이 필요한 것을 접어두지 않는다.
     await user.click(screen.getByRole('radio', { name: /기존 “자료구조”에 붙이기/ }));
-    await user.click(screen.getAllByRole('checkbox')[0]); // 첫 묶음은 이번엔 끈다
+    await user.click(groupBoxes()[0]); // 첫 묶음은 이번엔 끈다
 
     await user.click(screen.getByRole('button', { name: /선택 항목 연결하기 \(1\)/ }));
 
@@ -140,8 +151,12 @@ describe('ProposalDialog - 자료 연결 제안 검토', () => {
     ]);
   });
 
-  it('근거가 약한 자료에는 실패 프레이밍 대신 확신도를 적는다', () => {
+  it('근거가 약한 자료에는 실패 프레이밍 대신 확신도를 적는다', async () => {
+    const user = userEvent.setup();
     render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    // 근거는 `왜 이렇게 추천했나요?` 안에 한 번만 있다.
+    await user.click(screen.getAllByRole('button', { name: /왜 이렇게 추천했나요/ })[0]);
 
     expect(screen.getByText('파일명만 보고 고른 이름이에요')).toBeInTheDocument();
     expect(screen.queryByText(/실패|부족|미분류/)).not.toBeInTheDocument();
@@ -151,7 +166,7 @@ describe('ProposalDialog - 자료 연결 제안 검토', () => {
     const user = userEvent.setup();
     render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
 
-    await user.click(screen.getAllByRole('checkbox')[0]);
+    await user.click(groupBoxes()[0]);
 
     expect(screen.getByRole('button', { name: /선택 항목 연결하기 \(0\)/ })).toBeDisabled();
   });
@@ -205,9 +220,21 @@ describe('ProposalDialog - 따로 나누기', () => {
 
   const splitButton = () => screen.queryByRole('button', { name: /따로 나누기/ });
 
-  it('멤버가 둘 이상인 CREATE_AND_LINK에만 따로 나누기가 보인다', () => {
+  it('멤버가 둘 이상인 CREATE_AND_LINK에만 따로 나누기가 보인다', async () => {
+    const user = userEvent.setup();
     render(<ProposalDialog proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    // 근거가 충분한 묶음은 접힌 채로 온다 — 펼쳐야 손댈 것이 보인다.
+    expect(splitButton()).not.toBeInTheDocument();
+    await expand(user, '웹응용소프트웨어공학과 과목');
     expect(splitButton()).toBeInTheDocument();
+  });
+
+  it('접힌 줄은 파일 개수를 요약으로 말한다 — 한 줄에 여러 파일이 있다는 게 보여야 한다', () => {
+    render(<ProposalDialog proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByText('→ 새 프로젝트 · 파일 3개')).toBeInTheDocument();
+    expect(screen.getByText('웹응용소프트웨어공학과 과목')).toBeInTheDocument();
   });
 
   it('멤버가 하나면 따로 나누기가 없다 — 쪼갤 것이 없다', () => {
@@ -234,11 +261,12 @@ describe('ProposalDialog - 따로 나누기', () => {
     const user = userEvent.setup();
     render(<ProposalDialog proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
 
+    await expand(user, '웹응용소프트웨어공학과 과목');
     await user.click(splitButton());
 
-    const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes).toHaveLength(3);
-    expect(checkboxes.every((box) => !box.checked)).toBe(true);
+    const boxes = groupBoxes();
+    expect(boxes).toHaveLength(3);
+    expect(boxes.every((box) => !box.checked)).toBe(true);
     expect(screen.getByDisplayValue('스마트앱프로젝트')).toBeInTheDocument();
     expect(screen.getByDisplayValue('웹서버프로그래밍')).toBeInTheDocument();
     expect(screen.getByDisplayValue('빅데이터분석')).toBeInTheDocument();
@@ -249,10 +277,11 @@ describe('ProposalDialog - 따로 나누기', () => {
     const user = userEvent.setup();
     render(<ProposalDialog proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
 
+    await expand(user, '웹응용소프트웨어공학과 과목');
     await user.selectOptions(
         screen.getByLabelText('스마트앱프로젝트.pdf의 자료 역할'), 'TEXTBOOK_TOC');
     await user.click(splitButton());
-    await user.click(screen.getAllByRole('checkbox')[0]);
+    await user.click(groupBoxes()[0]);
     await user.click(screen.getByRole('button', { name: /선택 항목 연결하기 \(1\)/ }));
 
     expect(materialStoreAPI.applyLinkProposal).toHaveBeenCalledWith([
@@ -268,22 +297,23 @@ describe('ProposalDialog - 따로 나누기', () => {
     const user = userEvent.setup();
     render(<ProposalDialog proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
 
+    await expand(user, '웹응용소프트웨어공학과 과목');
     await user.click(splitButton());
-    expect(screen.queryByDisplayValue('웹응용소프트웨어공학과 과목')).not.toBeInTheDocument();
+    expect(screen.queryByText('웹응용소프트웨어공학과 과목')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /되돌리기/ }));
 
-    expect(screen.getByDisplayValue('웹응용소프트웨어공학과 과목')).toBeInTheDocument();
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
-    expect(splitButton()).toBeInTheDocument();
+    expect(screen.getByText('웹응용소프트웨어공학과 과목')).toBeInTheDocument();
+    expect(groupBoxes()).toHaveLength(1);
   });
 
   it('켜진 묶음 둘이 같은 이름이면 안내만 하고 적용은 막지 않는다', async () => {
     const user = userEvent.setup();
     render(<ProposalDialog proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
 
+    await expand(user, '웹응용소프트웨어공학과 과목');
     await user.click(splitButton());
-    const [first, second] = screen.getAllByRole('checkbox');
+    const [first, second] = groupBoxes();
     await user.click(first);
     await user.click(second);
 
@@ -329,6 +359,7 @@ describe('ProposalDialog - 다이얼로그 동작', () => {
     const onClose = vi.fn();
     render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={onClose} />);
 
+    await expand(user, '운영체제');
     const titleInput = screen.getByDisplayValue('운영체제');
     await user.click(titleInput);
     await user.keyboard('{Escape}');
@@ -372,5 +403,76 @@ describe('ProposalDialog - 다이얼로그 동작', () => {
     expect(document.body.style.overflow).toBe('hidden');
     unmount();
     expect(document.body.style.overflow).toBe('');
+  });
+});
+
+/**
+ * 접힘 기본값과 전체 선택. 여기가 이번 재구성의 핵심이다 — 전부 잘 잡힌 날에는 모두
+ * 접혀서 여러 줄이 한 화면에 들어오고, 잘 안 잡히는 날에는 확인할 것이 펼쳐진다.
+ */
+describe('ProposalDialog - 접기와 전체 선택', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    materialStoreAPI.applyLinkProposal.mockResolvedValue({ createdProjects: [], linkedMaterialCount: 0 });
+  });
+
+  const body = (title) => document.getElementById(
+      `proposal-group-body-${title}`);
+
+  it('근거가 충분한 묶음은 접혀 있다', () => {
+    render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '운영체제 자세히' }))
+        .toHaveAttribute('aria-expanded', 'false');
+    expect(body('g1')).toBeNull();
+  });
+
+  it('체크가 꺼진 묶음은 펼친 채로 온다 — 접어두면 못 보고 지나간다', () => {
+    render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    // g2는 defaultSelected=false이고 notices도 붙어 있다.
+    expect(screen.getByRole('button', { name: '자료구조 자세히' }))
+        .toHaveAttribute('aria-expanded', 'true');
+    expect(body('g2')).not.toBeNull();
+  });
+
+  it('수정을 누르면 그 자리에서 펼쳐진다', async () => {
+    const user = userEvent.setup();
+    render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    await user.click(screen.getAllByRole('button', { name: '수정' })[0]);
+
+    expect(screen.getByDisplayValue('운영체제')).toBeInTheDocument();
+  });
+
+  it('전체 선택을 누르면 전부 켜지고, 다시 누르면 전부 꺼진다', async () => {
+    const user = userEvent.setup();
+    render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    const selectAll = screen.getByLabelText(/전체 선택/);
+    expect(selectAll).toHaveProperty('indeterminate', true);
+
+    await user.click(selectAll);
+    expect(groupBoxes().every((b) => b.checked)).toBe(true);
+    expect(screen.getByText('(2/2)')).toBeInTheDocument();
+
+    await user.click(selectAll);
+    expect(groupBoxes().every((b) => !b.checked)).toBe(true);
+    expect(screen.getByText('(0/2)')).toBeInTheDocument();
+  });
+
+  it('reason과 evidence가 접기 안에 한 번씩만 나온다', async () => {
+    const user = userEvent.setup();
+    render(<ProposalDialog proposal={proposal} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    // 펼치기 전에는 근거가 화면에 없다 — 전에는 밖에 둘 다 나와서 같은 말을 두 번 했다.
+    expect(screen.queryByText(/두 자료 모두 첫 페이지에/)).not.toBeInTheDocument();
+
+    await expand(user, '운영체제');
+    await user.click(screen.getAllByRole('button', { name: /왜 이렇게 추천했나요/ })[0]);
+
+    expect(screen.getAllByText(/두 자료 모두 첫 페이지에/)).toHaveLength(1);
+    // 묶음 제목 하나 + 파일 둘의 evidence 원문. 파일마다 한 번씩이지 중복이 아니다.
+    expect(screen.getAllByText('운영체제')).toHaveLength(3);
   });
 });

@@ -69,6 +69,21 @@ function memberNote(member) {
   return '제안의 근거를 확인하지 못했어요';
 }
 
+/** 이 묶음이 어디로 가는지. 접힌 줄의 제목이자 라벨이다. */
+function destinationTitle(group) {
+  if (group.action === ProposalAction.LINK_EXISTING) return group.existingCourseTitle ?? '기존 프로젝트';
+  return group.proposedTitle || '이름 없음';
+}
+
+/** 접힌 줄의 요약. 파일 개수를 여기서 말해야 한 줄에 여러 파일이 있다는 게 보인다. */
+function summaryLine(group) {
+  const files = `파일 ${group.members.length}개`;
+  if (group.action === ProposalAction.LINK_EXISTING) {
+    return `→ ${group.existingCourseTitle ?? '기존 프로젝트'} · ${files}`;
+  }
+  return `→ 새 프로젝트 · ${files}`;
+}
+
 export default function ProposalDialog({
   proposal,
   onApplied,
@@ -101,6 +116,21 @@ export default function ProposalDialog({
       g.groupId,
       Object.fromEntries(g.members.map((m) => [m.materialId, m.materialType ?? MaterialType.OTHER])),
     ])));
+  /*
+    접힘 기본값. 체크가 꺼져 있거나 확인할 것이 붙은 묶음은 펼친 채로 둔다 — 그게 바로
+    사용자가 봐야 하는 것들이고, 접어두면 못 보고 지나간다(v6 §11.3의 5번과 같은 이유).
+
+    전부 잘 잡힌 날에는 모두 접혀서 여러 줄이 한 화면에 들어온다. 잘 안 잡히는 날이
+    이 규칙의 시험대다.
+  */
+  const [expanded, setExpanded] = useState(() =>
+    Object.fromEntries(actionable.map((g) => [
+      g.groupId,
+      !g.defaultSelected || (g.notices ?? []).length > 0,
+    ])));
+  /** 그룹별 `왜 이렇게 추천했나요?` 접기. */
+  const [reasonOpen, setReasonOpen] = useState({});
+  const selectAllRef = useRef(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState(null);
@@ -139,6 +169,11 @@ export default function ProposalDialog({
     setSelected((prev) => ({
       ...prev,
       ...Object.fromEntries(parts.map((p) => [p.groupId, false])),
+    }));
+    // 쪼갠 묶음은 체크가 꺼진 채로 온다 — 확인이 필요한 것은 펼쳐 둔다는 규칙이 그대로 적용된다.
+    setExpanded((prev) => ({
+      ...prev,
+      ...Object.fromEntries(parts.map((p) => [p.groupId, true])),
     }));
     setTitles((prev) => ({
       ...prev,
@@ -216,6 +251,26 @@ export default function ProposalDialog({
   };
 
   const busy = applying || loading;
+
+  /*
+    전체 선택은 현재 상태를 반영하는 표시이지 기본값이 아니다. 처음부터 전부 켜놓지 않는다 —
+    (4/6)처럼 숫자가 보이면 사용자가 "왜 2개는 꺼져 있지" 하고 확인하게 되고, 그게 의도다.
+  */
+  const selectedCount = selectedGroups.length;
+  const allSelected = actionable.length > 0 && selectedCount === actionable.length;
+  const noneSelected = selectedCount === 0;
+
+  // React는 indeterminate를 JSX 속성으로 받지 않는다 — DOM에 직접 설정해야 한다.
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = !allSelected && !noneSelected;
+    }
+  }, [allSelected, noneSelected]);
+
+  const toggleAll = () => {
+    const next = !allSelected;
+    setSelected(Object.fromEntries(actionable.map((g) => [g.groupId, next])));
+  };
 
   const dialogRef = useRef(null);
   const titleRef = useRef(null);
@@ -309,48 +364,94 @@ export default function ProposalDialog({
         <p className="view-dim proposal-dialog-empty">지금은 묶어서 제안할 만한 게 없어요.</p>
       )}
 
+      {actionable.length > 0 && (
+        <div className="proposal-select-all">
+          <label className="proposal-select-all-label">
+            <input
+              type="checkbox"
+              ref={selectAllRef}
+              checked={allSelected}
+              disabled={busy}
+              onChange={toggleAll}
+            />
+            전체 선택 <span className="proposal-select-all-count">({selectedCount}/{actionable.length})</span>
+          </label>
+          <button type="button" className="proposal-select-all-clear" disabled={busy || noneSelected}
+                  onClick={() => setSelected({})}>
+            선택 해제
+          </button>
+        </div>
+      )}
+
       <ul className="proposal-group-list">
         {actionable.map((group) => {
           const destination = destinations[group.groupId] ?? CREATE_NEW;
           const isNew = group.action === ProposalAction.CREATE_AND_LINK && destination === CREATE_NEW;
           return (
-            <li key={group.groupId} className={`proposal-group${selected[group.groupId] ? ' is-selected' : ''}`}>
-              <label className="proposal-group-head">
+            <li
+              key={group.groupId}
+              className={`proposal-group ${
+                group.defaultSelected && (group.notices ?? []).length === 0 ? 'is-confirmed' : 'is-review'}`}
+            >
+              {/*
+                한 줄 = 한 제안 그룹이다. 파일 하나가 아니다 — 두 파일이 한 프로젝트로
+                묶이면 한 줄에 파일 두 개다. 파일 단위로 줄을 만들면 그 묶음을 표현할
+                수 없고 `따로 나누기`가 붙을 자리도 없어진다.
+              */}
+              <div className="proposal-group-head">
                 <input
                   type="checkbox"
                   checked={!!selected[group.groupId]}
                   disabled={busy}
+                  aria-label={`${destinationTitle(group)} 선택`}
                   onChange={(e) =>
                     setSelected((prev) => ({ ...prev, [group.groupId]: e.target.checked }))}
                 />
-                <span className="proposal-group-label">
-                  {group.action === ProposalAction.LINK_EXISTING ? (
-                    <>기존 <strong>{group.existingCourseTitle}</strong>에 연결</>
-                  ) : isNew ? (
-                    <>새 프로젝트를 만들고 연결</>
-                  ) : (
-                    <>기존 프로젝트에 연결</>
-                  )}
+                <span className="proposal-group-main">
+                  {/* 접힌 줄의 제목은 텍스트다. 대부분 고치지 않으므로 입력 박스를 늘 열어두지 않는다. */}
+                  <span className="proposal-group-title">{destinationTitle(group)}</span>
+                  <span className="proposal-group-summary">{summaryLine(group)}</span>
                 </span>
-              </label>
-
-              {group.action === ProposalAction.CREATE_AND_LINK && isNew && (
-                <input
-                  type="text"
-                  className="learning-input proposal-title-input"
-                  value={titles[group.groupId] ?? ''}
-                  disabled={busy}
-                  aria-label="새 프로젝트 이름"
-                  onChange={(e) =>
-                    setTitles((prev) => ({ ...prev, [group.groupId]: e.target.value }))}
-                />
-              )}
+                <button type="button" className="proposal-group-edit" disabled={busy}
+                        onClick={() => setExpanded((prev) => ({ ...prev, [group.groupId]: true }))}>
+                  수정
+                </button>
+                <button
+                  type="button"
+                  className="proposal-group-toggle"
+                  aria-expanded={!!expanded[group.groupId]}
+                  aria-controls={`proposal-group-body-${group.groupId}`}
+                  aria-label={`${destinationTitle(group)} 자세히`}
+                  onClick={() => setExpanded((prev) => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}
+                >
+                  <ChevronRight size={14}
+                    className={expanded[group.groupId] ? 'proposal-caret is-open' : 'proposal-caret'} />
+                </button>
+              </div>
 
               {(group.notices ?? []).map((notice) => (
                 <p key={notice} className="proposal-notice">
                   <AlertCircle size={13} /> {notice}
                 </p>
               ))}
+
+              {expanded[group.groupId] && (
+              <div className="proposal-group-body" id={`proposal-group-body-${group.groupId}`}>
+
+              {group.action === ProposalAction.CREATE_AND_LINK && isNew && (
+                <label className="proposal-field">
+                  <span className="proposal-field-label">프로젝트명</span>
+                  <input
+                    type="text"
+                    className="learning-input proposal-title-input"
+                    value={titles[group.groupId] ?? ''}
+                    disabled={busy}
+                    aria-label="새 프로젝트 이름"
+                    onChange={(e) =>
+                      setTitles((prev) => ({ ...prev, [group.groupId]: e.target.value }))}
+                  />
+                </label>
+              )}
 
               {/*
                 동명 경고가 붙은 묶음은 existingCourseId가 없다. 프론트가 제목으로 프로젝트를
@@ -397,21 +498,48 @@ export default function ProposalDialog({
                       label={`${member.originalFilename}의 자료 역할`}
                       onChange={(t) => setType(group.groupId, member.materialId, t)}
                     />
-                    <span className="proposal-member-note">{memberNote(member)}</span>
                   </li>
                 ))}
               </ul>
 
-              {group.reason && <p className="proposal-group-reason">↳ {group.reason}</p>}
-
               {/*
-                쪼갠 묶음의 제목은 파일명에서 나온 추정값이라 그렇다고 말해준다.
-                멤버의 evidenceSource는 건드리지 않았으므로 근거 줄은 그대로 남는다 —
-                여기서 바뀐 것은 제목이지 근거가 아니다.
+                reason과 evidence를 접기 안에 한 번씩만 둔다. 전에는 둘 다 밖에 나와서
+                사실상 같은 말을 두 번 했다.
               */}
-              {group.splitFrom && (
-                <p className="proposal-group-reason">↳ 파일명에서 가져온 이름이에요</p>
-              )}
+              <div className="proposal-why">
+                <button
+                  type="button"
+                  className="proposal-why-toggle"
+                  aria-expanded={!!reasonOpen[group.groupId]}
+                  aria-controls={`proposal-why-${group.groupId}`}
+                  onClick={() => setReasonOpen((prev) => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}
+                >
+                  왜 이렇게 추천했나요?
+                  <ChevronRight size={13}
+                    className={reasonOpen[group.groupId] ? 'proposal-caret is-open' : 'proposal-caret'} />
+                </button>
+                {reasonOpen[group.groupId] && (
+                  <div className="proposal-why-body" id={`proposal-why-${group.groupId}`}>
+                    {group.reason && <p className="proposal-group-reason">{group.reason}</p>}
+                    {/*
+                      쪼갠 묶음의 제목은 파일명에서 나온 추정값이라 그렇다고 말해준다.
+                      멤버의 evidenceSource는 건드리지 않았으므로 파일별 근거는 그대로다 —
+                      여기서 바뀐 것은 제목이지 근거가 아니다.
+                    */}
+                    {group.splitFrom && (
+                      <p className="proposal-group-reason">파일명에서 가져온 이름이에요</p>
+                    )}
+                    <ul className="proposal-why-list">
+                      {group.members.map((member) => (
+                        <li key={member.materialId} className="proposal-why-item">
+                          <span className="proposal-why-file">{member.originalFilename}</span>
+                          <span className="proposal-member-note">{memberNote(member)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
 
               {/*
                 잘못 묶였을 때 사용자가 그 자리에서 푸는 길. LINK_EXISTING에는 붙이지 않는다 —
@@ -431,6 +559,8 @@ export default function ProposalDialog({
                         disabled={busy} onClick={() => undoSplit(group.splitFrom)}>
                   <Undo2 size={13} /> 되돌리기
                 </button>
+              )}
+              </div>
               )}
             </li>
           );
