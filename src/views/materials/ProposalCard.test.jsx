@@ -156,3 +156,142 @@ describe('ProposalCard - 자료 연결 제안 검토', () => {
     expect(screen.getByRole('button', { name: /0개 프로젝트 정리/ })).toBeDisabled();
   });
 });
+
+describe('ProposalCard - 따로 나누기', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    materialStoreAPI.applyLinkProposal.mockResolvedValue({ createdProjects: [], linkedMaterialCount: 0 });
+  });
+
+  const splittable = {
+    status: 'GENERATED',
+    remainingMaterialIds: [],
+    groups: [
+      {
+        groupId: 'g1',
+        action: 'CREATE_AND_LINK',
+        existingCourseId: null,
+        proposedTitle: '웹응용소프트웨어공학과 과목',
+        reason: '모두 같은 학과 소속이에요',
+        defaultSelected: true,
+        notices: [],
+        matchingProjects: [],
+        members: [
+          verifiedMember(201, '스마트앱프로젝트.pdf'),
+          verifiedMember(202, '웹서버프로그래밍.pdf'),
+          verifiedMember(203, '빅데이터분석.pdf'),
+        ],
+      },
+    ],
+  };
+
+  const single = (action, members, extra = {}) => ({
+    status: 'GENERATED',
+    remainingMaterialIds: [],
+    groups: [{
+      groupId: 'g1',
+      action,
+      existingCourseId: action === 'LINK_EXISTING' ? 55 : null,
+      existingCourseTitle: action === 'LINK_EXISTING' ? '운영체제' : null,
+      proposedTitle: action === 'CREATE_AND_LINK' ? '운영체제' : null,
+      reason: '',
+      defaultSelected: false,
+      notices: [],
+      matchingProjects: [],
+      members,
+      ...extra,
+    }],
+  });
+
+  const splitButton = () => screen.queryByRole('button', { name: /따로 나누기/ });
+
+  it('멤버가 둘 이상인 CREATE_AND_LINK에만 따로 나누기가 보인다', () => {
+    render(<ProposalCard proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
+    expect(splitButton()).toBeInTheDocument();
+  });
+
+  it('멤버가 하나면 따로 나누기가 없다 — 쪼갤 것이 없다', () => {
+    render(<ProposalCard proposal={single('CREATE_AND_LINK', [verifiedMember(201, 'a.pdf')])}
+                         onApplied={vi.fn()} onClose={vi.fn()} />);
+    expect(splitButton()).not.toBeInTheDocument();
+  });
+
+  it('LINK_EXISTING은 멤버가 여럿이어도 따로 나누기가 없다 — 쪼개도 같은 곳으로 간다', () => {
+    render(<ProposalCard proposal={single('LINK_EXISTING',
+        [verifiedMember(201, 'a.pdf'), verifiedMember(202, 'b.pdf')])}
+                         onApplied={vi.fn()} onClose={vi.fn()} />);
+    expect(splitButton()).not.toBeInTheDocument();
+  });
+
+  it('LEAVE는 멤버가 여럿이어도 따로 나누기가 없다', () => {
+    render(<ProposalCard proposal={single('LEAVE',
+        [verifiedMember(201, 'a.pdf'), verifiedMember(202, 'b.pdf')])}
+                         onApplied={vi.fn()} onClose={vi.fn()} />);
+    expect(splitButton()).not.toBeInTheDocument();
+  });
+
+  it('쪼개면 멤버 수만큼의 묶음이 되고, 제목은 파일명에서 오고, 전부 꺼진 채로 시작한다', async () => {
+    const user = userEvent.setup();
+    render(<ProposalCard proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    await user.click(splitButton());
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(3);
+    expect(checkboxes.every((box) => !box.checked)).toBe(true);
+    expect(screen.getByDisplayValue('스마트앱프로젝트')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('웹서버프로그래밍')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('빅데이터분석')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /0개 프로젝트 정리/ })).toBeDisabled();
+  });
+
+  it('쪼개기 전에 바꾼 자료 역할이 그대로 따라간다', async () => {
+    const user = userEvent.setup();
+    render(<ProposalCard proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    await user.selectOptions(
+        screen.getByLabelText('스마트앱프로젝트.pdf의 자료 역할'), 'TEXTBOOK_TOC');
+    await user.click(splitButton());
+    await user.click(screen.getAllByRole('checkbox')[0]);
+    await user.click(screen.getByRole('button', { name: /1개 프로젝트 정리/ }));
+
+    expect(materialStoreAPI.applyLinkProposal).toHaveBeenCalledWith([
+      {
+        action: 'CREATE_AND_LINK',
+        title: '스마트앱프로젝트',
+        members: [{ materialId: 201, materialType: 'TEXTBOOK_TOC' }],
+      },
+    ]);
+  });
+
+  it('되돌리기를 누르면 원래 묶음이 돌아온다 — 모델을 다시 부르지 않는다', async () => {
+    const user = userEvent.setup();
+    render(<ProposalCard proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    await user.click(splitButton());
+    expect(screen.queryByDisplayValue('웹응용소프트웨어공학과 과목')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /되돌리기/ }));
+
+    expect(screen.getByDisplayValue('웹응용소프트웨어공학과 과목')).toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(splitButton()).toBeInTheDocument();
+  });
+
+  it('켜진 묶음 둘이 같은 이름이면 안내만 하고 적용은 막지 않는다', async () => {
+    const user = userEvent.setup();
+    render(<ProposalCard proposal={splittable} onApplied={vi.fn()} onClose={vi.fn()} />);
+
+    await user.click(splitButton());
+    const [first, second] = screen.getAllByRole('checkbox');
+    await user.click(first);
+    await user.click(second);
+
+    const secondTitle = screen.getByDisplayValue('웹서버프로그래밍');
+    await user.clear(secondTitle);
+    await user.type(secondTitle, '스마트앱프로젝트');
+
+    expect(screen.getByText('같은 이름의 프로젝트가 두 개 만들어져요.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /2개 프로젝트 정리/ })).toBeEnabled();
+  });
+});

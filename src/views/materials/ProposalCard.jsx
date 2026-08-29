@@ -13,7 +13,7 @@
  */
 
 import { useState } from 'react';
-import { FileText, Loader2, X, ChevronRight, AlertCircle } from 'lucide-react';
+import { FileText, Loader2, X, ChevronRight, AlertCircle, Scissors, Undo2 } from 'lucide-react';
 import { materialStoreAPI } from '../../api/api.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import { MaterialType, MATERIAL_TYPE_HINT } from '../../types/learning.js';
@@ -31,6 +31,18 @@ const EvidenceSource = Object.freeze({
 
 /** 새로 만들기를 고른 상태. 실제 courseId와 섞이지 않게 문자열로 둔다. */
 const CREATE_NEW = 'new';
+
+/** 확장자를 뗀 파일명. 쪼갠 묶음의 제목은 여기서 나온다 — 추정값이라 기본 꺼짐이다. */
+function titleFromFilename(filename) {
+  const name = filename ?? '';
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+/** 동명 비교. 서버의 동명 검사(§4.4)와 같은 기준 — 공백 제거, 대소문자 무시. */
+function titleKey(title) {
+  return (title ?? '').replace(/\s+/g, '').toLowerCase();
+}
 
 /**
  * 실패 프레이밍을 쓰지 않는다. "근거를 확인하지 못했다"는 자료의 결함이 아니라 제안의
@@ -54,9 +66,18 @@ export default function ProposalCard({
   onRetry,
   loading = false,
 }) {
+  /**
+   * 화면에서 편집 중인 묶음 목록. 서버 응답을 그대로 쓰지 않고 복사해 두는 이유는
+   * `따로 나누기`가 묶음 구성 자체를 바꾸기 때문이다.
+   *
+   * 재요청이 아니라 수정인 것이 핵심이다. 잘못 묶였을 때 필요한 건 모델을 한 번 더 부르는
+   * 것이 아니라 사용자가 그 자리에서 고치는 길이다.
+   */
+  const [workGroups, setWorkGroups] = useState(() => proposal.groups ?? []);
+
   const groups = proposal.groups ?? [];
-  const actionable = groups.filter((g) => g.action !== ProposalAction.LEAVE);
-  const leaveGroup = groups.find((g) => g.action === ProposalAction.LEAVE);
+  const actionable = workGroups.filter((g) => g.action !== ProposalAction.LEAVE);
+  const leaveGroup = workGroups.find((g) => g.action === ProposalAction.LEAVE);
   const remaining = proposal.remainingMaterialIds ?? [];
 
   const [selected, setSelected] = useState(() =>
@@ -79,6 +100,75 @@ export default function ProposalCard({
 
   const setType = (groupId, materialId, materialType) => {
     setTypes((prev) => ({ ...prev, [groupId]: { ...prev[groupId], [materialId]: materialType } }));
+  };
+
+  /**
+   * 묶음을 멤버 수만큼의 새 프로젝트로 쪼갠다.
+   *
+   * 전부 체크 해제로 시작한다. 제목이 파일명에서 나온 추정값이므로 사용자가 하나씩 확인하고
+   * 켜야 한다 — 근거가 약한 항목은 기본 꺼짐이라는 검토 카드 공통 규칙과 같은 이유다.
+   *
+   * evidenceSource는 건드리지 않는다. 그건 모델이 신고한 값이고, 여기서 사람이 바꾼 것은
+   * 제목이지 근거가 아니다.
+   */
+  const splitGroup = (group) => {
+    const parts = group.members.map((member) => ({
+      groupId: `${group.groupId}-split-${member.materialId}`,
+      action: ProposalAction.CREATE_AND_LINK,
+      existingCourseId: null,
+      existingCourseTitle: null,
+      proposedTitle: titleFromFilename(member.originalFilename),
+      reason: '',
+      defaultSelected: false,
+      notices: [],
+      matchingProjects: [],
+      members: [member],
+      splitFrom: group,
+    }));
+
+    setSelected((prev) => ({
+      ...prev,
+      ...Object.fromEntries(parts.map((p) => [p.groupId, false])),
+    }));
+    setTitles((prev) => ({
+      ...prev,
+      ...Object.fromEntries(parts.map((p) => [p.groupId, p.proposedTitle])),
+    }));
+    setDestinations((prev) => ({
+      ...prev,
+      ...Object.fromEntries(parts.map((p) => [p.groupId, CREATE_NEW])),
+    }));
+    // 쪼개기 전에 사용자가 바꾼 역할을 그대로 물려받는다.
+    setTypes((prev) => ({
+      ...prev,
+      ...Object.fromEntries(parts.map((p) => {
+        const member = p.members[0];
+        return [p.groupId, {
+          [member.materialId]:
+            prev[group.groupId]?.[member.materialId] ?? member.materialType ?? MaterialType.OTHER,
+        }];
+      })),
+    }));
+
+    setWorkGroups((prev) => {
+      const index = prev.indexOf(group);
+      if (index < 0) return prev;
+      return [...prev.slice(0, index), ...parts, ...prev.slice(index + 1)];
+    });
+  };
+
+  /**
+   * 쪼갠 것을 되돌린다. 재요청이 모델 호출 한 번이라, 잘못 눌렀다고 호출을 한 번 더 쓸
+   * 이유가 없다.
+   */
+  const undoSplit = (origin) => {
+    setWorkGroups((prev) => {
+      const index = prev.findIndex((g) => g.splitFrom === origin);
+      if (index < 0) return prev;
+      return [...prev.slice(0, index).filter((g) => g.splitFrom !== origin),
+        origin,
+        ...prev.slice(index).filter((g) => g.splitFrom !== origin)];
+    });
   };
 
   /**
@@ -116,6 +206,22 @@ export default function ProposalCard({
   };
 
   const busy = applying || loading;
+
+  /** 쪼갠 묶음들 중 마지막인지. `되돌리기`를 그 묶음 아래 한 번만 띄우기 위한 판정이다. */
+  const isLastOfSplit = (group) => {
+    const family = actionable.filter((g) => g.splitFrom === group.splitFrom);
+    return family[family.length - 1] === group;
+  };
+
+  /** 켜진 묶음 중 새로 만들 제목이 겹치는 것이 있는지. */
+  const duplicateSelectedTitle = (() => {
+    const keys = selectedGroups
+        .filter((g) => g.action === ProposalAction.CREATE_AND_LINK
+            && (destinations[g.groupId] ?? CREATE_NEW) === CREATE_NEW)
+        .map((g) => titleKey(titles[g.groupId]))
+        .filter((key) => key.length > 0);
+    return new Set(keys).size !== keys.length;
+  })();
 
   return (
     <div className="proposal-card">
@@ -224,6 +330,35 @@ export default function ProposalCard({
               </ul>
 
               {group.reason && <p className="proposal-group-reason">↳ {group.reason}</p>}
+
+              {/*
+                쪼갠 묶음의 제목은 파일명에서 나온 추정값이라 그렇다고 말해준다.
+                멤버의 evidenceSource는 건드리지 않았으므로 근거 줄은 그대로 남는다 —
+                여기서 바뀐 것은 제목이지 근거가 아니다.
+              */}
+              {group.splitFrom && (
+                <p className="proposal-group-reason">↳ 파일명에서 가져온 이름이에요</p>
+              )}
+
+              {/*
+                잘못 묶였을 때 사용자가 그 자리에서 푸는 길. LINK_EXISTING에는 붙이지 않는다 —
+                쪼개도 전부 같은 기존 프로젝트로 가므로 결과가 같다.
+              */}
+              {group.action === ProposalAction.CREATE_AND_LINK
+                  && !group.splitFrom
+                  && group.members.length > 1 && (
+                <button type="button" className="btn-ghost btn-sm proposal-split-btn"
+                        disabled={busy} onClick={() => splitGroup(group)}>
+                  <Scissors size={13} /> 따로 나누기
+                </button>
+              )}
+
+              {group.splitFrom && isLastOfSplit(group) && (
+                <button type="button" className="btn-ghost btn-sm proposal-split-btn"
+                        disabled={busy} onClick={() => undoSplit(group.splitFrom)}>
+                  <Undo2 size={13} /> 되돌리기
+                </button>
+              )}
             </li>
           );
         })}
@@ -255,6 +390,18 @@ export default function ProposalCard({
       )}
 
       {actionable.length > 0 && <p className="proposal-card-hint">{MATERIAL_TYPE_HINT}</p>}
+
+      {/*
+        서버의 동명 검사는 제안을 만든 시점에만 돈다. 쪼개기와 제목 편집으로 그 뒤에
+        같은 이름이 생길 수 있어 여기서 한 번 더 본다. 막지는 않는다 — 사용자가 의도한
+        것일 수 있다.
+      */}
+      {duplicateSelectedTitle && (
+        <p className="proposal-notice">
+          <AlertCircle size={13} /> 같은 이름의 프로젝트가 두 개 만들어져요.
+        </p>
+      )}
+
       {error && <p className="view-error">{error}</p>}
 
       <div className="proposal-card-foot">

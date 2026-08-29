@@ -7810,3 +7810,11 @@ body {
 }
 
 .material-filters-action { margin-left: auto; }
+
+/*
+  묶음 안에서 구성을 고치는 버튼(따로 나누기 / 되돌리기). 왼쪽 여백을 멤버 목록과 맞춰
+  "이 묶음에 대한 조작"으로 읽히게 합니다.
+*/
+.proposal-split-btn {
+  margin: 8px 0 0 19px;
+}
