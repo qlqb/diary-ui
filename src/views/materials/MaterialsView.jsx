@@ -285,6 +285,19 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   const [linkBusy, setLinkBusy] = useState(false);
   /** 취소했을 때 포커스를 되돌릴 곳. 행마다 연결 버튼 하나씩이다. */
   const linkButtonRefs = useRef({});
+
+  /**
+   * 목록에서 바로 삭제하기. 연결 폼과 같은 자리를 쓰므로 둘 중 하나만 열린다 — 한 행에서
+   * 연결과 삭제가 동시에 펼쳐져 있으면 어느 쪽을 하려던 것인지 흐려진다.
+   *
+   * 확인 없이 지우지 않는다. 원본 파일까지 사라지고 되돌릴 수 없어서, 상세에서 쓰던
+   * DeleteConfirm을 그대로 행 안에 펼친다 — 무엇이 사라지고 무엇이 남는지 같은 문장으로
+   * 말해야 한다.
+   */
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const deleteButtonRefs = useRef({});
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
 
@@ -407,21 +420,42 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     }
   }, [load, requestProposal]);
 
-  const openDetail = (materialId) => {
+  const closeRowPanels = () => {
     setLinkingId(null);
     setLinkError(null);
+    setDeletingId(null);
+    setDeleteError(null);
+  };
+
+  const openDetail = (materialId) => {
+    closeRowPanels();
     setOpenId(materialId);
   };
 
+  // 열고 닫을 값을 먼저 정한다. closeRowPanels()가 먼저 비우고 나면 함수형 업데이터의
+  // prev가 항상 null이라 같은 버튼을 다시 눌러도 닫히지 않는다.
   const toggleLinking = (materialId) => {
-    setLinkError(null);
-    setLinkingId((prev) => (prev === materialId ? null : materialId));
+    const next = linkingId === materialId ? null : materialId;
+    closeRowPanels();
+    setLinkingId(next);
   };
 
   const cancelLinking = (materialId) => {
     setLinkingId(null);
     setLinkError(null);
     linkButtonRefs.current[materialId]?.focus();
+  };
+
+  const toggleDeleting = (materialId) => {
+    const next = deletingId === materialId ? null : materialId;
+    closeRowPanels();
+    setDeletingId(next);
+  };
+
+  const cancelDeleting = (materialId) => {
+    setDeletingId(null);
+    setDeleteError(null);
+    deleteButtonRefs.current[materialId]?.focus();
   };
 
   /**
@@ -440,6 +474,26 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
       setLinkError(err.message || '연결하지 못했습니다.');
     } finally {
       setLinkBusy(false);
+    }
+  };
+
+  /**
+   * 삭제는 원본 파일까지 지운다. 연결 해제와 다른 액션이라 목록에서도 같은 무게로 다룬다.
+   *
+   * 성공하면 그 행이 목록에서 사라지므로 포커스를 되돌릴 곳이 없다 — 되돌리지 않는다.
+   */
+  const handleDelete = async (materialId) => {
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await materialStoreAPI.delete(materialId);
+      setDeletingId(null);
+      await load();
+      await onProjectsChanged?.();
+    } catch (err) {
+      setDeleteError(err.message || '삭제하지 못했습니다.');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -495,14 +549,8 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     return (
         <MaterialDetail
             materialId={openId}
-            projects={projects}
             onBack={() => setOpenId(null)}
             onChanged={async () => { await load(); await onProjectsChanged?.(); }}
-            onDeleted={async () => {
-              setOpenId(null);
-              await load();
-              await onProjectsChanged?.();
-            }}
         />
     );
   }
@@ -649,6 +697,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                 const linkedCourseIds = new Set((m.links ?? []).map((l) => l.courseId));
                 const linkable = (projects ?? []).filter((p) => !linkedCourseIds.has(p.courseId));
                 const isLinking = linkingId === m.materialId;
+                const isDeleting = deletingId === m.materialId;
 
                 return (
                   <li key={m.materialId} className="material-item-row">
@@ -698,6 +747,16 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                         >
                           <Link2 size={13} /> 프로젝트 연결
                         </button>
+                        <button
+                            type="button"
+                            className="btn-ghost btn-sm btn-danger"
+                            ref={(el) => { deleteButtonRefs.current[m.materialId] = el; }}
+                            aria-expanded={isDeleting}
+                            aria-controls={`delete-confirm-${m.materialId}`}
+                            onClick={() => toggleDeleting(m.materialId)}
+                        >
+                          <Trash2 size={13} /> 삭제
+                        </button>
                       </div>
                     </div>
 
@@ -713,6 +772,19 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                                   handleLink(m.materialId, courseId, materialType)}
                           />
                           {linkError && <p className="view-error">{linkError}</p>}
+                        </div>
+                    )}
+
+                    {isDeleting && (
+                        <div id={`delete-confirm-${m.materialId}`}>
+                          <DeleteConfirm
+                              linkCount={(m.links ?? []).length}
+                              busy={deleteBusy}
+                              autoFocus
+                              onCancel={() => cancelDeleting(m.materialId)}
+                              onConfirm={() => handleDelete(m.materialId)}
+                          />
+                          {deleteError && <p className="view-error">{deleteError}</p>}
                         </div>
                     )}
                   </li>
@@ -849,12 +921,17 @@ function EmptyState({ filter, total, onPick }) {
   );
 }
 
-function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) {
+/**
+ * 자료 상세. 조작은 두 가지만 남는다 — 이 프로젝트에서의 역할 바꾸기, 연결 해제.
+ *
+ * `프로젝트 연결`과 `자료 삭제`는 목록 행으로 옮겼다. 목록에서 자료를 훑다가 바로 처리하는
+ * 것이 실제 흐름이고, 그 둘을 하려고 상세로 들어갔다 나오는 왕복이 사라진다. 여기 남기면
+ * 같은 조작이 두 곳에 생겨 어느 쪽이 정본인지 흐려진다.
+ */
+function MaterialDetail({ materialId, onBack, onChanged }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [linking, setLinking] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -873,8 +950,6 @@ function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) 
 
   const material = detail?.material;
   const links = material?.links ?? [];
-  const linkedCourseIds = new Set(links.map((l) => l.courseId));
-  const linkable = (projects ?? []).filter((p) => !linkedCourseIds.has(p.courseId));
 
   /**
    * 이 프로젝트에서의 역할만 바꾼다. 예전에는 연결 해제 후 재연결이 유일한 우회로였다.
@@ -904,18 +979,6 @@ function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) 
     } catch (err) {
       setError(err.message || '연결을 끊지 못했습니다.');
     } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await materialStoreAPI.delete(materialId);
-      await onDeleted();
-    } catch (err) {
-      setError(err.message || '삭제하지 못했습니다.');
       setBusy(false);
     }
   };
@@ -977,47 +1040,6 @@ function MaterialDetail({ materialId, projects, onBack, onChanged, onDeleted }) 
 
         <AnalysisHistory analyses={detail?.analyses ?? []} />
 
-        <div className="material-detail-actions">
-          <button type="button" className="btn-ghost btn-sm" disabled={busy || linkable.length === 0}
-                  onClick={() => setLinking(true)}>
-            <Link2 size={13} /> 프로젝트 연결
-          </button>
-          <button type="button" className="btn-ghost btn-sm btn-danger" disabled={busy}
-                  onClick={() => setConfirmDelete(true)}>
-            <Trash2 size={13} /> 자료 삭제
-          </button>
-        </div>
-
-        {linking && (
-            <LinkForm
-                projects={linkable}
-                busy={busy}
-                onCancel={() => setLinking(false)}
-                onSubmit={async (courseId, materialType) => {
-                  setBusy(true);
-                  setError(null);
-                  try {
-                    await materialStoreAPI.addLink(materialId, courseId, materialType);
-                    setLinking(false);
-                    await load();
-                    await onChanged();
-                  } catch (err) {
-                    setError(err.message || '연결하지 못했습니다.');
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-            />
-        )}
-
-        {confirmDelete && (
-            <DeleteConfirm
-                linkCount={links.length}
-                busy={busy}
-                onCancel={() => setConfirmDelete(false)}
-                onConfirm={handleDelete}
-            />
-        )}
       </div>
   );
 }
@@ -1119,9 +1141,18 @@ function LinkForm({ projects, onCancel, onSubmit, busy = false, autoFocus = fals
  * "영구 삭제 완료" 같은 표현은 쓰지 않는다 — 파일 삭제가 실패해도 사용자에게는 성공을
  * 반환하므로, 보장할 수 있는 것은 "정상적인 앱 경로에서 더 이상 접근할 수 없다"까지다.
  */
-function DeleteConfirm({ linkCount, busy, onCancel, onConfirm }) {
+function DeleteConfirm({ linkCount, busy, onCancel, onConfirm, autoFocus = false }) {
   return (
-      <div className="material-confirm">
+      <div
+          className="material-confirm"
+          onKeyDown={(e) => {
+            // 목록에서는 행 안에 펼쳐지므로 Esc로 접을 수 있어야 한다. LinkForm과 같은 규칙이다.
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              onCancel();
+            }
+          }}
+      >
         {linkCount >= 2 && (
             <p className="material-confirm-line">
               이 자료는 {linkCount}개 프로젝트에 연결되어 있어요.
@@ -1134,7 +1165,9 @@ function DeleteConfirm({ linkCount, busy, onCancel, onConfirm }) {
           이미 적용한 학습 내용과 프로젝트 상태는 그대로 유지됩니다.
         </p>
         <div className="material-detail-actions">
-          <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}>취소</button>
+          {/* 포커스는 취소에 준다 — 펼치자마자 Enter를 눌러 지워버리는 일이 없어야 한다. */}
+          <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}
+                  autoFocus={autoFocus}>취소</button>
           <button type="button" className="btn-ghost btn-sm btn-danger" onClick={onConfirm} disabled={busy}>
             {busy ? '삭제 중...' : '자료 삭제'}
           </button>

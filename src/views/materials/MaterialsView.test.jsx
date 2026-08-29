@@ -266,3 +266,125 @@ describe('자료 목록에서 바로 프로젝트 연결', () => {
     expect(materialStoreAPI.get).toHaveBeenCalledWith(4);
   });
 });
+
+/**
+ * 삭제는 목록 행에서 한다. 상세에는 조작 버튼이 남지 않는다 — 같은 조작이 두 곳에 있으면
+ * 어느 쪽이 정본인지 흐려진다.
+ */
+describe('자료 목록에서 바로 삭제', () => {
+  const UNLINKED = {
+    ...MATERIAL, materialId: 7, originalFilename: '네트워크.pdf', links: [],
+  };
+  const TWO_LINKS = {
+    ...MATERIAL,
+    materialId: 8,
+    originalFilename: '공용.pdf',
+    links: [
+      { courseId: 6, courseTitle: '자료구조', materialType: 'SYLLABUS', linkedAt: '2026-08-16T14:30:30' },
+      { courseId: 9, courseTitle: '네트워크', materialType: 'OTHER', linkedAt: '2026-08-17T14:30:30' },
+    ],
+  };
+  const PROJECTS = [{ courseId: 6, title: '자료구조' }, { courseId: 9, title: '네트워크' }];
+
+  let onProjectsChanged;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onProjectsChanged = vi.fn();
+    materialStoreAPI.list.mockResolvedValue([MATERIAL, UNLINKED]);
+    materialStoreAPI.get.mockResolvedValue(DETAIL);
+    materialStoreAPI.delete.mockResolvedValue(undefined);
+  });
+
+  const renderList = async () => {
+    const user = userEvent.setup();
+    render(<MaterialsView projects={PROJECTS} onProjectsChanged={onProjectsChanged} />);
+    await screen.findByText('네트워크.pdf');
+    return user;
+  };
+
+  const deleteButtons = () => screen.getAllByRole('button', { name: /^삭제$/ });
+
+  it('모든 행에 삭제 버튼이 있다', async () => {
+    await renderList();
+    expect(deleteButtons()).toHaveLength(2);
+  });
+
+  it('삭제 버튼을 누르면 확인 문구가 그 행에 펼쳐진다 — 바로 지우지 않는다', async () => {
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);
+
+    expect(deleteButtons()[1]).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/AI 참고 자료로 사용할 수 없습니다/)).toBeInTheDocument();
+    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
+  });
+
+  it('여러 프로젝트에 걸린 자료는 몇 곳에 연결돼 있는지 먼저 말한다', async () => {
+    materialStoreAPI.list.mockResolvedValue([TWO_LINKS]);
+    const user = userEvent.setup();
+    render(<MaterialsView projects={PROJECTS} onProjectsChanged={onProjectsChanged} />);
+    await screen.findByText('공용.pdf');
+
+    await user.click(deleteButtons()[0]);
+
+    expect(screen.getByText('이 자료는 2개 프로젝트에 연결되어 있어요.')).toBeInTheDocument();
+  });
+
+  it('확인하면 지우고 목록과 사이드바를 갱신한다', async () => {
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);
+    await user.click(screen.getByRole('button', { name: '자료 삭제' }));
+
+    expect(materialStoreAPI.delete).toHaveBeenCalledWith(7);
+    expect(onProjectsChanged).toHaveBeenCalled();
+    expect(materialStoreAPI.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('취소하면 아무것도 지우지 않고 확인 문구가 닫힌다', async () => {
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);
+    await user.click(screen.getByRole('button', { name: '취소' }));
+
+    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
+    expect(screen.queryByText(/AI 참고 자료로 사용할 수 없습니다/)).not.toBeInTheDocument();
+  });
+
+  it('실패하면 확인 문구가 열린 채로 이유가 뜬다', async () => {
+    materialStoreAPI.delete.mockRejectedValue(new Error('삭제하지 못했습니다'));
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);
+    await user.click(screen.getByRole('button', { name: '자료 삭제' }));
+
+    expect(await screen.findByText('삭제하지 못했습니다')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '자료 삭제' })).toBeInTheDocument();
+  });
+
+  it('연결 폼과 삭제 확인은 한 행에서 동시에 열리지 않는다', async () => {
+    const user = await renderList();
+
+    await user.click(screen.getAllByRole('button', { name: /프로젝트 연결/ })[1]);
+    expect(screen.getByLabelText('연결할 프로젝트')).toBeInTheDocument();
+
+    await user.click(deleteButtons()[1]);
+
+    expect(screen.queryByLabelText('연결할 프로젝트')).not.toBeInTheDocument();
+    expect(screen.getByText(/AI 참고 자료로 사용할 수 없습니다/)).toBeInTheDocument();
+  });
+
+  it('상세에는 연결·삭제 버튼이 남지 않는다', async () => {
+    const user = await renderList();
+
+    await user.click(screen.getByRole('button', { name: /자료구조\.pdf/ }));
+    await screen.findByRole('heading', { name: '자료구조.pdf' });
+
+    expect(screen.queryByRole('button', { name: /프로젝트 연결/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /자료 삭제/ })).not.toBeInTheDocument();
+    // 연결 해제와 역할 바꾸기는 상세에 그대로 남는다.
+    expect(screen.getByLabelText('자료구조에서의 자료 역할')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /연결 해제/ })).toBeInTheDocument();
+  });
+});
