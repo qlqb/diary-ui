@@ -82,15 +82,49 @@ describe('useUndoDelete - 삭제 되돌리기', () => {
     expect(executionItemAPI.restore).not.toHaveBeenCalled();
   });
 
-  it('마지막 한 건만 되돌린다 — 다시 지우면 그것이 대상이 된다', async () => {
+  it('여러 번 누르면 마지막에 지운 것부터 하나씩 돌아온다', async () => {
     const { result } = renderHook(() => useUndoDelete({ onRestored: vi.fn() }));
 
     act(() => result.current.rememberDeleted(ITEM));
     act(() => result.current.rememberDeleted({ executionItemId: 12, version: 0, title: '다른 일' }));
+    expect(result.current.undoCount).toBe(2);
+    expect(result.current.undoTarget).toMatchObject({ executionItemId: 12 });
+
+    await act(async () => { pressCtrlZ(); });
+    expect(executionItemAPI.restore).toHaveBeenLastCalledWith(12, 1);
+    expect(result.current.undoCount).toBe(1);
+
+    await act(async () => { pressCtrlZ(); });
+    expect(executionItemAPI.restore).toHaveBeenLastCalledWith(9, 3);
+    expect(result.current.undoCount).toBe(0);
+    expect(result.current.undoTarget).toBeNull();
+  });
+
+  it('되돌린 것은 다시 되돌려지지 않는다', async () => {
+    const { result } = renderHook(() => useUndoDelete({ onRestored: vi.fn() }));
+
+    act(() => result.current.rememberDeleted(ITEM));
+    await act(async () => { pressCtrlZ(); });
     await act(async () => { pressCtrlZ(); });
 
     expect(executionItemAPI.restore).toHaveBeenCalledTimes(1);
-    expect(executionItemAPI.restore).toHaveBeenCalledWith(12, 1);
+  });
+
+  it('항목마다 자기 창을 갖는다 — 먼저 지운 것이 먼저 만료된다', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useUndoDelete({ onRestored: vi.fn() }));
+
+    act(() => result.current.rememberDeleted(ITEM));
+    act(() => { vi.advanceTimersByTime(UNDO_WINDOW_MS / 2); });
+    act(() => result.current.rememberDeleted({ executionItemId: 12, version: 0, title: '다른 일' }));
+
+    // 먼저 지운 것의 창만 닫힌다. 같이 만료되면 화면에 남아 있던 되돌리기가 이유 없이 사라진다.
+    act(() => { vi.advanceTimersByTime(UNDO_WINDOW_MS / 2 + 1); });
+    expect(result.current.undoCount).toBe(1);
+    expect(result.current.undoTarget).toMatchObject({ executionItemId: 12 });
+
+    act(() => { vi.advanceTimersByTime(UNDO_WINDOW_MS); });
+    expect(result.current.undoCount).toBe(0);
   });
 
   it('안내가 사라지면 단축키도 함께 꺼진다 — 눌러도 아무 일이 없는 구간을 만들지 않는다', async () => {
@@ -101,6 +135,7 @@ describe('useUndoDelete - 삭제 되돌리기', () => {
     act(() => { vi.advanceTimersByTime(UNDO_WINDOW_MS + 1); });
 
     expect(result.current.undoTarget).toBeNull();
+    expect(result.current.undoCount).toBe(0);
 
     pressCtrlZ();
     expect(executionItemAPI.restore).not.toHaveBeenCalled();

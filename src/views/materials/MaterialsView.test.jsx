@@ -302,6 +302,10 @@ describe('자료 목록에서 바로 삭제', () => {
 
   const deleteButtons = () => screen.getAllByRole('button', { name: /^삭제$/ });
 
+  const pressCtrlZ = () => document.body.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
+  }));
+
   it('모든 행에 삭제 버튼이 있다', async () => {
     await renderList();
     expect(deleteButtons()).toHaveLength(2);
@@ -342,11 +346,7 @@ describe('자료 목록에서 바로 삭제', () => {
     const user = await renderList();
 
     await user.click(deleteButtons()[1]);
-    await act(async () => {
-      document.body.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
-      }));
-    });
+    await act(async () => { pressCtrlZ(); });
 
     expect(await screen.findByText('네트워크.pdf')).toBeInTheDocument();
   });
@@ -362,15 +362,45 @@ describe('자료 목록에서 바로 삭제', () => {
     await waitFor(() => expect(onProjectsChanged).toHaveBeenCalled());
   });
 
-  it('연달아 지우면 앞의 것은 곧바로 보내고 마지막 하나만 되돌릴 수 있다', async () => {
+  it('연달아 지워도 앞의 것을 서둘러 보내지 않는다 — 둘 다 되돌릴 수 있다', async () => {
     const user = await renderList();
 
     await user.click(deleteButtons()[1]);
     await user.click(deleteButtons()[0]);
 
-    // 앞의 것을 조용히 없던 일로 만들면 사용자가 지운 자료가 되살아난다.
-    await waitFor(() => expect(materialStoreAPI.delete).toHaveBeenCalledWith(7));
-    expect(screen.getByRole('status')).toHaveTextContent('자료구조.pdf');
+    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('자료구조.pdf 외 1개 지웠어요');
+  });
+
+  it('Ctrl+Z를 여러 번 누르면 마지막에 지운 것부터 하나씩 돌아온다', async () => {
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);  // 네트워크.pdf
+    await user.click(deleteButtons()[0]);  // 자료구조.pdf
+
+    await act(async () => { pressCtrlZ(); });
+    // 나중에 지운 것이 먼저 돌아온다.
+    expect(await screen.findByRole('button', { name: /자료구조\.pdf/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /네트워크\.pdf/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('네트워크.pdf 지웠어요');
+
+    await act(async () => { pressCtrlZ(); });
+    expect(await screen.findByRole('button', { name: /네트워크\.pdf/ })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    await act(async () => { vi.advanceTimersByTime(PENDING_DELETE_WINDOW_MS + 100); });
+    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
+  });
+
+  it('되돌리지 않은 것들은 각자 자기 창이 닫힐 때 지워진다', async () => {
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);
+    await user.click(deleteButtons()[0]);
+    await act(async () => { vi.advanceTimersByTime(PENDING_DELETE_WINDOW_MS + 100); });
+
+    expect(materialStoreAPI.delete).toHaveBeenCalledWith(7);
+    expect(materialStoreAPI.delete).toHaveBeenCalledWith(4);
   });
 
   it('지우지 못하면 목록을 다시 읽고 이유를 말한다', async () => {

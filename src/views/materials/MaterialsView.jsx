@@ -14,12 +14,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, Upload, Loader2, ArrowLeft, Link2, Trash2, X,
-  Plus, Check, AlertCircle, UploadCloud, Sparkles, RotateCcw,
+  Plus, Check, AlertCircle, UploadCloud, Sparkles,
 } from 'lucide-react';
 import { materialStoreAPI } from '../../api/api.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import ProposalCard from './ProposalCard.jsx';
 import usePendingDelete from './usePendingDelete.js';
+import UndoToast from '../../components/UndoToast.jsx';
 import {
   MaterialType, MATERIAL_TYPE_HINT, ExtractionStatus, EXTRACTION_STATUS_LABEL, MaterialAnalysisStatus,
 } from '../../types/learning.js';
@@ -482,8 +483,8 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   // 삭제를 예약한 자료는 화면에서 먼저 사라진다. 서버는 아직 모르므로 목록을 다시 읽어도
   // 돌아오는데, 그걸 여기서 걸러 "지운 것처럼" 보이게 유지한다.
   const materials = useMemo(
-      () => allMaterials.filter((m) => m.materialId !== pendingDelete.pending?.materialId),
-      [allMaterials, pendingDelete.pending],
+      () => allMaterials.filter((m) => !pendingDelete.pendingIds.has(m.materialId)),
+      [allMaterials, pendingDelete.pendingIds],
   );
 
   /** 정리할 것이 없으면 버튼을 숨긴다 — 눌러도 NO_CANDIDATES만 나온다. */
@@ -778,16 +779,12 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
           곧 되돌릴 수 있는 시간이고, 사라지는 순간 실제로 지워진다.
           실행 조각의 되돌리기 안내와 같은 모양을 쓴다 — 하는 일이 같으면 같아 보여야 한다.
         */}
-        {pendingDelete.pending && (
-            <div className="undo-toast" role="status">
-              <span className="undo-toast-text">
-                <strong>{pendingDelete.pending.title}</strong> 지웠어요
-              </span>
-              <button type="button" className="undo-toast-btn" onClick={pendingDelete.undo}>
-                <RotateCcw size={13} /> 되돌리기
-                <kbd className="undo-toast-kbd">Ctrl+Z</kbd>
-              </button>
-            </div>
+        {pendingDelete.latest && (
+            <UndoToast
+                title={pendingDelete.latest.title}
+                count={pendingDelete.pendingCount}
+                onUndo={pendingDelete.undo}
+            />
         )}
 
         {dragging && (

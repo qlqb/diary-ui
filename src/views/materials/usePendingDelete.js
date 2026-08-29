@@ -12,14 +12,19 @@
  * 그래서 되돌리기의 의미가 다르다 — 되돌리기는 복구가 아니라 "아직 보내지 않은 요청을
  * 취소하는 것"이다. 창이 열려 있는 동안 서버는 아무것도 모른다.
  *
- * 대신 지켜야 하는 것이 하나 늘어난다: 창이 닫히기 전에 화면을 떠나도 삭제는 되어야 한다.
- * 사용자는 이미 지웠다고 생각하고 떠났기 때문이다. 언마운트에서 남은 것을 흘려보낸다.
+ * 여러 건을 동시에 미뤄 둔다. 각자 자기 타이머를 갖고 따로 만료되며, 되돌리기는 마지막에
+ * 지운 것부터 하나씩 취소한다. 앞의 것을 뒤의 것 때문에 서둘러 보내지 않는다 — 지운 순서와
+ * 되돌리는 순서만 맞으면 사용자가 무엇이 남았는지 셀 필요가 없다.
+ *
+ * 늦게 지우기 때문에 지켜야 하는 것이 하나 늘어난다: 창이 닫히기 전에 화면을 떠나도 삭제는
+ * 되어야 한다. 사용자는 이미 지웠다고 생각하고 떠났기 때문이다. 언마운트에서 남은 것을
+ * 전부 흘려보낸다.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { materialStoreAPI } from '../../api/api.js';
 
-/** 되돌리기 안내가 떠 있는 시간. 이 창이 닫히는 순간 실제로 지운다. */
+/** 되돌리기 안내가 떠 있는 시간. 이 창이 닫히는 순간 그 자료를 실제로 지운다. */
 export const PENDING_DELETE_WINDOW_MS = 8000;
 
 /** 입력 중에는 브라우저 기본 실행 취소를 뺏지 않는다. */
@@ -29,23 +34,17 @@ function isTyping(el) {
 }
 
 export default function usePendingDelete({ onCommitted, onFailed }) {
-  const [pending, setPending] = useState(null);
-  const pendingRef = useRef(null);
-  const timerRef = useRef(null);
+  const [pending, setPending] = useState([]);
+  const pendingRef = useRef([]);
+  const timersRef = useRef(new Map());
 
-  const setPendingBoth = useCallback((next) => {
+  const setPendingBoth = useCallback((update) => {
+    const next = typeof update === 'function' ? update(pendingRef.current) : update;
     pendingRef.current = next;
     setPending(next);
   }, []);
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  /** 실제로 지운다. 창이 닫혔거나, 화면을 떠났거나, 다음 삭제가 들어왔을 때. */
+  /** 실제로 지운다. 창이 닫혔거나 화면을 떠났을 때. */
   const commit = useCallback(async (target) => {
     if (!target) return;
     try {
@@ -57,31 +56,36 @@ export default function usePendingDelete({ onCommitted, onFailed }) {
     }
   }, [onCommitted, onFailed]);
 
-  const schedule = useCallback((material) => {
-    // 앞의 것이 아직 남아 있으면 먼저 보낸다. 되돌릴 수 있는 것은 항상 마지막 하나뿐이고,
-    // 앞의 것을 조용히 없던 일로 만들면 사용자가 지운 자료가 되살아난다.
-    const previous = pendingRef.current;
-    clearTimer();
-    if (previous) commit(previous);
+  const commitRef = useRef(commit);
+  useEffect(() => { commitRef.current = commit; });
 
-    const next = { materialId: material.materialId, title: material.originalFilename };
-    setPendingBoth(next);
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      setPendingBoth(null);
-      commit(next);
-    }, PENDING_DELETE_WINDOW_MS);
-  }, [clearTimer, commit, setPendingBoth]);
+  const schedule = useCallback((material) => {
+    const entry = { materialId: material.materialId, title: material.originalFilename };
+    setPendingBoth((prev) => [...prev, entry]);
+
+    timersRef.current.set(material.materialId, setTimeout(() => {
+      timersRef.current.delete(material.materialId);
+      setPendingBoth((prev) => prev.filter((it) => it.materialId !== material.materialId));
+      commitRef.current(entry);
+    }, PENDING_DELETE_WINDOW_MS));
+  }, [setPendingBoth]);
 
   /** 되돌리기 = 아직 보내지 않은 요청을 취소하는 것. 서버는 이 일을 모른다. */
   const undo = useCallback(() => {
-    clearTimer();
-    setPendingBoth(null);
-  }, [clearTimer, setPendingBoth]);
+    const target = pendingRef.current[pendingRef.current.length - 1];
+    if (!target) return;
+
+    const timer = timersRef.current.get(target.materialId);
+    if (timer) {
+      clearTimeout(timer);
+      timersRef.current.delete(target.materialId);
+    }
+    setPendingBoth((prev) => prev.filter((it) => it.materialId !== target.materialId));
+  }, [setPendingBoth]);
 
   // 되돌릴 것이 있을 때만 단축키를 건다.
   useEffect(() => {
-    if (!pending) return undefined;
+    if (pending.length === 0) return undefined;
 
     const onKeyDown = (e) => {
       if (e.key !== 'z' && e.key !== 'Z') return;
@@ -97,23 +101,32 @@ export default function usePendingDelete({ onCommitted, onFailed }) {
   }, [pending, undo]);
 
   /*
-    창이 닫히기 전에 화면을 떠나도 삭제는 되어야 한다. 사용자는 이미 지웠다고 생각한다.
+    창이 닫히기 전에 화면을 떠나도 삭제는 되어야 한다.
 
     ★ 의존성이 비어 있어야 한다. commit을 의존성에 넣으면 호출부가 onCommitted를 인라인
       함수로 넘길 때(=매 렌더 새 함수) 정리 함수가 렌더마다 돌아, 예약하자마자 곧바로
       지워버린다. 되돌릴 창이 아예 열리지 않는다.
   */
-  const commitRef = useRef(commit);
-  useEffect(() => { commitRef.current = commit; });
-
   useEffect(() => () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-      commitRef.current(pendingRef.current);
-      pendingRef.current = null;
-    }
+    const timers = timersRef.current;
+    if (timers.size === 0) return;
+    timers.forEach((timer) => clearTimeout(timer));
+    timers.clear();
+    pendingRef.current.forEach((entry) => commitRef.current(entry));
+    pendingRef.current = [];
   }, []);
 
-  return { pending, schedule, undo };
+  const pendingIds = useMemo(
+      () => new Set(pending.map((it) => it.materialId)),
+      [pending],
+  );
+
+  return {
+    /** 다음 Ctrl+Z가 되살릴 것. 안내에 이름을 띄우는 데 쓴다. */
+    latest: pending[pending.length - 1] ?? null,
+    pendingCount: pending.length,
+    pendingIds,
+    schedule,
+    undo,
+  };
 }
