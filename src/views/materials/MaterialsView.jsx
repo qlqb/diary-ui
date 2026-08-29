@@ -389,6 +389,21 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
    *   카드다. 새 임계값을 만들지 않고 서버가 이미 계산한 defaultSelected를 그대로 쓴다.
    *   버리는 것이 아니다 — 자료는 `연결 안 된 자료`에 그대로 남는다.
    */
+  const runAutoProposal = useCallback(async (materialIds) => {
+    try {
+      const result = await requestProposal(materialIds, ProposalTrigger.AUTO);
+      if (result.status !== ProposalStatus.GENERATED) return;
+      if (!(result.groups ?? []).some((g) => g.defaultSelected)) return;
+      setProposal(result);
+      setProposalOrigin('auto');
+      setProposalKey((prev) => prev + 1);
+      setProposalMessage(null);
+      setProposalRetryable(false);
+    } catch {
+      // 자동 경로는 어떤 실패도 표시하지 않는다(사용량 한도 초과 포함).
+    }
+  }, [requestProposal]);
+
   const handleBatchDone = useCallback(async (uploaded) => {
     await load();
 
@@ -404,19 +419,22 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     }
     if (autoProposalOffRef.current) return;
 
-    try {
-      const result = await requestProposal(materialIds, ProposalTrigger.AUTO);
-      if (result.status !== ProposalStatus.GENERATED) return;
-      if (!(result.groups ?? []).some((g) => g.defaultSelected)) return;
-      setProposal(result);
-      setProposalOrigin('auto');
-      setProposalKey((prev) => prev + 1);
-      setProposalMessage(null);
-      setProposalRetryable(false);
-    } catch {
-      // 자동 경로는 어떤 실패도 표시하지 않는다(사용량 한도 초과 포함).
-    }
-  }, [load, requestProposal]);
+    /*
+      ★ 기다리지 않는다.
+
+      업로드 대기열은 이 함수가 끝나야 비워진다(useUploadQueue.start 참고). 자동 제안까지
+      기다리면 업로드가 다 끝난 뒤에도 대기열이 20~40초 동안 그대로 남아, 사용자에게는
+      "다 올렸는데 화면이 안 바뀐다"로 보인다 — 실제로는 모델 답을 기다리는 중인데,
+      그 사실이 화면 어디에도 없다.
+
+      목록 새로고침(load)까지는 기다려야 한다. 그게 끝나기 전에 대기열을 비우면 방금 올린
+      파일이 위에서도 아래에서도 잠깐 사라진다.
+
+      제안은 준비되면 그때 카드로 뜬다. 실패해도 자동 경로는 아무것도 표시하지 않으므로
+      기다릴 이유가 없다.
+    */
+    runAutoProposal(materialIds);
+  }, [load, runAutoProposal]);
 
   const closeRowPanels = () => {
     setLinkingId(null);

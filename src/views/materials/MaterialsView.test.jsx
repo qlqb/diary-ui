@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MaterialsView from './MaterialsView.jsx';
 import { PENDING_DELETE_WINDOW_MS } from './usePendingDelete.js';
@@ -425,5 +425,63 @@ describe('자료 목록에서 바로 삭제', () => {
     // 연결 해제와 역할 바꾸기는 상세에 그대로 남는다.
     expect(screen.getByLabelText('자료구조에서의 자료 역할')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /연결 해제/ })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 업로드가 끝났는데 화면이 안 바뀌는 것처럼 보이던 문제.
+ *
+ * 자동 연결 제안은 모델 호출이라 20~40초가 걸린다. 그걸 기다린 뒤에 업로드 대기열을
+ * 비우게 해두면, 파일은 다 올라갔는데 대기열이 그대로 남아 "멈춘 것"처럼 보인다.
+ */
+describe('업로드 직후 대기열 정리', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    materialStoreAPI.list.mockResolvedValue([]);
+    materialStoreAPI.get.mockResolvedValue(DETAIL);
+    materialStoreAPI.upload.mockImplementation((file) => Promise.resolve({
+      materialId: file.name.length,
+      extractionStatus: 'SUCCESS',
+    }));
+  });
+
+  const pdf = (name) => new File(['%PDF-1.4'], name, { type: 'application/pdf' });
+
+  it('자동 제안을 기다리지 않고 대기열을 비운다', async () => {
+    const user = userEvent.setup();
+    // 모델 답이 오지 않는 상태를 만든다 — 예전에는 여기서 대기열이 계속 남아 있었다.
+    materialStoreAPI.proposeLinks.mockReturnValue(new Promise(() => {}));
+
+    const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+    const input = container.querySelector('input[type="file"]');
+
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [pdf('가.pdf'), pdf('나.pdf')] } });
+    });
+    await user.click(screen.getByRole('button', { name: /2개 올리기/ }));
+
+    await waitFor(() => expect(materialStoreAPI.upload).toHaveBeenCalledTimes(2));
+    // 대기열이 비워졌다 = 올린 파일 줄이 남아 있지 않다.
+    await waitFor(() => expect(screen.queryByText('가.pdf')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /개 올리기/ })).not.toBeInTheDocument();
+
+    // 제안은 여전히 도는 중이다 — 기다리지 않았을 뿐 부르지 않은 것은 아니다.
+    expect(materialStoreAPI.proposeLinks).toHaveBeenCalled();
+  });
+
+  it('목록 새로고침까지는 기다린다 — 파일이 위아래 어디에도 없는 순간을 만들지 않는다', async () => {
+    const user = userEvent.setup();
+    materialStoreAPI.proposeLinks.mockReturnValue(new Promise(() => {}));
+
+    const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+    await waitFor(() => expect(materialStoreAPI.list).toHaveBeenCalledTimes(1));
+
+    const input = container.querySelector('input[type="file"]');
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [pdf('가.pdf'), pdf('나.pdf')] } });
+    });
+    await user.click(screen.getByRole('button', { name: /2개 올리기/ }));
+
+    await waitFor(() => expect(materialStoreAPI.list).toHaveBeenCalledTimes(2));
   });
 });
