@@ -7818,3 +7818,118 @@ body {
 .proposal-split-btn {
   margin: 8px 0 0 19px;
 }
+
+/* ---------- 알림 모달 ---------- */
+
+/*
+  되돌릴 수 없는 조작 하나만 묻는 가벼운 창입니다. .modal-content(560px)보다 좁게 잡아
+  "읽고 결정할 것이 하나"라는 게 크기로 먼저 보이게 합니다.
+*/
+.alert-modal {
+  width: 100%;
+  max-width: 360px;
+  padding: 18px 20px 15px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+  text-align: center;
+  animation: alert-modal-in 0.14s ease-out;
+}
+
+@keyframes alert-modal-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 애니메이션을 끈 사용자에게는 움직임 없이 그대로 보여줍니다. */
+@media (prefers-reduced-motion: reduce) {
+  .alert-modal { animation: none; }
+}
+
+.alert-modal-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 9px;
+  border-radius: 50%;
+  background: #fdeceb;
+  color: var(--ws-danger);
+}
+
+.alert-modal-title {
+  margin: 0 0 7px;
+  font-size: 15.5px;
+  font-weight: 650;
+  color: var(--ws-text);
+}
+
+/*
+  어느 자료인지. 행에서 떨어져 나왔으므로 이 줄이 없으면 무엇을 지우는지 알 수 없습니다.
+  칩으로 감싸는 이유는 제목과 같은 굵기로 나란히 두면 둘이 한 덩어리로 읽혀서, 무엇이
+  질문이고 무엇이 대상인지 구분되지 않기 때문입니다.
+*/
+.alert-modal-target {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 9px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: #f4f5f7;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ws-text);
+  word-break: break-all;
+}
+
+.alert-modal-desc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ws-text-dim);
+}
+
+.alert-modal-error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ws-danger);
+}
+
+.alert-modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* 두 버튼의 모양을 맞춥니다 — 높이가 다르면 나란히 놓았을 때 한쪽이 기울어 보입니다. */
+.alert-modal-actions button {
+  min-width: 84px;
+  justify-content: center;
+  padding: 7px 14px;
+  font-size: 13.5px;
+}
+
+/*
+  파괴적 조작이라 이 버튼만 채웁니다. 취소는 ghost로 남겨 두 버튼의 무게를 다르게 합니다 —
+  둘 다 같은 모양이면 손이 먼저 가는 쪽이 우연히 정해집니다.
+*/
+.btn-danger-solid {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--ws-danger);
+  border-radius: 8px;
+  background: var(--ws-danger);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.btn-danger-solid:hover { filter: brightness(0.94); }
+.btn-danger-solid:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-danger-solid:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 2px; }

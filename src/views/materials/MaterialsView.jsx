@@ -290,9 +290,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
    * 목록에서 바로 삭제하기. 연결 폼과 같은 자리를 쓰므로 둘 중 하나만 열린다 — 한 행에서
    * 연결과 삭제가 동시에 펼쳐져 있으면 어느 쪽을 하려던 것인지 흐려진다.
    *
-   * 확인 없이 지우지 않는다. 원본 파일까지 사라지고 되돌릴 수 없어서, 상세에서 쓰던
-   * DeleteConfirm을 그대로 행 안에 펼친다 — 무엇이 사라지고 무엇이 남는지 같은 문장으로
-   * 말해야 한다.
+   * 확인 없이 지우지 않는다. 원본 파일까지 사라지고 되돌릴 수 없어서 알림으로 한 번 묻는다.
    */
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
@@ -497,6 +495,9 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     }
   };
 
+  /** 삭제 확인이 열린 자료. 모달이 목록 바깥에 있으므로 여기서 찾아 넘긴다. */
+  const deletingMaterial = materials.find((m) => m.materialId === deletingId) ?? null;
+
   const uploader = useUploadQueue({ onBatchDone: handleBatchDone });
   const { addFiles } = uploader;
 
@@ -697,7 +698,6 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                 const linkedCourseIds = new Set((m.links ?? []).map((l) => l.courseId));
                 const linkable = (projects ?? []).filter((p) => !linkedCourseIds.has(p.courseId));
                 const isLinking = linkingId === m.materialId;
-                const isDeleting = deletingId === m.materialId;
 
                 return (
                   <li key={m.materialId} className="material-item-row">
@@ -747,12 +747,15 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                         >
                           <Link2 size={13} /> 프로젝트 연결
                         </button>
+                        {/*
+                          모달을 여는 버튼이라 aria-expanded/aria-controls를 쓰지 않는다 —
+                          그건 제자리에서 펼쳐지는 디스클로저용이다.
+                        */}
                         <button
                             type="button"
                             className="btn-ghost btn-sm btn-danger"
                             ref={(el) => { deleteButtonRefs.current[m.materialId] = el; }}
-                            aria-expanded={isDeleting}
-                            aria-controls={`delete-confirm-${m.materialId}`}
+                            aria-haspopup="dialog"
                             onClick={() => toggleDeleting(m.materialId)}
                         >
                           <Trash2 size={13} /> 삭제
@@ -775,22 +778,24 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                         </div>
                     )}
 
-                    {isDeleting && (
-                        <div id={`delete-confirm-${m.materialId}`}>
-                          <DeleteConfirm
-                              linkCount={(m.links ?? []).length}
-                              busy={deleteBusy}
-                              autoFocus
-                              onCancel={() => cancelDeleting(m.materialId)}
-                              onConfirm={() => handleDelete(m.materialId)}
-                          />
-                          {deleteError && <p className="view-error">{deleteError}</p>}
-                        </div>
-                    )}
                   </li>
                 );
               })}
             </ul>
+        )}
+
+        {/*
+          삭제 확인은 모달로 띄운다. 한 번에 하나만 열리므로 행마다 렌더하지 않고 여기서
+          한 번만 그린다 — 목록이 다시 정렬되거나 필터가 바뀌어도 열린 확인이 흔들리지 않는다.
+        */}
+        {deletingMaterial && (
+            <DeleteMaterialModal
+                material={deletingMaterial}
+                busy={deleteBusy}
+                error={deleteError}
+                onCancel={() => cancelDeleting(deletingMaterial.materialId)}
+                onConfirm={() => handleDelete(deletingMaterial.materialId)}
+            />
         )}
 
         {dragging && (
@@ -1136,41 +1141,55 @@ function LinkForm({ projects, onCancel, onSubmit, busy = false, autoFocus = fals
 }
 
 /**
- * 여러 프로젝트에 걸린 자료를 지울 때는 무엇이 사라지고 무엇이 남는지 먼저 말한다.
+ * 삭제 확인 알림.
  *
- * "영구 삭제 완료" 같은 표현은 쓰지 않는다 — 파일 삭제가 실패해도 사용자에게는 성공을
- * 반환하므로, 보장할 수 있는 것은 "정상적인 앱 경로에서 더 이상 접근할 수 없다"까지다.
+ * 되돌릴 수 없는 조작이라 화면을 덮지만, 무겁게 만들지 않는다 — 여기서 읽어야 하는 것은
+ * "무엇을, 어디서 지우는가"뿐이고 나머지 문장은 결정을 늦출 뿐이다.
+ *
+ * 짧게 만든다고 말을 흐리지는 않는다. "영구 삭제" 같은 표현을 쓰지 않는 것은 그대로다 —
+ * 파일 삭제가 실패해도 사용자에게는 성공을 반환하므로, 보장할 수 있는 것은 "정상적인 앱
+ * 경로에서 더 이상 접근할 수 없다"까지다.
+ *
+ * 오버레이 클릭과 Esc로 닫히고, 포커스는 취소에서 시작한다 — 열자마자 Enter를 눌러
+ * 지워버리는 일이 없어야 한다.
  */
-function DeleteConfirm({ linkCount, busy, onCancel, onConfirm, autoFocus = false }) {
+function DeleteMaterialModal({ material, busy, error, onCancel, onConfirm }) {
+  const linkCount = (material.links ?? []).length;
+
   return (
       <div
-          className="material-confirm"
+          className="modal-overlay"
+          role="presentation"
+          onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
           onKeyDown={(e) => {
-            // 목록에서는 행 안에 펼쳐지므로 Esc로 접을 수 있어야 한다. LinkForm과 같은 규칙이다.
             if (e.key === 'Escape') {
               e.stopPropagation();
-              onCancel();
+              if (!busy) onCancel();
             }
           }}
       >
-        {linkCount >= 2 && (
-            <p className="material-confirm-line">
-              이 자료는 {linkCount}개 프로젝트에 연결되어 있어요.
-            </p>
-        )}
-        <p className="material-confirm-line">
-          삭제하면 해당 프로젝트에서 더 이상 이 자료를 AI 참고 자료로 사용할 수 없습니다.
-        </p>
-        <p className="material-confirm-line view-sub-dim">
-          이미 적용한 학습 내용과 프로젝트 상태는 그대로 유지됩니다.
-        </p>
-        <div className="material-detail-actions">
-          {/* 포커스는 취소에 준다 — 펼치자마자 Enter를 눌러 지워버리는 일이 없어야 한다. */}
-          <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}
-                  autoFocus={autoFocus}>취소</button>
-          <button type="button" className="btn-ghost btn-sm btn-danger" onClick={onConfirm} disabled={busy}>
-            {busy ? '삭제 중...' : '자료 삭제'}
-          </button>
+        <div className="alert-modal" role="dialog" aria-modal="true" aria-labelledby="delete-material-title">
+          <span className="alert-modal-icon" aria-hidden="true"><Trash2 size={16} /></span>
+
+          <h3 className="alert-modal-title" id="delete-material-title">이 자료를 삭제할까요?</h3>
+          <p className="alert-modal-target">{material.originalFilename}</p>
+
+          <p className="alert-modal-desc">
+            {linkCount > 0
+                ? `${linkCount}개 프로젝트에서 더 이상 참고할 수 없어요.`
+                : '어느 프로젝트에도 연결하지 않은 자료예요.'}
+            {' '}이미 적용한 학습 내용은 그대로 남아요.
+          </p>
+
+          {error && <p className="alert-modal-error">{error}</p>}
+
+          <div className="alert-modal-actions">
+            <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}
+                    autoFocus>취소</button>
+            <button type="button" className="btn-danger-solid" onClick={onConfirm} disabled={busy}>
+              {busy ? '삭제 중...' : '삭제'}
+            </button>
+          </div>
         </div>
       </div>
   );
