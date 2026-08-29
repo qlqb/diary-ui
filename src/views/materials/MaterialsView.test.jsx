@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MaterialsView from './MaterialsView.jsx';
+import { PENDING_DELETE_WINDOW_MS } from './usePendingDelete.js';
 import { materialStoreAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
@@ -268,21 +269,12 @@ describe('자료 목록에서 바로 프로젝트 연결', () => {
 });
 
 /**
- * 삭제는 목록 행에서 한다. 상세에는 조작 버튼이 남지 않는다 — 같은 조작이 두 곳에 있으면
- * 어느 쪽이 정본인지 흐려진다.
+ * 자료 삭제는 실행 조각과 방향이 반대다. 되돌릴 수가 없어서(링크 물리 삭제 + 본문 제거 +
+ * 원본 파일 삭제) 아예 늦게 지운다 — 되돌리기는 복구가 아니라 아직 보내지 않은 요청의 취소다.
  */
 describe('자료 목록에서 바로 삭제', () => {
   const UNLINKED = {
     ...MATERIAL, materialId: 7, originalFilename: '네트워크.pdf', links: [],
-  };
-  const TWO_LINKS = {
-    ...MATERIAL,
-    materialId: 8,
-    originalFilename: '공용.pdf',
-    links: [
-      { courseId: 6, courseTitle: '자료구조', materialType: 'SYLLABUS', linkedAt: '2026-08-16T14:30:30' },
-      { courseId: 9, courseTitle: '네트워크', materialType: 'OTHER', linkedAt: '2026-08-17T14:30:30' },
-    ],
   };
   const PROJECTS = [{ courseId: 6, title: '자료구조' }, { courseId: 9, title: '네트워크' }];
 
@@ -290,14 +282,19 @@ describe('자료 목록에서 바로 삭제', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     onProjectsChanged = vi.fn();
     materialStoreAPI.list.mockResolvedValue([MATERIAL, UNLINKED]);
     materialStoreAPI.get.mockResolvedValue(DETAIL);
     materialStoreAPI.delete.mockResolvedValue(undefined);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const renderList = async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<MaterialsView projects={PROJECTS} onProjectsChanged={onProjectsChanged} />);
     await screen.findByText('네트워크.pdf');
     return user;
@@ -310,101 +307,81 @@ describe('자료 목록에서 바로 삭제', () => {
     expect(deleteButtons()).toHaveLength(2);
   });
 
-  it('삭제 버튼을 누르면 확인 모달이 뜬다 — 바로 지우지 않는다', async () => {
+  it('누르면 확인 없이 목록에서 사라지고 되돌리기 안내가 뜬다', async () => {
     const user = await renderList();
 
     await user.click(deleteButtons()[1]);
 
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText('이 자료를 삭제할까요?')).toBeInTheDocument();
-    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
-  });
-
-  it('모달이 어느 자료를 지우는지 말한다 — 행에서 떨어져 나왔으므로 필요하다', async () => {
-    const user = await renderList();
-
-    await user.click(deleteButtons()[1]);
-
-    expect(within(screen.getByRole('dialog')).getByText('네트워크.pdf')).toBeInTheDocument();
-  });
-
-  it('열리자마자 포커스는 취소에 있다 — Enter로 지워버리지 않는다', async () => {
-    const user = await renderList();
-
-    await user.click(deleteButtons()[1]);
-
-    expect(screen.getByRole('button', { name: '취소' })).toHaveFocus();
-  });
-
-  it('Esc로 닫으면 아무것도 지우지 않는다', async () => {
-    const user = await renderList();
-
-    await user.click(deleteButtons()[1]);
-    await user.keyboard('{Escape}');
-
+    // 안내에도 파일명이 있으므로 "목록에서" 사라졌는지를 본다.
+    expect(screen.queryByRole('button', { name: /네트워크\.pdf/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('네트워크.pdf');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
   });
 
-  it('몇 곳에서 참고할 수 없게 되는지, 무엇이 남는지 한 줄로 말한다', async () => {
-    materialStoreAPI.list.mockResolvedValue([TWO_LINKS]);
-    const user = userEvent.setup();
-    render(<MaterialsView projects={PROJECTS} onProjectsChanged={onProjectsChanged} />);
-    await screen.findByText('공용.pdf');
-
-    await user.click(deleteButtons()[0]);
-
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveTextContent('2개 프로젝트에서 더 이상 참고할 수 없어요.');
-    // 짧게 만들되 남는 것에 대한 약속은 그대로 남긴다.
-    expect(dialog).toHaveTextContent('이미 적용한 학습 내용은 그대로 남아요.');
-  });
-
-  it('확인하면 지우고 목록과 사이드바를 갱신한다', async () => {
+  it('되돌릴 수 있는 동안에는 서버를 아직 부르지 않는다 — 되돌리기가 복구가 아니라 취소다', async () => {
     const user = await renderList();
 
     await user.click(deleteButtons()[1]);
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '삭제' }));
+
+    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
+  });
+
+  it('되돌리기를 누르면 자료가 목록으로 돌아오고 끝내 지워지지 않는다', async () => {
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);
+    await user.click(screen.getByRole('button', { name: /되돌리기/ }));
+
+    expect(await screen.findByText('네트워크.pdf')).toBeInTheDocument();
+
+    await act(async () => { vi.advanceTimersByTime(PENDING_DELETE_WINDOW_MS + 100); });
+    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Z도 같은 일을 한다', async () => {
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
+      }));
+    });
+
+    expect(await screen.findByText('네트워크.pdf')).toBeInTheDocument();
+  });
+
+  it('창이 닫히면 그때 실제로 지운다', async () => {
+    const user = await renderList();
+
+    await user.click(deleteButtons()[1]);
+    await act(async () => { vi.advanceTimersByTime(PENDING_DELETE_WINDOW_MS + 100); });
 
     expect(materialStoreAPI.delete).toHaveBeenCalledWith(7);
-    expect(onProjectsChanged).toHaveBeenCalled();
-    expect(materialStoreAPI.list).toHaveBeenCalledTimes(2);
+    // 프로젝트별 자료 수가 바뀌므로 사이드바에도 알린다.
+    await waitFor(() => expect(onProjectsChanged).toHaveBeenCalled());
   });
 
-  it('취소하면 아무것도 지우지 않고 확인 문구가 닫힌다', async () => {
+  it('연달아 지우면 앞의 것은 곧바로 보내고 마지막 하나만 되돌릴 수 있다', async () => {
     const user = await renderList();
 
     await user.click(deleteButtons()[1]);
-    await user.click(screen.getByRole('button', { name: '취소' }));
+    await user.click(deleteButtons()[0]);
 
-    expect(materialStoreAPI.delete).not.toHaveBeenCalled();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    // 포커스는 그 행의 삭제 버튼으로 돌아온다.
-    expect(deleteButtons()[1]).toHaveFocus();
+    // 앞의 것을 조용히 없던 일로 만들면 사용자가 지운 자료가 되살아난다.
+    await waitFor(() => expect(materialStoreAPI.delete).toHaveBeenCalledWith(7));
+    expect(screen.getByRole('status')).toHaveTextContent('자료구조.pdf');
   });
 
-  it('실패하면 알림이 열린 채로 이유가 뜬다', async () => {
+  it('지우지 못하면 목록을 다시 읽고 이유를 말한다', async () => {
     materialStoreAPI.delete.mockRejectedValue(new Error('삭제하지 못했습니다'));
     const user = await renderList();
 
     await user.click(deleteButtons()[1]);
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '삭제' }));
+    await act(async () => { vi.advanceTimersByTime(PENDING_DELETE_WINDOW_MS + 100); });
 
     expect(await screen.findByText('삭제하지 못했습니다')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-  });
-
-  it('삭제 모달을 열면 열려 있던 연결 폼이 닫힌다', async () => {
-    const user = await renderList();
-
-    await user.click(screen.getAllByRole('button', { name: /프로젝트 연결/ })[1]);
-    expect(screen.getByLabelText('연결할 프로젝트')).toBeInTheDocument();
-
-    await user.click(deleteButtons()[1]);
-
-    expect(screen.queryByLabelText('연결할 프로젝트')).not.toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(materialStoreAPI.list).toHaveBeenCalledTimes(2);
   });
 
   it('상세에는 연결·삭제 버튼이 남지 않는다', async () => {

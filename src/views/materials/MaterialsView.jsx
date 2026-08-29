@@ -14,11 +14,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, Upload, Loader2, ArrowLeft, Link2, Trash2, X,
-  Plus, Check, AlertCircle, UploadCloud, Sparkles,
+  Plus, Check, AlertCircle, UploadCloud, Sparkles, RotateCcw,
 } from 'lucide-react';
 import { materialStoreAPI } from '../../api/api.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import ProposalCard from './ProposalCard.jsx';
+import usePendingDelete from './usePendingDelete.js';
 import {
   MaterialType, MATERIAL_TYPE_HINT, ExtractionStatus, EXTRACTION_STATUS_LABEL, MaterialAnalysisStatus,
 } from '../../types/learning.js';
@@ -267,7 +268,8 @@ function useUploadQueue({ onBatchDone }) {
 }
 
 export default function MaterialsView({ projects, onProjectsChanged }) {
-  const [materials, setMaterials] = useState([]);
+  /** 서버가 준 그대로. 화면에 보이는 목록(materials)은 삭제 예약분을 뺀 것이다. */
+  const [allMaterials, setAllMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
@@ -287,15 +289,12 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   const linkButtonRefs = useRef({});
 
   /**
-   * 목록에서 바로 삭제하기. 연결 폼과 같은 자리를 쓰므로 둘 중 하나만 열린다 — 한 행에서
-   * 연결과 삭제가 동시에 펼쳐져 있으면 어느 쪽을 하려던 것인지 흐려진다.
+   * 목록에서 바로 삭제하기.
    *
-   * 확인 없이 지우지 않는다. 원본 파일까지 사라지고 되돌릴 수 없어서 알림으로 한 번 묻는다.
+   * 확인을 묻지 않는다. 대신 삭제를 잠깐 미뤄 두고 그 사이에 되돌릴 수 있게 한다 —
+   * 자료 삭제는 서버까지 가면 되돌릴 수 없기 때문이다(usePendingDelete 참고).
    */
-  const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const deleteButtonRefs = useRef({});
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
 
@@ -303,7 +302,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     setLoading(true);
     setError(null);
     try {
-      setMaterials(await materialStoreAPI.list());
+      setAllMaterials(await materialStoreAPI.list());
     } catch (err) {
       setError(err.message || '자료를 불러오지 못했습니다.');
     } finally {
@@ -421,8 +420,6 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   const closeRowPanels = () => {
     setLinkingId(null);
     setLinkError(null);
-    setDeletingId(null);
-    setDeleteError(null);
   };
 
   const openDetail = (materialId) => {
@@ -442,18 +439,6 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     setLinkingId(null);
     setLinkError(null);
     linkButtonRefs.current[materialId]?.focus();
-  };
-
-  const toggleDeleting = (materialId) => {
-    const next = deletingId === materialId ? null : materialId;
-    closeRowPanels();
-    setDeletingId(next);
-  };
-
-  const cancelDeleting = (materialId) => {
-    setDeletingId(null);
-    setDeleteError(null);
-    deleteButtonRefs.current[materialId]?.focus();
   };
 
   /**
@@ -476,30 +461,30 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   };
 
   /**
-   * 삭제는 원본 파일까지 지운다. 연결 해제와 다른 액션이라 목록에서도 같은 무게로 다룬다.
-   *
-   * 성공하면 그 행이 목록에서 사라지므로 포커스를 되돌릴 곳이 없다 — 되돌리지 않는다.
+   * 삭제를 예약한다. 서버 호출은 되돌리기 창이 닫힐 때 일어난다 — 그때까지 이 자료는
+   * 화면에서만 사라져 있다.
    */
-  const handleDelete = async (materialId) => {
-    setDeleteBusy(true);
-    setDeleteError(null);
-    try {
-      await materialStoreAPI.delete(materialId);
-      setDeletingId(null);
+  const pendingDelete = usePendingDelete({
+    onCommitted: async () => {
       await load();
       await onProjectsChanged?.();
-    } catch (err) {
+    },
+    onFailed: async (err) => {
+      // 화면에서는 이미 사라진 뒤다. 목록을 다시 읽어 실제 상태로 되돌린다.
       setDeleteError(err.message || '삭제하지 못했습니다.');
-    } finally {
-      setDeleteBusy(false);
-    }
-  };
-
-  /** 삭제 확인이 열린 자료. 모달이 목록 바깥에 있으므로 여기서 찾아 넘긴다. */
-  const deletingMaterial = materials.find((m) => m.materialId === deletingId) ?? null;
+      await load();
+    },
+  });
 
   const uploader = useUploadQueue({ onBatchDone: handleBatchDone });
   const { addFiles } = uploader;
+
+  // 삭제를 예약한 자료는 화면에서 먼저 사라진다. 서버는 아직 모르므로 목록을 다시 읽어도
+  // 돌아오는데, 그걸 여기서 걸러 "지운 것처럼" 보이게 유지한다.
+  const materials = useMemo(
+      () => allMaterials.filter((m) => m.materialId !== pendingDelete.pending?.materialId),
+      [allMaterials, pendingDelete.pending],
+  );
 
   /** 정리할 것이 없으면 버튼을 숨긴다 — 눌러도 NO_CANDIDATES만 나온다. */
   const unlinkedCount = useMemo(
@@ -655,6 +640,11 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
         )}
 
         {error && <p className="view-error">{error}</p>}
+        {/*
+          지우지 못했을 때만 뜬다. 화면에서는 이미 사라진 뒤라 아무 말도 없으면 지워진 줄
+          알고 넘어가는데, 실제로는 목록에 그대로 돌아와 있다.
+        */}
+        {deleteError && <p className="view-error">{deleteError}</p>}
 
         <div className="material-filters" role="tablist" aria-label="자료 필터">
           {FILTERS.map((f) => (
@@ -748,15 +738,14 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                           <Link2 size={13} /> 프로젝트 연결
                         </button>
                         {/*
-                          모달을 여는 버튼이라 aria-expanded/aria-controls를 쓰지 않는다 —
-                          그건 제자리에서 펼쳐지는 디스클로저용이다.
+                          확인을 묻지 않는다. 되돌릴 창이 열리는 동안 서버는 아직 이 일을
+                          모르므로, 잘못 눌러도 취소하면 그만이다.
                         */}
                         <button
                             type="button"
                             className="btn-ghost btn-sm btn-danger"
-                            ref={(el) => { deleteButtonRefs.current[m.materialId] = el; }}
-                            aria-haspopup="dialog"
-                            onClick={() => toggleDeleting(m.materialId)}
+                            title="삭제 (Ctrl+Z로 되돌릴 수 있어요)"
+                            onClick={() => pendingDelete.schedule(m)}
                         >
                           <Trash2 size={13} /> 삭제
                         </button>
@@ -785,17 +774,20 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
         )}
 
         {/*
-          삭제 확인은 모달로 띄운다. 한 번에 하나만 열리므로 행마다 렌더하지 않고 여기서
-          한 번만 그린다 — 목록이 다시 정렬되거나 필터가 바뀌어도 열린 확인이 흔들리지 않는다.
+          삭제 확인을 없앤 대신 여기서 되돌릴 수 있다고 말한다. 이 안내가 떠 있는 동안이
+          곧 되돌릴 수 있는 시간이고, 사라지는 순간 실제로 지워진다.
+          실행 조각의 되돌리기 안내와 같은 모양을 쓴다 — 하는 일이 같으면 같아 보여야 한다.
         */}
-        {deletingMaterial && (
-            <DeleteMaterialModal
-                material={deletingMaterial}
-                busy={deleteBusy}
-                error={deleteError}
-                onCancel={() => cancelDeleting(deletingMaterial.materialId)}
-                onConfirm={() => handleDelete(deletingMaterial.materialId)}
-            />
+        {pendingDelete.pending && (
+            <div className="undo-toast" role="status">
+              <span className="undo-toast-text">
+                <strong>{pendingDelete.pending.title}</strong> 지웠어요
+              </span>
+              <button type="button" className="undo-toast-btn" onClick={pendingDelete.undo}>
+                <RotateCcw size={13} /> 되돌리기
+                <kbd className="undo-toast-kbd">Ctrl+Z</kbd>
+              </button>
+            </div>
         )}
 
         {dragging && (
@@ -1137,60 +1129,5 @@ function LinkForm({ projects, onCancel, onSubmit, busy = false, autoFocus = fals
         <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onCancel}>취소</button>
         <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
       </form>
-  );
-}
-
-/**
- * 삭제 확인 알림.
- *
- * 되돌릴 수 없는 조작이라 화면을 덮지만, 무겁게 만들지 않는다 — 여기서 읽어야 하는 것은
- * "무엇을, 어디서 지우는가"뿐이고 나머지 문장은 결정을 늦출 뿐이다.
- *
- * 짧게 만든다고 말을 흐리지는 않는다. "영구 삭제" 같은 표현을 쓰지 않는 것은 그대로다 —
- * 파일 삭제가 실패해도 사용자에게는 성공을 반환하므로, 보장할 수 있는 것은 "정상적인 앱
- * 경로에서 더 이상 접근할 수 없다"까지다.
- *
- * 오버레이 클릭과 Esc로 닫히고, 포커스는 취소에서 시작한다 — 열자마자 Enter를 눌러
- * 지워버리는 일이 없어야 한다.
- */
-function DeleteMaterialModal({ material, busy, error, onCancel, onConfirm }) {
-  const linkCount = (material.links ?? []).length;
-
-  return (
-      <div
-          className="modal-overlay"
-          role="presentation"
-          onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.stopPropagation();
-              if (!busy) onCancel();
-            }
-          }}
-      >
-        <div className="alert-modal" role="dialog" aria-modal="true" aria-labelledby="delete-material-title">
-          <span className="alert-modal-icon" aria-hidden="true"><Trash2 size={16} /></span>
-
-          <h3 className="alert-modal-title" id="delete-material-title">이 자료를 삭제할까요?</h3>
-          <p className="alert-modal-target">{material.originalFilename}</p>
-
-          <p className="alert-modal-desc">
-            {linkCount > 0
-                ? `${linkCount}개 프로젝트에서 더 이상 참고할 수 없어요.`
-                : '어느 프로젝트에도 연결하지 않은 자료예요.'}
-            {' '}이미 적용한 학습 내용은 그대로 남아요.
-          </p>
-
-          {error && <p className="alert-modal-error">{error}</p>}
-
-          <div className="alert-modal-actions">
-            <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}
-                    autoFocus>취소</button>
-            <button type="button" className="btn-danger-solid" onClick={onConfirm} disabled={busy}>
-              {busy ? '삭제 중...' : '삭제'}
-            </button>
-          </div>
-        </div>
-      </div>
   );
 }
