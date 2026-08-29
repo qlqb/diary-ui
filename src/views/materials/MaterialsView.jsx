@@ -397,6 +397,12 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   const uploader = useUploadQueue({ onBatchDone: handleBatchDone });
   const { addFiles } = uploader;
 
+  /** 정리할 것이 없으면 버튼을 숨긴다 — 눌러도 NO_CANDIDATES만 나온다. */
+  const unlinkedCount = useMemo(
+      () => materials.filter((m) => (m.links ?? []).length === 0).length,
+      [materials],
+  );
+
   const visible = useMemo(() => {
     if (filter === 'unlinked') return materials.filter((m) => (m.links ?? []).length === 0);
     // 목록은 서버가 이미 created_at DESC로 준다. `최근 추가`는 그중 앞쪽만 보여주는 것이다.
@@ -565,8 +571,13 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                 {f.label}
               </button>
           ))}
-          {/* 수동 진입. 자동 제안을 껐어도 이 버튼은 항상 동작한다. */}
-          {filter === 'unlinked' && visible.length > 0 && (
+          {/*
+            수동 진입. 세 탭 모두에 둔다 — 방금 자료를 올린 사람이 이 버튼을 찾으려고
+            필터를 먼저 바꿔야 한다는 것을 알 이유가 없다. 어느 탭에서 누르든 대상은
+            미연결 자료 전체이고, 카드 헤더가 범위를 말해주므로 혼란이 없다.
+            자동 제안을 껐어도 이 버튼은 항상 동작한다.
+          */}
+          {unlinkedCount > 0 && (
               <button type="button" className="btn-ghost btn-sm material-filters-action"
                       disabled={proposalLoading}
                       onClick={() => showProposal([], 'manual', ProposalTrigger.MANUAL)}>

@@ -13,6 +13,8 @@ vi.mock('../../api/api.js', () => ({
     addLink: vi.fn(),
     updateLinkType: vi.fn(),
     removeLink: vi.fn(),
+    proposeLinks: vi.fn(),
+    applyLinkProposal: vi.fn(),
   },
 }));
 
@@ -79,5 +81,45 @@ describe('자료 상세', () => {
     // 예전 우회로(연결 해제 후 재연결)를 쓰지 않는다 — linked_at도 분석 이력도 그대로 남는다.
     expect(materialStoreAPI.removeLink).not.toHaveBeenCalled();
     expect(materialStoreAPI.addLink).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * `프로젝트로 정리하기`는 세 탭 모두에 있어야 한다 — 방금 자료를 올린 사람이 이 버튼을
+ * 찾으려고 필터를 먼저 바꿔야 한다는 것을 알 이유가 없다.
+ */
+describe('프로젝트로 정리하기 버튼', () => {
+  const UNLINKED = { ...MATERIAL, materialId: 7, originalFilename: '네트워크.pdf', links: [] };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    materialStoreAPI.get.mockResolvedValue(DETAIL);
+  });
+
+  const tidyButton = () => screen.queryByRole('button', { name: /프로젝트로 정리하기/ });
+
+  it('미연결 자료가 있으면 전체 탭에서도 보인다', async () => {
+    materialStoreAPI.list.mockResolvedValue([MATERIAL, UNLINKED]);
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    expect(await screen.findByText('네트워크.pdf')).toBeInTheDocument();
+    expect(tidyButton()).toBeInTheDocument();
+  });
+
+  it('최근 추가 탭으로 옮겨도 그대로 있다', async () => {
+    const user = userEvent.setup();
+    materialStoreAPI.list.mockResolvedValue([MATERIAL, UNLINKED]);
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    await user.click(await screen.findByRole('tab', { name: '최근 추가' }));
+    expect(tidyButton()).toBeInTheDocument();
+  });
+
+  it('미연결 자료가 하나도 없으면 숨긴다 — 눌러도 정리할 게 없다', async () => {
+    materialStoreAPI.list.mockResolvedValue([MATERIAL]);
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    expect(await screen.findByText('자료구조.pdf')).toBeInTheDocument();
+    expect(tidyButton()).not.toBeInTheDocument();
   });
 });
