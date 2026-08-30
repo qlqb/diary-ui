@@ -8126,3 +8126,28 @@ body {
   color: var(--ws-text-faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* 이름·분류·교재를 한 폼에서 고칩니다. 교재 네 칸은 한 줄에 이어 놓아 함께 읽히게 합니다. */
+.project-edit { flex-direction: column; align-items: stretch; gap: 8px; }
+
+.project-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.project-edit-textbook {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+.project-edit-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ws-text-faint);
+}

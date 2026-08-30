@@ -388,30 +388,76 @@ export default function ProjectWorkspace({
   );
 }
 
+/**
+ * 이름·분류·교재 수정.
+ *
+ * 교재 칸이 여기 있는 이유: 지금까지 교재 정보를 채우는 경로는 자료 분석 적용 하나뿐이라,
+ * AI가 잘못 뽑으면 사용자가 손댈 방법이 없었다. 제목만으로는 어느 책인지 알 수 없어서
+ * (같은 제목의 교재가 여럿이다) 저자·출판사·ISBN이 판정에 필요한데, 틀렸을 때 고칠 수
+ * 없으면 확인이라는 행위 자체가 성립하지 않는다.
+ *
+ * 비우면 비워진다. 사람이 지운 것은 "모른다"는 뜻이고, 서버의 사용자 편집 경로가 그렇게
+ * 동작한다 — 재분석이 그 칸을 다시 채울 수는 있지만(비어 있으니까) 채워진 값을 덮지는 않는다.
+ */
 function RenameForm({ project, onCancel, onSaved }) {
   const [title, setTitle] = useState(project?.title ?? '');
   const [groupLabel, setGroupLabel] = useState(project?.groupLabel ?? '');
+  const [textbook, setTextbook] = useState({
+    textbookTitle: project?.textbookTitle ?? '',
+    textbookAuthor: project?.textbookAuthor ?? '',
+    textbookPublisher: project?.textbookPublisher ?? '',
+    textbookIsbn: project?.textbookIsbn ?? '',
+  });
   const [saving, setSaving] = useState(false);
+
+  const setField = (key) => (e) => setTextbook((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
     <form
-      className="project-create"
+      className="project-create project-edit"
       onSubmit={async (e) => {
         e.preventDefault();
         setSaving(true);
         try {
-          await courseAPI.update(project.courseId, { title: title.trim(), groupLabel: groupLabel.trim() || null });
+          await courseAPI.update(project.courseId, {
+            title: title.trim(),
+            groupLabel: groupLabel.trim() || null,
+            textbookTitle: textbook.textbookTitle.trim() || null,
+            textbookAuthor: textbook.textbookAuthor.trim() || null,
+            textbookPublisher: textbook.textbookPublisher.trim() || null,
+            textbookIsbn: textbook.textbookIsbn.trim() || null,
+          });
           await onSaved();
         } finally {
           setSaving(false);
         }
       }}
     >
-      <input className="project-create-title" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="프로젝트 이름" />
-      <input className="project-create-group" value={groupLabel} placeholder="분류 (선택)"
-        onChange={(e) => setGroupLabel(e.target.value)} aria-label="분류" />
-      <button type="submit" className="btn-primary" disabled={saving || !title.trim()}>저장</button>
-      <button type="button" className="btn-ghost" onClick={onCancel}>취소</button>
+      <div className="project-edit-row">
+        <input className="project-create-title" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="프로젝트 이름" />
+        <input className="project-create-group" value={groupLabel} placeholder="분류 (선택)"
+          onChange={(e) => setGroupLabel(e.target.value)} aria-label="분류" />
+      </div>
+
+      <div className="project-edit-row">
+        <input className="project-edit-textbook" value={textbook.textbookTitle} placeholder="교재명 (선택)"
+          onChange={setField('textbookTitle')} aria-label="교재명" />
+        <input className="project-edit-textbook" value={textbook.textbookAuthor} placeholder="저자"
+          onChange={setField('textbookAuthor')} aria-label="교재 저자" />
+        <input className="project-edit-textbook" value={textbook.textbookPublisher} placeholder="출판사"
+          onChange={setField('textbookPublisher')} aria-label="교재 출판사" />
+        <input className="project-edit-textbook" value={textbook.textbookIsbn} placeholder="ISBN"
+          onChange={setField('textbookIsbn')} aria-label="교재 ISBN" />
+      </div>
+
+      <p className="project-edit-hint">
+        같은 제목의 교재가 여럿이라 저자와 출판사까지 있어야 어느 책인지 알 수 있어요.
+      </p>
+
+      <div className="project-edit-row">
+        <button type="submit" className="btn-primary" disabled={saving || !title.trim()}>저장</button>
+        <button type="button" className="btn-ghost" onClick={onCancel}>취소</button>
+      </div>
     </form>
   );
 }

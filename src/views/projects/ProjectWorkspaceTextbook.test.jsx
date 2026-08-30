@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import ProjectWorkspace from './ProjectWorkspace.jsx';
 import {
   courseAPI, courseNoteAPI, executionItemAPI, materialAPI, planAPI, topicAPI,
@@ -93,5 +94,71 @@ describe('프로젝트의 교재 정보', () => {
 
     await screen.findByRole('heading', { name: '빅데이터분석' });
     expect(screen.queryByText(/교재/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 잘못 뽑힌 값을 고칠 수 있어야 확인이라는 행위가 성립한다. 지금까지 교재 정보를 채우는
+ * 경로는 자료 분석 적용 하나뿐이었고, 사용자가 손댈 방법이 없었다.
+ */
+describe('교재 정보 수정', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    planAPI.findCoveringDate.mockResolvedValue([]);
+    executionItemAPI.getByDateRange.mockResolvedValue([]);
+    materialAPI.listByCourse.mockResolvedValue([]);
+    topicAPI.getTree.mockResolvedValue([]);
+    courseNoteAPI.list.mockResolvedValue([]);
+    executionItemAPI.getByCourse.mockResolvedValue([]);
+    courseAPI.update.mockResolvedValue({});
+    courseAPI.get.mockResolvedValue({
+      ...BASE,
+      textbookTitle: '전처리와 시각화',
+      textbookAuthor: '오경선',
+      textbookPublisher: '길벗',
+      textbookIsbn: null,
+    });
+  });
+
+  const openEdit = async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(await screen.findByRole('button', { name: /이름.*분류 수정|이름\/분류 수정/ }));
+    return user;
+  };
+
+  it('지금 저장된 교재 값이 폼에 채워져 있다', async () => {
+    await openEdit();
+
+    expect(screen.getByLabelText('교재명')).toHaveValue('전처리와 시각화');
+    expect(screen.getByLabelText('교재 저자')).toHaveValue('오경선');
+    expect(screen.getByLabelText('교재 출판사')).toHaveValue('길벗');
+    expect(screen.getByLabelText('교재 ISBN')).toHaveValue('');
+  });
+
+  it('저자를 바로잡아 저장하면 그대로 나간다', async () => {
+    const user = await openEdit();
+
+    const author = screen.getByLabelText('교재 저자');
+    await user.clear(author);
+    await user.type(author, '오경선, 양숙희, 장은실');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    expect(courseAPI.update).toHaveBeenCalledWith(6, expect.objectContaining({
+      textbookTitle: '전처리와 시각화',
+      textbookAuthor: '오경선, 양숙희, 장은실',
+      textbookPublisher: '길벗',
+    }));
+  });
+
+  it('비우면 null로 나간다 — 사람이 지운 것은 "모른다"는 뜻이다', async () => {
+    const user = await openEdit();
+
+    await user.clear(screen.getByLabelText('교재 출판사'));
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    expect(courseAPI.update).toHaveBeenCalledWith(6, expect.objectContaining({
+      textbookPublisher: null,
+    }));
   });
 });
