@@ -51,6 +51,33 @@ function findAncestors(topics, targetId, path = []) {
   return null;
 }
 
+/**
+ * 교재 정보 한 줄.
+ *
+ * 제목만으로는 어느 책인지 알 수 없다 — `자료구조`, `운영체제` 같은 제목은 수십 종이고
+ * 판이 다르면 목차도 다르다. 저자와 출판사가 있어야 사람이 "내가 쓰는 책이 맞다"를
+ * 판정할 수 있고, ISBN이 있으면 확정된다.
+ *
+ * 지금까지 이 값들은 자료 분석 검토 화면에서 한 번 스쳐 지나가고 다시 볼 데가 없었다.
+ * 정작 "어, 내 책이 이거 맞나" 싶어지는 것은 몇 주 뒤 이 화면에서다.
+ *
+ * 비어 있는 항목은 자리를 만들지 않는다 — AI가 못 찾은 것과 값이 없는 것을 구분해
+ * 보여줄 방법이 지금은 없고, `미확인`을 줄줄이 세워봐야 읽을 것만 늘어난다.
+ */
+function TextbookLine({ project }) {
+  const parts = [project.textbookAuthor, project.textbookPublisher].filter(Boolean);
+
+  return (
+    <span className="view-sub-dim project-textbook">
+      {' '}교재 {project.textbookTitle}
+      {parts.length > 0 && ` · ${parts.join(' · ')}`}
+      {project.textbookIsbn && (
+        <span className="project-textbook-isbn">ISBN {project.textbookIsbn}</span>
+      )}
+    </span>
+  );
+}
+
 export default function ProjectWorkspace({
   courseId, onBack, onAsk, draft, onPatchCard, onToggleExclude, onProjectsChanged, refreshToken,
   onCreatePlan, onOpenPlan, onItemDeleted,
@@ -183,7 +210,7 @@ export default function ProjectWorkspace({
             <h1 className="view-title">{project?.title}</h1>
             <p className="view-sub">
               {project?.groupLabel && <span className="chip">{project.groupLabel}</span>}
-              {project?.textbookTitle && <span className="view-sub-dim"> 교재 {project.textbookTitle}</span>}
+              {project?.textbookTitle && <TextbookLine project={project} />}
             </p>
           </div>
         </div>

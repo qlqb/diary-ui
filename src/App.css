@@ -8116,3 +8116,13 @@ body {
   font-family: inherit;
   color: rgba(249, 250, 251, 0.8);
 }
+
+/* 교재 정보. 제목·저자·출판사는 한 줄로 이어 읽히고, ISBN은 확인용 식별자라 뒤로 뺍니다. */
+.project-textbook { word-break: keep-all; }
+
+.project-textbook-isbn {
+  margin-left: 8px;
+  font-size: 12.5px;
+  color: var(--ws-text-faint);
+  font-variant-numeric: tabular-nums;
+}
