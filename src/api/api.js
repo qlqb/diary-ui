@@ -71,13 +71,23 @@ async function request(url, options = {}) {
 
     // response가 200~299일때 통과하고 아니라면 에러를 발생시킨다
     if (!response.ok) {
-        throw new Error(
+        const error = new Error(
             //data가 null일 경우 에러가 생기기 때문에 옵셔널 체이닝 기법을 활용
             //null일때 undefined 반환
             data?.message ||
             data?.error ||
             `요청 실패: ${response.status}`
         );
+        /*
+         * 서버가 구조화된 details를 주는 오류가 있다(반복 일정 수정이 기존 예외를 무효로
+         * 만드는 409). 화면이 "무엇이 걸렸는지"를 보여주려면 그 값이 필요한데, message
+         * 문자열을 파싱하는 방식은 쓰지 않는다 — 서버 문구를 다듬는 순간 화면이 깨진다.
+         * 기존 호출부는 전부 err.message만 읽으므로 이 두 필드가 붙어도 영향이 없다.
+         */
+        error.status = response.status;
+        error.code = data?.code ?? null;
+        error.details = data?.details ?? null;
+        throw error;
     }
 
     return data;
@@ -1024,6 +1034,51 @@ export const orchestrationAPI = {
  * 확정 요청은 기간·강도·목표를 보내지 않는다: 서버가 초안 시점의 값을 갖고 있고,
  * 다시 보내면 초안과 다른 값으로 확정될 수 있다.
  */
+/**
+ * 반복 일정(수업·알바·운동). 발생분은 서버에 행이 없고, occurrences가 규칙에서 계산해
+ * 돌려주는 값이다 — 그래서 이 응답이 주간 시간표에 그릴 유일한 출처다.
+ */
+export const routineAPI = {
+    async list() {
+        return request('/routines');
+    },
+
+    /** from/to는 'YYYY-MM-DD'. 양끝을 포함한다. */
+    async occurrences(from, to) {
+        const params = new URLSearchParams({ from, to });
+        return request(`/routines/occurrences?${params.toString()}`);
+    },
+
+    async create(payload) {
+        return request('/routines', { method: 'POST', body: JSON.stringify(payload) });
+    },
+
+    /** 전체 교체다. 폼이 들고 있는 값을 전부 보낸다 — 비운 칸은 비운 것으로 저장된다. */
+    async update(routineId, payload) {
+        return request(`/routines/${routineId}`, { method: 'PUT', body: JSON.stringify(payload) });
+    },
+
+    async remove(routineId) {
+        return request(`/routines/${routineId}`, { method: 'DELETE' });
+    },
+
+    async addException(routineId, payload) {
+        return request(`/routines/${routineId}/exceptions`, {
+            method: 'POST', body: JSON.stringify(payload),
+        });
+    },
+
+    async updateException(routineId, routineExceptionId, payload) {
+        return request(`/routines/${routineId}/exceptions/${routineExceptionId}`, {
+            method: 'PUT', body: JSON.stringify(payload),
+        });
+    },
+
+    async removeException(routineId, routineExceptionId) {
+        return request(`/routines/${routineId}/exceptions/${routineExceptionId}`, { method: 'DELETE' });
+    },
+};
+
 export const planAPI = {
     /** 초안 생성. intensity를 생략하면 서버가 직전 계획에서 승계한다. */
     createDraft: ({ startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null }) => {

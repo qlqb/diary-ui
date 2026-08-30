@@ -12,11 +12,12 @@ import WeekGrid from './WeekGrid.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
 import ExecutionRow from '../../components/ExecutionRow.jsx';
 import { adjustmentFor } from '../../ai/useProposalDraft.js';
-import { executionItemAPI } from '../../api/api.js';
+import RoutineSection from './RoutineSection.jsx';
+import { executionItemAPI, routineAPI } from '../../api/api.js';
 import { formatDateShort, todayString, weekDates, weekOffsetOf } from '../../lib/datetime.js';
 
 export default function ScheduleView({
-  draft, onPatchCard, onToggleExclude, onOpenAi, refreshToken, projectTitles, onItemDeleted,
+  draft, onPatchCard, onToggleExclude, onOpenAi, refreshToken, projectTitles, projects, onItemDeleted,
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const dates = useMemo(() => weekDates(weekOffset), [weekOffset]);
@@ -25,6 +26,9 @@ export default function ScheduleView({
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [routines, setRoutines] = useState([]);
+  const [occurrences, setOccurrences] = useState([]);
+  const [routinesLoading, setRoutinesLoading] = useState(true);
   const today = todayString();
 
   const load = async () => {
@@ -39,8 +43,29 @@ export default function ScheduleView({
     }
   };
 
+  /*
+   * 반복 일정은 규칙과 발생분을 따로 읽는다. 규칙은 아래 목록이 쓰고, 발생분은 격자가 쓴다.
+   * 발생분에는 서버에 행이 없어서 주를 옮길 때마다 그 주 것을 다시 계산해 받아야 한다.
+   */
+  const loadRoutines = async () => {
+    setRoutinesLoading(true);
+    try {
+      const [list, expanded] = await Promise.all([
+        routineAPI.list(),
+        routineAPI.occurrences(dates[0], dates[6]),
+      ]);
+      setRoutines(list);
+      setOccurrences(expanded);
+    } catch (err) {
+      setError(err.message || '반복 일정을 불러오지 못했습니다.');
+    } finally {
+      setRoutinesLoading(false);
+    }
+  };
+
   useEffect(() => {
     load();
+    loadRoutines();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset, refreshToken]);
 
@@ -120,6 +145,7 @@ export default function ScheduleView({
         dates={dates}
         items={items}
         draftCards={draftCards}
+        occurrences={occurrences}
         todayDate={today}
         onPatchCard={onPatchCard}
         onSelectItem={setSelected}
@@ -168,7 +194,14 @@ export default function ScheduleView({
         </section>
       )}
 
-      {!loading && items.length === 0 && draftCards.length === 0 && (
+      <RoutineSection
+        routines={routines}
+        courses={projects}
+        loading={routinesLoading}
+        onChanged={loadRoutines}
+      />
+
+      {!loading && items.length === 0 && draftCards.length === 0 && occurrences.length === 0 && (
         <div className="empty-block">
           <p className="empty-title">이번 주에 잡힌 것이 없어요</p>
           <p className="empty-desc">오른쪽에서 &quot;이번 주 계획 짜줘&quot;라고 말하면 초안이 이 격자 위에 바로 나타나요.</p>

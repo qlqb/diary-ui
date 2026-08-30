@@ -341,6 +341,7 @@ export default function MainShell({ user, onLogout }) {
               onItemDeleted={rememberDeleted}
               refreshToken={refreshToken}
               projectTitles={projectTitles}
+              projects={projects}
             />
           )}
 

@@ -10,7 +10,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import { formatDateShort, hhmmOf, minutesOf, weekdayKo } from '../../lib/datetime.js';
+import { formatDateShort, hhmmOf, minutesOf, toHHmm, weekdayKo } from '../../lib/datetime.js';
 
 const START_HOUR = 6;
 const END_HOUR = 24;
@@ -27,8 +27,66 @@ function heightOf(startHHmm, endHHmm) {
   return Math.max(18, h);
 }
 
+/**
+ * 반복 일정 발생분 하나를 격자에 그릴 조각들로 나눈다.
+ *
+ * 발생분은 자정을 넘을 수 있어서(알바 22:00~02:00, CL 15:00~00:00) 하루 칸 하나에 담기지
+ * 않는다. 시작한 날의 조각과 다음 날의 조각으로 나눈다.
+ *
+ * 격자가 06시부터라 그 앞은 그리지 못한다. 22:00~02:00의 새벽 조각처럼 06시 이전에 끝나는
+ * 부분은 여기서 빠진다 — 없는 척하는 것이 아니라, 아래 반복 일정 목록이 전체 구간을
+ * 그대로 보여준다. 배치는 잘라내지 않은 원래 구간을 본다.
+ */
+function occurrenceSegments(occurrence) {
+  const startDate = occurrence.startAt.slice(0, 10);
+  const endDate = occurrence.endAt.slice(0, 10);
+  const startTime = toHHmm(occurrence.startAt);
+  const endTime = toHHmm(occurrence.endAt);
+  if (startDate === endDate) {
+    return [{ date: startDate, startTime, endTime }];
+  }
+  const segments = [{ date: startDate, startTime, endTime: '24:00' }];
+  if (endTime !== '00:00') {
+    segments.push({ date: endDate, startTime: '00:00', endTime });
+  }
+  return segments;
+}
+
+/**
+ * 같은 날 겹치는 발생분을 나란히 놓는다.
+ *
+ * 필요한 이유는 보강 때문이다. 보강이 정규 수업이 있는 날로 옮겨 오면 그날 같은 시각에
+ * 발생분이 둘이 되고(둘 다 실제로 가야 한다), 폭이 같으면 뒤에 그린 것이 앞의 것을 통째로
+ * 덮어 하나만 있는 것처럼 보인다. 대부분의 날은 하나뿐이라 폭이 그대로다.
+ */
+function assignLanes(entries) {
+  const sorted = [...entries].sort(
+    (a, b) => minutesOf(a.segment.startTime) - minutesOf(b.segment.startTime),
+  );
+  const laneEnds = [];
+  const placed = sorted.map((entry) => {
+    const start = minutesOf(entry.segment.startTime);
+    let lane = laneEnds.findIndex((end) => end <= start);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(0);
+    }
+    laneEnds[lane] = minutesOf(entry.segment.endTime);
+    return { ...entry, lane };
+  });
+  const laneCount = Math.max(1, laneEnds.length);
+  return placed.map((entry) => ({ ...entry, laneCount }));
+}
+
+function clampSegment(segment) {
+  const start = Math.max(minutesOf(segment.startTime), START_HOUR * 60);
+  const end = Math.min(minutesOf(segment.endTime), END_HOUR * 60);
+  if (end <= start) return null;
+  return { ...segment, startTime: hhmmOf(start), endTime: end === END_HOUR * 60 ? '24:00' : hhmmOf(end) };
+}
+
 export default function WeekGrid({
-  dates, items, draftCards, todayDate, onPatchCard, onSelectItem,
+  dates, items, draftCards, occurrences, todayDate, onPatchCard, onSelectItem,
 }) {
   const gridRef = useRef(null);
   /*
@@ -64,9 +122,21 @@ export default function WeekGrid({
 
   const timedByDate = {};
   const untimedByDate = {};
+  const routineByDate = {};
   for (const date of dates) {
     timedByDate[date] = [];
     untimedByDate[date] = [];
+    routineByDate[date] = [];
+  }
+  for (const occurrence of occurrences ?? []) {
+    for (const segment of occurrenceSegments(occurrence)) {
+      if (!(segment.date in routineByDate)) continue;
+      const clamped = clampSegment(segment);
+      if (clamped) routineByDate[segment.date].push({ occurrence, segment: clamped });
+    }
+  }
+  for (const date of dates) {
+    routineByDate[date] = assignLanes(routineByDate[date]);
   }
   for (const item of items) {
     if (!item.scheduledDate || !(item.scheduledDate in timedByDate)) continue;
@@ -151,6 +221,31 @@ export default function WeekGrid({
           <div key={date} className={`week-grid-col${date === todayDate ? ' is-today' : ''}`} style={{ height: GRID_HEIGHT }}>
             {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
               <div key={i} className="week-grid-line" style={{ top: i * HOUR_PX }} />
+            ))}
+
+            {/*
+              반복 일정은 실행 조각과 형태로 구분한다 — 행이 없는 값이라 클릭할 상세도 없고,
+              끌어 옮길 수도 없다. 색만으로 나누지 않는 것은 이 화면 전체의 규칙이다.
+            */}
+            {routineByDate[date].map(({ occurrence, segment, lane, laneCount }, index) => (
+              <div
+                key={`ro-${occurrence.routineId}-${occurrence.sourceDate}-${index}`}
+                className="grid-block is-routine"
+                title={`${occurrence.title}${occurrence.location ? ` · ${occurrence.location}` : ''}`}
+                style={{
+                  top: topOf(segment.startTime),
+                  height: heightOf(segment.startTime, segment.endTime),
+                  left: `calc(3px + ${lane} * (100% - 6px) / ${laneCount})`,
+                  width: `calc((100% - 6px) / ${laneCount})`,
+                  right: 'auto',
+                }}
+              >
+                <span className="grid-block-time">
+                  {segment.startTime}
+                  {occurrence.moved && <span className="grid-block-badge">보강</span>}
+                </span>
+                <span className="grid-block-title">{occurrence.title}</span>
+              </div>
             ))}
 
             {timedByDate[date].map((item) => (

@@ -46,11 +46,17 @@ export function weekdayKo(dateString) {
   return WEEKDAY_KO[parseDateString(dateString).getDay()];
 }
 
-/** ISO datetime 또는 'HH:mm'에서 'HH:mm'만 뽑는다. */
+/**
+ * ISO datetime('2026-10-01T10:00:00'), 'HH:mm:ss', 'HH:mm' 어느 쪽이든 'HH:mm'만 뽑는다.
+ *
+ * 서버의 LocalTime은 초까지 실려 온다('10:00:00'). 자리 수로만 갈라 slice(11, 16)을 하면
+ * 빈 문자열이 나오므로 'T'가 있는지로 구분한다.
+ */
 export function toHHmm(value) {
   if (!value) return null;
   const s = String(value);
-  return s.length > 5 ? s.slice(11, 16) : s;
+  if (s.length <= 5) return s;
+  return s.includes('T') ? s.slice(11, 16) : s.slice(0, 5);
 }
 
 export function minutesOf(hhmm) {
