@@ -86,7 +86,8 @@ function clampSegment(segment) {
 }
 
 export default function WeekGrid({
-  dates, items, draftCards, occurrences, todayDate, onPatchCard, onSelectItem,
+  dates, items, draftCards, occurrences, commitments, todayDate,
+  onPatchCard, onSelectItem, onSelectCommitment,
 }) {
   const gridRef = useRef(null);
   /*
@@ -123,10 +124,12 @@ export default function WeekGrid({
   const timedByDate = {};
   const untimedByDate = {};
   const routineByDate = {};
+  const commitmentByDate = {};
   for (const date of dates) {
     timedByDate[date] = [];
     untimedByDate[date] = [];
     routineByDate[date] = [];
+    commitmentByDate[date] = [];
   }
   for (const occurrence of occurrences ?? []) {
     for (const segment of occurrenceSegments(occurrence)) {
@@ -137,6 +140,17 @@ export default function WeekGrid({
   }
   for (const date of dates) {
     routineByDate[date] = assignLanes(routineByDate[date]);
+  }
+  /*
+   * 약속도 같은 조각내기를 쓴다 — 자정을 넘기면 두 날에 걸쳐 그려야 하는 것이 똑같다.
+   * 다른 것은 클릭이 열린다는 점뿐이다(반복 일정은 행이 없어 열 상세가 없다).
+   */
+  for (const commitment of commitments ?? []) {
+    for (const segment of occurrenceSegments(commitment)) {
+      if (!(segment.date in commitmentByDate)) continue;
+      const clamped = clampSegment(segment);
+      if (clamped) commitmentByDate[segment.date].push({ commitment, segment: clamped });
+    }
   }
   for (const item of items) {
     if (!item.scheduledDate || !(item.scheduledDate in timedByDate)) continue;
@@ -246,6 +260,30 @@ export default function WeekGrid({
                 </span>
                 <span className="grid-block-title">{occurrence.title}</span>
               </div>
+            ))}
+
+            {/*
+              약속은 반복 일정과 같은 회색 계열이지만 클릭이 열린다 — 고칠 수 있는 행이
+              실제로 있기 때문이다. 라벨로 종류를 말하는 규칙은 같다.
+            */}
+            {commitmentByDate[date].map(({ commitment, segment }, index) => (
+              <button
+                key={`cm-${commitment.commitmentId}-${index}`}
+                type="button"
+                className="grid-block is-commitment"
+                title={`${commitment.title}${commitment.locationText ? ` · ${commitment.locationText}` : ''}`}
+                style={{
+                  top: topOf(segment.startTime),
+                  height: heightOf(segment.startTime, segment.endTime),
+                }}
+                onClick={() => onSelectCommitment?.(commitment)}
+              >
+                <span className="grid-block-time">
+                  {segment.startTime}
+                  <span className="grid-block-badge">약속</span>
+                </span>
+                <span className="grid-block-title">{commitment.title}</span>
+              </button>
             ))}
 
             {timedByDate[date].map((item) => (

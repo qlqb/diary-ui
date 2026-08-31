@@ -36,7 +36,7 @@ import ScheduleView from '../views/schedule/ScheduleView.jsx';
 import PlanCreateView from '../views/plan/PlanCreateView.jsx';
 import PlanView from '../views/plan/PlanView.jsx';
 import RecordView from '../views/RecordView.jsx';
-import { courseAPI, executionItemAPI, routineAPI } from '../api/api.js';
+import { commitmentAPI, courseAPI, executionItemAPI, routineAPI } from '../api/api.js';
 import useUndoDelete from './useUndoDelete.js';
 import UndoToast from '../components/UndoToast.jsx';
 import { todayString } from '../lib/datetime.js';
@@ -120,6 +120,8 @@ export default function MainShell({ user, onLogout }) {
    * 오늘 화면이 둘을 합치는 것은 "언제가 비어 있는가"를 셀 때뿐이다.
    */
   const [todayOccurrences, setTodayOccurrences] = useState([]);
+  /** 오늘 걸치는 일회성 약속. 루틴과 같은 이유로 실행 조각과 합치지 않고 따로 들고 간다. */
+  const [todayCommitments, setTodayCommitments] = useState([]);
   const [todayLoading, setTodayLoading] = useState(true);
   const [todayError, setTodayError] = useState(null);
   /** 일부만 읽은 상태를 알리는 문구. 전체 실패(todayError)와 구분한다. */
@@ -149,24 +151,33 @@ export default function MainShell({ user, onLogout }) {
     setTodayLoading(true);
     setTodayError(null);
     try {
-      const [itemsResult, occurrencesResult] = await Promise.allSettled([
+      const [itemsResult, occurrencesResult, commitmentsResult] = await Promise.allSettled([
         executionItemAPI.getByDate(today),
         routineAPI.occurrences(today, today),
+        commitmentAPI.list(today, today),
       ]);
       if (itemsResult.status === 'rejected') throw itemsResult.reason;
       setTodayItems(itemsResult.value);
       /*
-       * 반복 일정만 못 읽었으면 실행 조각은 그대로 보여주되, 시간축이 불완전하다는 것을
+       * 시간축 소스 하나만 못 읽었으면 실행 조각은 그대로 보여주되, 불완전하다는 것을
        * 말한다. 조용히 빈 배열로 두면 화면이 "다음 일정 없음"이라고 단언하는데, 그건
        * 못 읽었다는 사실을 없는 일정으로 바꿔 말하는 것이다.
        */
+      const missing = [];
       if (occurrencesResult.status === 'rejected') {
         setTodayOccurrences([]);
-        setTodayNotice('반복 일정을 불러오지 못했어요. 수업·알바가 빠진 채로 보고 있어요.');
+        missing.push('반복 일정');
       } else {
         setTodayOccurrences(occurrencesResult.value ?? []);
-        setTodayNotice(null);
       }
+      if (commitmentsResult.status === 'rejected') {
+        setTodayCommitments([]);
+        missing.push('약속');
+      } else {
+        setTodayCommitments(commitmentsResult.value ?? []);
+      }
+      setTodayNotice(missing.length === 0 ? null
+        : `${missing.join('과 ')}을 불러오지 못했어요. 그 시간이 빠진 채로 보고 있어요.`);
     } catch (err) {
       setTodayError(err.message || '오늘 항목을 불러오지 못했습니다.');
     } finally {
@@ -294,6 +305,7 @@ export default function MainShell({ user, onLogout }) {
             <TodayView
               items={todayItems}
               occurrences={todayOccurrences}
+              commitments={todayCommitments}
               notice={todayNotice}
               loading={todayLoading}
               error={todayError}

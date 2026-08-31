@@ -28,7 +28,7 @@ import { formatDateKo, formatMinutes, minutesOf, nowMinutes, toHHmm, todayString
 import { executionItemAPI } from '../api/api.js';
 
 export default function TodayView({
-  items, occurrences, loading, error, notice, onRefresh, projectTitles,
+  items, occurrences, commitments, loading, error, notice, onRefresh, projectTitles,
   draft, onPatchCard, onToggleExclude, onOpenAi, onAsk, onItemDeleted,
 }) {
   const today = todayString();
@@ -60,8 +60,8 @@ export default function TodayView({
    * 해야 할 일과 못 쓰는 시간을 합친 숫자가 되어 뜻을 잃는다.
    */
   const timeline = useMemo(
-    () => buildTodayTimeline({ items, occurrences }, today),
-    [items, occurrences, today],
+    () => buildTodayTimeline({ items, occurrences, commitments }, today),
+    [items, occurrences, commitments, today],
   );
   const { currentEntries, nextTimed, minutesToNext } = useMemo(
     () => classifyTimeline(timeline, now), [timeline, now],
@@ -274,7 +274,8 @@ export default function TodayView({
                 </p>
                 <p className="empty-desc">
                   {toHHmm(nextTimed.startAt)} {nextTimed.title}
-                  {nextTimed.kind !== 'EXECUTION' && <span className="exec-row-dim"> · 반복 일정</span>}
+                  {nextTimed.kind === 'ROUTINE' && <span className="exec-row-dim"> · 반복 일정</span>}
+                  {nextTimed.kind === 'COMMITMENT' && <span className="exec-row-dim"> · 약속</span>}
                 </p>
               </div>
             )}

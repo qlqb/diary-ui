@@ -9,14 +9,15 @@
  * 사실상 같은 회색이라, 색을 옮겨 와도 "왜 이 줄만 버튼이 없지"에 답이 되지 않는다.
  * 무엇인지를 글자로 말한다.
  *
- * kind를 늘리면 라벨만 추가하면 된다 — 일회성 약속(COMMITMENT)이 다음에 여기로 들어온다.
+ * kind를 늘리면 라벨만 추가하면 된다. 지금은 반복 일정과 약속 둘이다.
  */
 
-import { Repeat } from 'lucide-react';
+import { Repeat, MapPin } from 'lucide-react';
 import { toHHmm } from '../lib/datetime.js';
 
 const KIND_LABEL = {
   ROUTINE: '반복 일정',
+  COMMITMENT: '약속',
 };
 
 export default function TimeBlockRow({ entry, running = false, compact = false }) {
@@ -31,7 +32,8 @@ export default function TimeBlockRow({ entry, running = false, compact = false }
         </div>
         <div className="exec-row-meta">
           <span className="chip chip-block">
-            <Repeat size={11} /> {KIND_LABEL[entry.kind] ?? '일정'}
+            {entry.kind === 'ROUTINE' ? <Repeat size={11} /> : <MapPin size={11} />}
+            {KIND_LABEL[entry.kind] ?? '일정'}
           </span>
           {running && <span className="exec-row-dim">진행 중</span>}
           {entry.locationText && <span className="exec-row-dim">{entry.locationText}</span>}

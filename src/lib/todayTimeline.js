@@ -8,7 +8,7 @@
  *
  *   ExecutionItem ─┐
  *   RoutineOccurrence ─┤ ──> buildTodayTimeline() ──> classifyTimeline() ──> 시간 상태
- *   (다음: Commitment) ─┘                     currentEntries / nextTimed / minutesToNext
+ *   Commitment ────────┘                      currentEntries / nextTimed / minutesToNext
  *
  * classifyToday는 단순 정렬 함수가 아니라 status === 'PLANNED'를 전제로 밀린 항목과
  * 남은 실행량을 판단하는 ExecutionItem 전용 규칙이다. 루틴에는 그런 상태가 없다.
@@ -22,12 +22,12 @@
  *
  * TodayTimelineEntry {
  *   key          목록 렌더 키. 원본이 달라도 충돌하지 않게 kind를 앞에 붙인다
- *   kind         'EXECUTION' | 'ROUTINE'   (다음: 'COMMITMENT')
+ *   kind         'EXECUTION' | 'ROUTINE' | 'COMMITMENT'
  *   title
  *   startAt      'YYYY-MM-DDTHH:mm' 로컬 시각. HH:mm만으로는 자정 넘김을 표현할 수 없다
  *   endAt
  *   locationText
- *   sourceRef    'execution:12' / 'routine:9:2026-09-03'
+ *   sourceRef    'execution:12' / 'routine:9:2026-09-03' / 'commitment:5'
  *   startMinutes / endMinutes   오늘 자정 기준 분. 계산은 전부 이 둘로 한다
  * }
  *
@@ -120,14 +120,42 @@ function fromRoutineOccurrence(occurrence, today) {
 }
 
 /**
+ * 일회성 약속 → 타임라인 항목.
+ *
+ * 루틴과 거의 같다 — 다른 것은 반복이냐 한 번이냐뿐이고, 시간을 막는다는 의미는 같다.
+ * 그래서 판정 함수들은 이 둘을 구분하지 않는다(kind로 분기하지 않는다).
+ *
+ * startAt/endAt이 서버에서 이미 날짜를 포함한 값으로 온다. 22:00~다음날 02:00이 그대로
+ * 실려 오므로 자정 넘김 추론이 필요 없다.
+ */
+function fromCommitment(commitment, today) {
+  const startMinutes = minutesFromToday(commitment.startAt, today);
+  const endMinutes = minutesFromToday(commitment.endAt, today);
+  if (startMinutes == null || endMinutes == null || endMinutes <= startMinutes) return null;
+  if (endMinutes <= 0 || startMinutes >= DAY) return null;
+  return {
+    key: `COMMITMENT:${commitment.commitmentId}`,
+    kind: 'COMMITMENT',
+    title: commitment.title,
+    startAt: commitment.startAt,
+    endAt: commitment.endAt,
+    locationText: commitment.locationText ?? null,
+    sourceRef: `commitment:${commitment.commitmentId}`,
+    startMinutes,
+    endMinutes,
+  };
+}
+
+/**
  * 시간을 점유하는 소스 목록.
  *
- * 소스를 늘릴 때 여기에 한 줄을 추가한다 — 일회성 약속(COMMITMENT)이 다음에 이 자리로
- * 들어온다. 아래 계산은 kind를 보고 분기하지 않으므로 소스가 늘어도 고칠 곳이 없다.
+ * 소스를 늘릴 때 여기에 한 줄을 추가한다. 아래 계산은 kind를 보고 분기하지 않으므로
+ * 소스가 늘어도 고칠 곳이 없다.
  */
 const TIMELINE_SOURCES = [
   { key: 'items', map: fromExecutionItem },
   { key: 'occurrences', map: fromRoutineOccurrence },
+  { key: 'commitments', map: fromCommitment },
 ];
 
 /** 같은 시각에 여럿이면 짧은 것부터. 화면이 매번 같은 순서로 그려지기만 하면 된다. */
@@ -141,7 +169,7 @@ function byStartThenEnd(a, b) {
 /**
  * 오늘 시간을 점유하는 것들을 한 줄로 세운다.
  *
- * @param sources { items, occurrences, ... } 원본 그대로. 소스별 형태를 여기서 흡수한다
+ * @param sources { items, occurrences, commitments } 원본 그대로. 형태를 여기서 흡수한다
  * @param today   'YYYY-MM-DD'
  */
 export function buildTodayTimeline(sources, today) {

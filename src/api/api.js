@@ -1035,6 +1035,36 @@ export const orchestrationAPI = {
  * 다시 보내면 초안과 다른 값으로 확정될 수 있다.
  */
 /**
+ * 일회성 약속(친구 약속·병원·면접). 반복이면 routineAPI다.
+ *
+ * 수행 대상이 아니라 complete/partial 같은 것이 없다 — 이 API가 하는 일은 "그 시간은 못
+ * 쓴다"는 사실의 CRUD뿐이다. sourceType을 보내지 않는 것도 의도다: 서버가 정한다.
+ */
+export const commitmentAPI = {
+    /** from/to는 'YYYY-MM-DD'. 구간이 그 범위와 겹치는 것을 전부 돌려준다(시작일 기준이 아니다). */
+    async list(from, to) {
+        const params = new URLSearchParams({ from, to });
+        return request(`/commitments?${params.toString()}`);
+    },
+
+    async create(payload) {
+        return request('/commitments', { method: 'POST', body: JSON.stringify(payload) });
+    },
+
+    /** 전체 교체다. 비운 장소는 비운 것으로 저장된다. */
+    async update(commitmentId, payload) {
+        return request(`/commitments/${commitmentId}`, {
+            method: 'PUT', body: JSON.stringify(payload),
+        });
+    },
+
+    async remove(commitmentId, version) {
+        const params = new URLSearchParams({ version });
+        return request(`/commitments/${commitmentId}?${params.toString()}`, { method: 'DELETE' });
+    },
+};
+
+/**
  * 반복 일정(수업·알바·운동). 발생분은 서버에 행이 없고, occurrences가 규칙에서 계산해
  * 돌려주는 값이다 — 그래서 이 응답이 주간 시간표에 그릴 유일한 출처다.
  */

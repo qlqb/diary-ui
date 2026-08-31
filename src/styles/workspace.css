@@ -348,6 +348,34 @@
   background: #fafbfc;
 }
 .exec-row.is-block.is-running { border-left-color: var(--ws-accent); background: var(--ws-surface); }
+.exec-row.is-block .exec-row-actions { align-self: center; }
+
+/* 약속 입력. 반복 옵션이 없다 — 필드가 넷뿐이라 한 줄로 접힌다. */
+.commitment-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ws-border);
+  border-radius: 10px;
+  background: #f8f9fb;
+}
+.commitment-form input[type='text'],
+.commitment-form input:not([type]),
+.commitment-form input[type='date'],
+.commitment-form input[type='time'] {
+  padding: 4px 7px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13.5px;
+  color: var(--ws-text);
+}
+.commitment-form-actions { display: inline-flex; align-items: center; gap: 6px; }
+
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .block-row-range { font-variant-numeric: tabular-nums; font-weight: 600; }
 .chip-block { background: #e7eaee; color: var(--ws-text-dim); }
 .exec-row.has-draft { border-color: var(--ws-draft); box-shadow: 0 0 0 1px var(--ws-draft-soft); }
@@ -1663,6 +1691,15 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
   z-index: 0;
 }
 .grid-block.is-routine:hover { filter: none; }
+
+/* 약속. 반복 일정과 같은 계열이지만 누를 수 있다 — 고칠 수 있는 행이 실제로 있다. */
+.grid-block.is-commitment {
+  border: 1px solid var(--ws-border-strong);
+  border-left: 3px solid var(--ws-warn);
+  background: #f7f6f1;
+  color: var(--ws-text-dim);
+  z-index: 1;
+}
 .grid-block-badge {
   margin-left: 4px; padding: 0 4px;
   border-radius: 4px; background: var(--ws-warn-soft); color: var(--ws-warn);

@@ -13,7 +13,8 @@ import DraftRow from '../../components/DraftRow.jsx';
 import ExecutionRow from '../../components/ExecutionRow.jsx';
 import { adjustmentFor } from '../../ai/useProposalDraft.js';
 import RoutineSection from './RoutineSection.jsx';
-import { executionItemAPI, routineAPI } from '../../api/api.js';
+import CommitmentSection from './CommitmentSection.jsx';
+import { commitmentAPI, executionItemAPI, routineAPI } from '../../api/api.js';
 import { formatDateShort, todayString, weekDates, weekOffsetOf } from '../../lib/datetime.js';
 
 export default function ScheduleView({
@@ -29,6 +30,10 @@ export default function ScheduleView({
   const [routines, setRoutines] = useState([]);
   const [occurrences, setOccurrences] = useState([]);
   const [routinesLoading, setRoutinesLoading] = useState(true);
+  const [commitments, setCommitments] = useState([]);
+  const [commitmentsLoading, setCommitmentsLoading] = useState(true);
+  /** 격자에서 약속을 누르면 아래 목록의 그 줄이 편집으로 열린다. */
+  const [editingCommitmentId, setEditingCommitmentId] = useState(null);
   const today = todayString();
 
   const load = async () => {
@@ -63,9 +68,22 @@ export default function ScheduleView({
     }
   };
 
+  /* 약속도 그 주에 걸치는 것을 받는다 — 시작일이 아니라 구간이 겹치면 온다. */
+  const loadCommitments = async () => {
+    setCommitmentsLoading(true);
+    try {
+      setCommitments(await commitmentAPI.list(dates[0], dates[6]));
+    } catch (err) {
+      setError(err.message || '약속을 불러오지 못했습니다.');
+    } finally {
+      setCommitmentsLoading(false);
+    }
+  };
+
   useEffect(() => {
     load();
     loadRoutines();
+    loadCommitments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset, refreshToken]);
 
@@ -149,9 +167,11 @@ export default function ScheduleView({
         items={items}
         draftCards={draftCards}
         occurrences={occurrences}
+        commitments={commitments}
         todayDate={today}
         onPatchCard={onPatchCard}
         onSelectItem={setSelected}
+        onSelectCommitment={(c) => setEditingCommitmentId(c.commitmentId)}
       />
 
       {selected && (
@@ -197,6 +217,14 @@ export default function ScheduleView({
         </section>
       )}
 
+      <CommitmentSection
+        commitments={commitments}
+        loading={commitmentsLoading}
+        editingId={editingCommitmentId}
+        onEdit={setEditingCommitmentId}
+        onChanged={loadCommitments}
+      />
+
       <RoutineSection
         routines={routines}
         courses={projects}
@@ -204,7 +232,8 @@ export default function ScheduleView({
         onChanged={loadRoutines}
       />
 
-      {!loading && items.length === 0 && draftCards.length === 0 && occurrences.length === 0 && (
+      {!loading && items.length === 0 && draftCards.length === 0 && occurrences.length === 0
+        && commitments.length === 0 && (
         <div className="empty-block">
           <p className="empty-title">이번 주에 잡힌 것이 없어요</p>
           <p className="empty-desc">오른쪽에서 &quot;이번 주 계획 짜줘&quot;라고 말하면 초안이 이 격자 위에 바로 나타나요.</p>

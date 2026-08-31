@@ -550,6 +550,78 @@ describe('반복 일정 반영', () => {
   });
 });
 
+describe('일회성 약속', () => {
+  const AT = (hhmm, date = TODAY_STRING) => `${date}T${hhmm}:00`;
+  const meetup = (overrides = {}) => ({
+    commitmentId: 5,
+    title: '친구 약속',
+    startAt: AT('19:00'),
+    endAt: AT('21:00'),
+    locationText: '홍대',
+    version: 0,
+    ...overrides,
+  });
+
+  it('다음 일정 계산에 들어가고 "약속"으로 표시된다', () => {
+    freezeAt(18, 0);
+    renderToday([], { commitments: [meetup()] });
+
+    expect(screen.getByText(/다음 일정까지 1시간 남았어요/)).toBeInTheDocument();
+    expect(screen.getAllByText('약속').length).toBeGreaterThan(0);
+  });
+
+  it('진행 중이면 "지금"에 뜨고 시각 없는 실행 조각을 제안하지 않는다', () => {
+    freezeAt(20, 0);
+    renderToday([untimed(7, '웹서버 과제')], { commitments: [meetup()] });
+
+    expect(screen.getByText('진행 중')).toBeInTheDocument();
+    expect(document.querySelector('.focus-slot')).toBeNull();
+    // 접힌 항목은 사라지지 않는다.
+    expect(screen.getByText('웹서버 과제')).toBeInTheDocument();
+  });
+
+  it('장소를 보여준다', () => {
+    freezeAt(20, 0);
+    renderToday([], { commitments: [meetup()] });
+
+    expect(screen.getByText('홍대')).toBeInTheDocument();
+  });
+
+  it('실행 액션이 없다', () => {
+    freezeAt(20, 0);
+    renderToday([], { commitments: [meetup()] });
+
+    for (const name of ['완료', '일부 했어요', '줄이기', '이동']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it('남은 예정 시간에 약속 시간이 더해지지 않는다', () => {
+    freezeAt(18, 0);
+    renderToday([timed(4, '영어 복습', '22:00', '22:30')], { commitments: [meetup()] });
+
+    expect(screen.getByText(/남은 예정 30분/)).toBeInTheDocument();
+  });
+
+  it('전날 밤에 시작해 오늘 새벽에 끝나는 약속이 새벽에 진행 중으로 잡힌다', () => {
+    freezeAt(1, 0);
+    const yesterday = new Date(TODAY);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayString = [
+      yesterday.getFullYear(),
+      String(yesterday.getMonth() + 1).padStart(2, '0'),
+      String(yesterday.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    renderToday([], {
+      commitments: [meetup({ title: '밤샘 행사', startAt: AT('22:00', yesterdayString), endAt: AT('02:00') })],
+    });
+
+    expect(screen.getByText('밤샘 행사')).toBeInTheDocument();
+    expect(screen.getByText('진행 중')).toBeInTheDocument();
+  });
+});
+
 describe('이동 액션', () => {
   it('"미루기"가 아니라 "이동"이고, 오늘 뒤로 / 내일로 / 날짜 선택을 준다', async () => {
     freezeAt(15, 40);

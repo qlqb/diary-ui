@@ -172,3 +172,64 @@ describe('실행 상태와의 분리', () => {
     expect(blockingEntries(entries).map((e) => e.kind)).toEqual(['ROUTINE']);
   });
 });
+
+describe('일회성 약속', () => {
+  const meetup = (id, title, startAt, endAt, locationText = null) => ({
+    commitmentId: id, title, startAt, endAt, locationText, version: 0,
+  });
+
+  it('루틴과 같은 자리에 들어와 시간을 막는다', () => {
+    const timeline = buildTodayTimeline({
+      items: [],
+      commitments: [meetup(5, '친구 약속', at('19:00'), at('21:00'), '홍대')],
+    }, TODAY);
+
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0].kind).toBe('COMMITMENT');
+    expect(timeline[0].sourceRef).toBe('commitment:5');
+    expect(timeline[0].locationText).toBe('홍대');
+  });
+
+  it('진행 중이면 currentEntries에, 앞이면 nextTimed에 잡힌다', () => {
+    const timeline = buildTodayTimeline({
+      items: [],
+      commitments: [meetup(5, '친구 약속', at('19:00'), at('21:00'))],
+    }, TODAY);
+
+    expect(classifyTimeline(timeline, 18 * 60).nextTimed.title).toBe('친구 약속');
+    expect(classifyTimeline(timeline, 20 * 60).currentEntries.map((e) => e.title))
+      .toEqual(['친구 약속']);
+  });
+
+  it('전날 밤에 시작해 오늘 새벽에 끝나도 오늘 시간을 막는다', () => {
+    const timeline = buildTodayTimeline({
+      items: [],
+      commitments: [meetup(5, '밤샘 행사', at('22:00', YESTERDAY), at('02:00'))],
+    }, TODAY);
+
+    expect(timeline[0].startMinutes).toBe(-120);
+    expect(classifyTimeline(timeline, 60).currentEntries.map((e) => e.title)).toEqual(['밤샘 행사']);
+  });
+
+  it('실행 상태(remainingMinutes)에는 섞이지 않는다', () => {
+    const items = [item(1, '18:00', '19:00')];
+    const timeline = buildTodayTimeline({
+      items,
+      commitments: [meetup(5, '친구 약속', at('19:00'), at('21:00'))],
+    }, TODAY);
+
+    expect(timeline).toHaveLength(2);
+    // 약속 120분이 더해지면 "남은 예정"이 못 쓰는 시간까지 센 숫자가 된다.
+    expect(classifyToday(items, 13 * 60, TODAY).remainingMinutes).toBe(60);
+  });
+
+  it('blockingEntries는 약속도 함께 고른다', () => {
+    const timeline = buildTodayTimeline({
+      items: [item(1, '18:00', '19:00')],
+      occurrences: [occurrence(9, '웹서버 수업', at('14:00'), at('17:00'))],
+      commitments: [meetup(5, '친구 약속', at('19:00'), at('21:00'))],
+    }, TODAY);
+
+    expect(blockingEntries(timeline).map((e) => e.kind)).toEqual(['ROUTINE', 'COMMITMENT']);
+  });
+});
