@@ -122,6 +122,8 @@ export default function MainShell({ user, onLogout }) {
   const [todayOccurrences, setTodayOccurrences] = useState([]);
   const [todayLoading, setTodayLoading] = useState(true);
   const [todayError, setTodayError] = useState(null);
+  /** 일부만 읽은 상태를 알리는 문구. 전체 실패(todayError)와 구분한다. */
+  const [todayNotice, setTodayNotice] = useState(null);
   /** 적용 후 다른 화면들이 자기 데이터를 다시 읽게 만드는 신호. */
   const [refreshToken, setRefreshToken] = useState(0);
 
@@ -147,12 +149,24 @@ export default function MainShell({ user, onLogout }) {
     setTodayLoading(true);
     setTodayError(null);
     try {
-      const [items, occurrences] = await Promise.all([
+      const [itemsResult, occurrencesResult] = await Promise.allSettled([
         executionItemAPI.getByDate(today),
         routineAPI.occurrences(today, today),
       ]);
-      setTodayItems(items);
-      setTodayOccurrences(occurrences ?? []);
+      if (itemsResult.status === 'rejected') throw itemsResult.reason;
+      setTodayItems(itemsResult.value);
+      /*
+       * 반복 일정만 못 읽었으면 실행 조각은 그대로 보여주되, 시간축이 불완전하다는 것을
+       * 말한다. 조용히 빈 배열로 두면 화면이 "다음 일정 없음"이라고 단언하는데, 그건
+       * 못 읽었다는 사실을 없는 일정으로 바꿔 말하는 것이다.
+       */
+      if (occurrencesResult.status === 'rejected') {
+        setTodayOccurrences([]);
+        setTodayNotice('반복 일정을 불러오지 못했어요. 수업·알바가 빠진 채로 보고 있어요.');
+      } else {
+        setTodayOccurrences(occurrencesResult.value ?? []);
+        setTodayNotice(null);
+      }
     } catch (err) {
       setTodayError(err.message || '오늘 항목을 불러오지 못했습니다.');
     } finally {
@@ -280,6 +294,7 @@ export default function MainShell({ user, onLogout }) {
             <TodayView
               items={todayItems}
               occurrences={todayOccurrences}
+              notice={todayNotice}
               loading={todayLoading}
               error={todayError}
               onRefresh={loadToday}

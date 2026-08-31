@@ -7,8 +7,8 @@
  *                                        focus / overdue / finished / remainingMinutes
  *
  *   ExecutionItem ─┐
- *   RoutineOccurrence ─┤ ──> buildTodayTimeline() ──> 시간 상태
- *                                        currentBusy / nextEntry / minutesToNext
+ *   RoutineOccurrence ─┤ ──> buildTodayTimeline() ──> classifyTimeline() ──> 시간 상태
+ *   (다음: Commitment) ─┘                     currentEntries / nextTimed / minutesToNext
  *
  * classifyToday는 단순 정렬 함수가 아니라 status === 'PLANNED'를 전제로 밀린 항목과
  * 남은 실행량을 판단하는 ExecutionItem 전용 규칙이다. 루틴에는 그런 상태가 없다.
@@ -21,13 +21,19 @@
  * 분리된 채 남는다.
  *
  * TodayTimelineEntry {
- *   kind       'EXECUTION' | 'ROUTINE'   (다음: 'COMMITMENT')
+ *   key          목록 렌더 키. 원본이 달라도 충돌하지 않게 kind를 앞에 붙인다
+ *   kind         'EXECUTION' | 'ROUTINE'   (다음: 'COMMITMENT')
  *   title
- *   startAt / endAt   표시용 원본 값
- *   location
- *   sourceRef  executionItemId, 또는 routineId + date
+ *   startAt      'YYYY-MM-DDTHH:mm' 로컬 시각. HH:mm만으로는 자정 넘김을 표현할 수 없다
+ *   endAt
+ *   locationText
+ *   sourceRef    'execution:12' / 'routine:9:2026-09-03'
  *   startMinutes / endMinutes   오늘 자정 기준 분. 계산은 전부 이 둘로 한다
  * }
+ *
+ * ★ 시각을 HH:mm으로만 들고 있지 않는다. 22:00~02:00 루틴에서 "어제 22:00"과
+ *   "오늘 22:00"이 같은 값이 되어, 지금 진행 중인지를 판단할 수 없게 된다.
+ *   시간대 변환 체계를 새로 만들지는 않는다 — 서버/클라이언트 모두 로컬 시각 의미 그대로다.
  */
 
 import { minutesOf, parseDateString, toHHmm } from './datetime.js';
@@ -41,11 +47,11 @@ const DAY = 24 * 60;
  * 자르지 않고 그대로 돌려준다 — 자르는 것은 판정하는 쪽의 일이고, 여기서 미리 잘라 두면
  * "어제 시작한 것"과 "오늘 0시에 시작한 것"을 구분할 수 없게 된다.
  */
-function minutesFromToday(isoDateTime, today) {
-  if (!isoDateTime || !today) return null;
-  const minutes = minutesOf(toHHmm(isoDateTime));
+function minutesFromToday(localDateTime, today) {
+  if (!localDateTime || !today) return null;
+  const minutes = minutesOf(toHHmm(localDateTime));
   if (minutes == null) return null;
-  const date = String(isoDateTime).slice(0, 10);
+  const date = String(localDateTime).slice(0, 10);
   const dayOffset = Math.round(
     (parseDateString(date) - parseDateString(today)) / (DAY * 60 * 1000),
   );
@@ -58,33 +64,40 @@ function minutesFromToday(isoDateTime, today) {
  * 시각이 정해진 PLANNED만 시간을 점유한다. 끝난 것(DONE/PARTIAL/HOLD/CANCELLED)은
  * 사용자가 이미 판단을 내린 것이라 앞으로의 시간을 막지 않고, 시각 없는 항목은 애초에
  * 어느 시간을 막는지 알 수 없다.
+ *
+ * 장소 개념이 실행 조각에는 아직 없다. 없는 것을 지어내지 않고 null로 둔다.
  */
 function fromExecutionItem(item, today) {
   if (item.status !== 'PLANNED' || !isTimed(item)) return null;
   const date = item.scheduledDate ?? today;
   if (date !== today) return null;
-  const startMinutes = minutesOf(item.startTime);
-  const endMinutes = minutesOf(item.endTime);
+  const start = minutesOf(item.startTime);
+  const end = minutesOf(item.endTime);
   // 백엔드는 하루를 넘는 실행 조각을 만들지 않는다. 그 전제가 깨진 데이터는 버린다.
-  if (startMinutes == null || endMinutes == null || endMinutes <= startMinutes) return null;
+  if (start == null || end == null || end <= start) return null;
   return {
+    key: `EXECUTION:${item.executionItemId}`,
     kind: 'EXECUTION',
     title: item.title,
-    startAt: item.startTime,
-    endAt: item.endTime,
-    location: null,
-    sourceRef: { executionItemId: item.executionItemId },
-    startMinutes,
-    endMinutes,
+    startAt: `${date}T${toHHmm(item.startTime)}`,
+    endAt: `${date}T${toHHmm(item.endTime)}`,
+    locationText: null,
+    sourceRef: `execution:${item.executionItemId}`,
+    startMinutes: start,
+    endMinutes: end,
   };
 }
 
 /**
  * 루틴 발생분 → 타임라인 항목.
  *
- * startAt/endAt이 절대 시각(ISO)이라 자정 넘김이 그대로 실려 온다. 22:00~02:00이면
+ * startAt/endAt이 이미 날짜를 포함한 값이라 자정 넘김이 그대로 실려 온다. 22:00~02:00이면
  * 어제 시작한 발생분의 startMinutes가 음수가 되는데, 그게 정확하다 — 지금이 01:00이면
  * 이 알바는 진행 중이다.
+ *
+ * sourceRef의 날짜는 규칙상 원래 날짜(sourceDate)다. 이동해 온 발생분(보강)이 원본과
+ * 같은 키를 갖지 않게 하려면 이동 전 날짜가 아니라 실제 발생일이어야 하므로 startAt의
+ * 날짜를 쓴다.
  */
 function fromRoutineOccurrence(occurrence, today) {
   const startMinutes = minutesFromToday(occurrence.startAt, today);
@@ -92,13 +105,15 @@ function fromRoutineOccurrence(occurrence, today) {
   if (startMinutes == null || endMinutes == null || endMinutes <= startMinutes) return null;
   // 오늘과 한 순간도 겹치지 않으면 오늘의 시간을 점유하지 않는다(반열린 구간).
   if (endMinutes <= 0 || startMinutes >= DAY) return null;
+  const occurredOn = String(occurrence.startAt).slice(0, 10);
   return {
+    key: `ROUTINE:${occurrence.routineId}:${occurredOn}`,
     kind: 'ROUTINE',
     title: occurrence.title,
     startAt: occurrence.startAt,
     endAt: occurrence.endAt,
-    location: occurrence.location ?? null,
-    sourceRef: { routineId: occurrence.routineId, date: String(occurrence.startAt).slice(0, 10) },
+    locationText: occurrence.location ?? null,
+    sourceRef: `routine:${occurrence.routineId}:${occurredOn}`,
     startMinutes,
     endMinutes,
   };
@@ -143,17 +158,18 @@ export function buildTodayTimeline(sources, today) {
 /**
  * 지금 시각 기준의 시간 상태.
  *
- * busy는 지금 진행 중인 것 전부다. 하나로 줄이지 않는다 — 수업과 실행 조각이 겹칠 수 있고,
- * 어느 쪽을 "지금"의 주인공으로 삼을지는 화면이 정할 문제다.
+ * currentEntries는 지금 진행 중인 것 전부다. 하나로 줄이지 않는다 — 수업과 실행 조각이
+ * 겹칠 수 있고(14~17시 수업 안의 15~16시 조각), 어느 쪽을 "지금"의 주인공으로 삼을지는
+ * 화면이 정할 문제다. 여기서 충돌을 자동으로 해결하지 않는다.
  */
-export function todayOccupancy(entries, now) {
+export function classifyTimeline(entries, now) {
   const all = entries ?? [];
-  const busy = all.filter((e) => e.startMinutes <= now && now < e.endMinutes);
-  const nextEntry = all.find((e) => e.startMinutes > now) ?? null;
+  const currentEntries = all.filter((e) => e.startMinutes <= now && now < e.endMinutes);
+  const nextTimed = all.find((e) => e.startMinutes > now) ?? null;
   return {
-    busy,
-    nextEntry,
-    minutesToNext: nextEntry ? nextEntry.startMinutes - now : null,
+    currentEntries,
+    nextTimed,
+    minutesToNext: nextTimed ? nextTimed.startMinutes - now : null,
   };
 }
 

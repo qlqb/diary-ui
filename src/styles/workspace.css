@@ -212,6 +212,16 @@
   font-size: 13.5px;
 }
 
+/* 일부만 읽은 상태. 실패(붉은색)와 구분한다 — 화면은 쓸 수 있고 사실만 덜 찼다. */
+.view-notice {
+  margin: 8px 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--ws-warn-soft);
+  color: var(--ws-warn);
+  font-size: 13.5px;
+}
+
 .view-section { margin-bottom: 22px; }
 
 .section-title {

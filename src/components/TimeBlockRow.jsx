@@ -34,7 +34,7 @@ export default function TimeBlockRow({ entry, running = false, compact = false }
             <Repeat size={11} /> {KIND_LABEL[entry.kind] ?? '일정'}
           </span>
           {running && <span className="exec-row-dim">진행 중</span>}
-          {entry.location && <span className="exec-row-dim">{entry.location}</span>}
+          {entry.locationText && <span className="exec-row-dim">{entry.locationText}</span>}
         </div>
       </div>
     </article>

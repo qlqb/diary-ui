@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { blockingEntries, buildTodayTimeline, todayOccupancy } from './todayTimeline.js';
+import { blockingEntries, buildTodayTimeline, classifyTimeline } from './todayTimeline.js';
 import { classifyToday } from './today.js';
 
 const TODAY = '2026-09-03';
@@ -42,8 +42,10 @@ describe('buildTodayTimeline', () => {
 
     expect(timeline.map((e) => e.kind)).toEqual(['ROUTINE', 'EXECUTION']);
     expect(timeline[0].title).toBe('웹서버 수업');
-    expect(timeline[0].sourceRef).toEqual({ routineId: 9, date: TODAY });
-    expect(timeline[1].sourceRef).toEqual({ executionItemId: 1 });
+    expect(timeline[0].sourceRef).toBe(`routine:9:${TODAY}`);
+    expect(timeline[1].sourceRef).toBe('execution:1');
+    // 시각은 날짜까지 들고 있어야 한다 — HH:mm만으로는 자정 넘김을 표현할 수 없다.
+    expect(timeline[1].startAt).toBe(`${TODAY}T15:00`);
   });
 
   it('끝난 실행 조각은 시간을 막지 않는다', () => {
@@ -87,32 +89,32 @@ describe('buildTodayTimeline', () => {
   });
 });
 
-describe('todayOccupancy', () => {
+describe('classifyTimeline', () => {
   const timeline = () => buildTodayTimeline({
     items: [item(1, '18:00', '19:00')],
     occurrences: [occurrence(9, '웹서버 수업', at('14:00'), at('17:00'))],
   }, TODAY);
 
   it('실행 조각보다 루틴이 먼저면 다음 일정은 루틴이다', () => {
-    const { nextEntry, minutesToNext } = todayOccupancy(timeline(), 13 * 60);
+    const { nextTimed, minutesToNext } = classifyTimeline(timeline(), 13 * 60);
 
-    expect(nextEntry.title).toBe('웹서버 수업');
-    expect(nextEntry.kind).toBe('ROUTINE');
+    expect(nextTimed.title).toBe('웹서버 수업');
+    expect(nextTimed.kind).toBe('ROUTINE');
     expect(minutesToNext).toBe(60);
   });
 
   it('루틴이 지나가면 다음 일정은 실행 조각이 된다', () => {
-    const { nextEntry, minutesToNext } = todayOccupancy(timeline(), 17 * 60);
+    const { nextTimed, minutesToNext } = classifyTimeline(timeline(), 17 * 60);
 
-    expect(nextEntry.kind).toBe('EXECUTION');
+    expect(nextTimed.kind).toBe('EXECUTION');
     expect(minutesToNext).toBe(60);
   });
 
-  it('진행 중이면 busy에 담기고 다음 일정으로는 세지 않는다', () => {
-    const { busy, nextEntry } = todayOccupancy(timeline(), 15 * 60);
+  it('진행 중이면 currentEntries에 담기고 다음 일정으로는 세지 않는다', () => {
+    const { currentEntries, nextTimed } = classifyTimeline(timeline(), 15 * 60);
 
-    expect(busy.map((e) => e.title)).toEqual(['웹서버 수업']);
-    expect(nextEntry.kind).toBe('EXECUTION');
+    expect(currentEntries.map((e) => e.title)).toEqual(['웹서버 수업']);
+    expect(nextTimed.kind).toBe('EXECUTION');
   });
 
   it('자정 넘긴 알바가 새벽에도 진행 중으로 잡힌다', () => {
@@ -121,12 +123,23 @@ describe('todayOccupancy', () => {
       occurrences: [occurrence(9, '알바', at('22:00', YESTERDAY), at('02:00'))],
     }, TODAY);
 
-    expect(todayOccupancy(overnight, 60).busy.map((e) => e.title)).toEqual(['알바']);
-    expect(todayOccupancy(overnight, 10 * 60).busy).toEqual([]);
+    expect(classifyTimeline(overnight, 60).currentEntries.map((e) => e.title)).toEqual(['알바']);
+    expect(classifyTimeline(overnight, 10 * 60).currentEntries).toEqual([]);
+  });
+
+  it('동시에 진행 중인 것이 여럿이면 하나를 버리지 않는다', () => {
+    // 14~17시 수업 안의 15~16시 실행 조각. 이번 작업에서 충돌을 자동으로 풀지 않는다.
+    const overlapping = buildTodayTimeline({
+      items: [item(1, '15:00', '16:00')],
+      occurrences: [occurrence(9, '웹서버 수업', at('14:00'), at('17:00'))],
+    }, TODAY);
+
+    expect(classifyTimeline(overlapping, 15 * 60 + 30).currentEntries.map((e) => e.kind))
+      .toEqual(['ROUTINE', 'EXECUTION']);
   });
 
   it('끝나는 순간은 진행 중이 아니다', () => {
-    expect(todayOccupancy(timeline(), 17 * 60).busy).toEqual([]);
+    expect(classifyTimeline(timeline(), 17 * 60).currentEntries).toEqual([]);
   });
 });
 

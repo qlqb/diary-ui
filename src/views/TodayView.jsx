@@ -23,17 +23,12 @@ import DraftRow from '../components/DraftRow.jsx';
 import ReschedulePanel from './today/ReschedulePanel.jsx';
 import { adjustmentFor } from '../ai/useProposalDraft.js';
 import { classifyToday, isTimed } from '../lib/today.js';
-import { blockingEntries, buildTodayTimeline, todayOccupancy } from '../lib/todayTimeline.js';
+import { blockingEntries, buildTodayTimeline, classifyTimeline } from '../lib/todayTimeline.js';
 import { formatDateKo, formatMinutes, minutesOf, nowMinutes, toHHmm, todayString } from '../lib/datetime.js';
 import { executionItemAPI } from '../api/api.js';
 
-/** 발생분에는 id가 없다(서버에 행이 없다). 루틴과 날짜로 한 건을 가리킨다. */
-function blockKey(entry) {
-  return `${entry.kind}:${entry.sourceRef.routineId}:${entry.sourceRef.date}:${entry.startAt}`;
-}
-
 export default function TodayView({
-  items, occurrences, loading, error, onRefresh, projectTitles,
+  items, occurrences, loading, error, notice, onRefresh, projectTitles,
   draft, onPatchCard, onToggleExclude, onOpenAi, onAsk, onItemDeleted,
 }) {
   const today = todayString();
@@ -68,11 +63,11 @@ export default function TodayView({
     () => buildTodayTimeline({ items, occurrences }, today),
     [items, occurrences, today],
   );
-  const { busy, nextEntry, minutesToNext } = useMemo(
-    () => todayOccupancy(timeline, now), [timeline, now],
+  const { currentEntries, nextTimed, minutesToNext } = useMemo(
+    () => classifyTimeline(timeline, now), [timeline, now],
   );
   /** 지금 진행 중인 실행 조각이 아닌 것(수업·알바). 있으면 "지금 이걸 하세요"를 띄우지 않는다. */
-  const runningBlocks = blockingEntries(busy);
+  const runningBlocks = blockingEntries(currentEntries);
   /*
    * 수업 중인데 "지금 웹서버 과제 하세요"가 뜨면 앱을 못 믿게 된다. 다만 실행 조각이
    * 실제로 돌고 있는 경우(RUNNING)는 그대로 둔다 — 그건 지금 하고 있는 일이 맞다.
@@ -218,6 +213,8 @@ export default function TodayView({
         </form>
       )}
 
+      {/* 시간축 일부를 못 읽은 상태. 전체 실패와 달리 화면은 그대로 쓰되 사실을 말한다. */}
+      {notice && <p className="view-notice">{notice}</p>}
       {actionError && <p className="view-error">{actionError}</p>}
       {error && <p className="view-error">{error}</p>}
       {loading && <p className="view-dim">불러오는 중...</p>}
@@ -233,7 +230,7 @@ export default function TodayView({
 
             {/* 지금 못 쓰는 시간이 먼저다. 수업 중이라는 사실이 "무엇을 할까"보다 앞선다. */}
             {runningBlocks.map((entry) => (
-              <TimeBlockRow key={blockKey(entry)} entry={entry} running />
+              <TimeBlockRow key={entry.key} entry={entry} running />
             ))}
 
             {shownFocus && <Row item={shownFocus} {...rowProps} highlight />}
@@ -270,19 +267,19 @@ export default function TodayView({
 
             {/* 다음 일정은 실행 조각일 수도 수업일 수도 있다. 둘을 나눠 세면 "다음 일정까지
                 3시간"이라고 해놓고 1시간 뒤 수업이 시작하는 상태가 만들어진다. */}
-            {!shownFocus && runningBlocks.length === 0 && overdue.length === 0 && nextEntry && (
+            {!shownFocus && runningBlocks.length === 0 && overdue.length === 0 && nextTimed && (
               <div className="empty-block">
                 <p className="empty-title">
                   <Clock3 size={15} /> 다음 일정까지 {formatMinutes(minutesToNext) || '곧'} 남았어요
                 </p>
                 <p className="empty-desc">
-                  {toHHmm(nextEntry.startAt)} {nextEntry.title}
-                  {nextEntry.kind !== 'EXECUTION' && <span className="exec-row-dim"> · 반복 일정</span>}
+                  {toHHmm(nextTimed.startAt)} {nextTimed.title}
+                  {nextTimed.kind !== 'EXECUTION' && <span className="exec-row-dim"> · 반복 일정</span>}
                 </p>
               </div>
             )}
 
-            {!shownFocus && runningBlocks.length === 0 && overdue.length === 0 && !nextEntry
+            {!shownFocus && runningBlocks.length === 0 && overdue.length === 0 && !nextTimed
               && nowState === 'EMPTY' && (
               <div className="empty-block">
                 <p className="empty-title">아직 계획된 항목이 없어요.</p>
@@ -358,7 +355,7 @@ export default function TodayView({
                 {overdue.length > 0 && <p className="section-desc overdue-divider">앞으로 할 일</p>}
                 <div className="row-list">
                   {restRows.map((row) => (row.entry
-                    ? <TimeBlockRow key={blockKey(row.entry)} entry={row.entry} />
+                    ? <TimeBlockRow key={row.entry.key} entry={row.entry} />
                     : <Row key={row.item.executionItemId} item={row.item} {...rowProps} />
                   ))}
                   {newDraftCards.map((card) => (
