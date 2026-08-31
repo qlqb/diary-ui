@@ -12,7 +12,7 @@
  * 하고 싶을 때만 누르는 별도 선택지이고, 검수를 마쳐야 질문할 수 있는 구조가 아니다.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Upload, Archive, Pencil, Loader2, Link2, X,
 } from 'lucide-react';
@@ -472,13 +472,94 @@ function RenameForm({ project, onCancel, onSaved }) {
  * 업로드가 끝나면 그 자리에서 "AI가 이 자료를 사용할 수 있어요"가 보인다 — 구조 분석은
  * 그다음에 원할 때 누르는 선택지이고, 분석 결과를 전부 검수해야 질문할 수 있는 구조가 아니다.
  */
+/**
+ * 이력에서 열린 초안 하나를 고른다.
+ *
+ * 서버가 created_at DESC, analysis_id DESC로 주므로 첫 DRAFT가 최신이다. 마이그레이션 전
+ * 레거시 데이터에는 DRAFT가 여러 개 남아 있을 수 있어 여기서 하나만 연다. 다만 정합성을
+ * 지키는 것은 DB의 유일 인덱스이지 이 함수가 아니다 — 여기는 화면이 두 개를 그리지 않게
+ * 하는 것까지만 한다.
+ */
+function latestDraft(history) {
+  return (history ?? []).find((a) => a.status === 'DRAFT') ?? null;
+}
+
 function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
   const [error, setError] = useState(null);
   const [analyses, setAnalyses] = useState({});
+  /** materialId -> 'loading' | 'ready' | 'error'. 초안 조회가 끝났는지 자료마다 따로 안다. */
+  const [draftStatus, setDraftStatus] = useState({});
   const [analyzingId, setAnalyzingId] = useState(null);
   const [picking, setPicking] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  /** 이전 프로젝트의 응답이 늦게 도착해 지금 화면을 덮어쓰는 것을 막는 세대 값. */
+  const hydrationRef = useRef(0);
+
+  const materialIds = materials.map((m) => m.materialId).join(',');
+
+  /*
+   * 검토 중이던 초안을 화면 진입 때 되살린다.
+   *
+   * 이게 없으면 새로고침한 순간 검토 폼이 사라지고 "구조 분석" 버튼이 다시 나온다. 사용자는
+   * 초안이 없어진 줄 알고 다시 누르고, 그때마다 AI가 호출되고 DRAFT가 쌓였다. 서버가 이제
+   * 기존 DRAFT를 재사용하지만, 화면이 없는 척하는 것 자체가 사용자를 그 경로로 밀었다.
+   *
+   * 자료마다 요청이 하나씩 나간다(자료 6개면 6개). 지금은 연결 자료가 한 자릿수라 batch
+   * API를 만들지 않았다 — 프로젝트당 연결 자료가 10개를 넘기 시작하면 그때 다시 검토한다.
+   */
+  useEffect(() => {
+    const generation = hydrationRef.current + 1;
+    hydrationRef.current = generation;
+    if (materials.length === 0) {
+      setDraftStatus({});
+      return;
+    }
+    setDraftStatus(Object.fromEntries(materials.map((m) => [m.materialId, 'loading'])));
+
+    (async () => {
+      const results = await Promise.allSettled(
+        materials.map((m) => materialAnalysisAPI.listByMaterial(courseId, m.materialId)),
+      );
+      // 늦게 도착한 이전 프로젝트의 응답이면 버린다.
+      if (hydrationRef.current !== generation) return;
+
+      const nextAnalyses = {};
+      const nextStatus = {};
+      results.forEach((result, i) => {
+        const materialId = materials[i].materialId;
+        if (result.status !== 'fulfilled') {
+          // 조회 실패를 "DRAFT 없음"으로 취급하지 않는다 — 그러면 버튼이 열리고, 그게 바로
+          // 중복을 만드는 경로다.
+          nextStatus[materialId] = 'error';
+          return;
+        }
+        nextStatus[materialId] = 'ready';
+        const draft = latestDraft(result.value);
+        if (draft) nextAnalyses[materialId] = draft;
+      });
+      setDraftStatus(nextStatus);
+      setAnalyses(nextAnalyses);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, materialIds]);
+
+  /** 한 자료의 조회만 다시. 다른 자료의 복원 결과는 건드리지 않는다. */
+  const retryDraft = async (materialId) => {
+    setDraftStatus((prev) => ({ ...prev, [materialId]: 'loading' }));
+    try {
+      const draft = latestDraft(await materialAnalysisAPI.listByMaterial(courseId, materialId));
+      setAnalyses((prev) => {
+        const next = { ...prev };
+        if (draft) next[materialId] = draft;
+        else delete next[materialId];
+        return next;
+      });
+      setDraftStatus((prev) => ({ ...prev, [materialId]: 'ready' }));
+    } catch {
+      setDraftStatus((prev) => ({ ...prev, [materialId]: 'error' }));
+    }
+  };
 
   /**
    * 이 프로젝트에서의 역할을 바꾼다. 연결 해제 후 재연결이 아니라 링크만 고치는 것이라
@@ -501,8 +582,10 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
     setAnalyzingId(materialId);
     setError(null);
     try {
+      // 201(새로 만듦)이든 200(검토 중이던 것 재사용)이든 화면이 하는 일은 같다.
       const analysis = await materialAnalysisAPI.analyze(courseId, materialId);
       setAnalyses((prev) => ({ ...prev, [materialId]: analysis }));
+      setDraftStatus((prev) => ({ ...prev, [materialId]: 'ready' }));
     } catch (err) {
       setError(err.message || '분석하지 못했습니다.');
     } finally {
@@ -568,7 +651,21 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
                       onClick={() => onAsk(`${m.originalFilename} 내용 중에 중요한 걸 알려줘.`)}>
                       이 자료로 질문
                     </button>
-                    {!analyses[m.materialId] && (
+                    {/*
+                      조회가 끝나기 전에는 버튼을 열지 않는다. 잠깐 보였다 사라지는 깜빡임도
+                      없어야 하고, 그 잠깐 사이의 클릭이 곧 중복 분석이다.
+                    */}
+                    {draftStatus[m.materialId] === 'loading' && (
+                      <span className="view-dim">초안 확인 중...</span>
+                    )}
+                    {draftStatus[m.materialId] === 'error' && (
+                      <span className="material-draft-error">
+                        초안을 확인하지 못했어요
+                        <button type="button" className="btn-ghost btn-sm"
+                          onClick={() => retryDraft(m.materialId)}>다시 시도</button>
+                      </span>
+                    )}
+                    {draftStatus[m.materialId] === 'ready' && !analyses[m.materialId] && (
                       <button type="button" className="btn-ghost btn-sm" disabled={analyzingId === m.materialId}
                         onClick={() => handleAnalyze(m.materialId)}>
                         {analyzingId === m.materialId ? '분석 중...' : '구조 분석'}

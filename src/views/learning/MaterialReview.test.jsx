@@ -28,6 +28,15 @@ const analysis = {
   },
 };
 
+/**
+ * 검토 폼은 기본이 접힘이다(프로젝트 화면을 통째로 밀지 않기 위해). 본문을 검사하는
+ * 테스트는 먼저 펼친다 — 접힘 자체는 아래 별도 테스트가 고정한다.
+ */
+async function renderOpened(analysis, props = {}) {
+  render(<MaterialReview analysis={analysis} onApplied={vi.fn()} onDismiss={vi.fn()} {...props} />);
+  await userEvent.click(screen.getByRole('button', { name: /구조 분석 결과/ }));
+}
+
 describe('MaterialReview - AI 분석 초안 편집', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -37,7 +46,7 @@ describe('MaterialReview - AI 분석 초안 편집', () => {
 
   it('잘못된 하위 항목을 제거하고 적용하면, 제거된 구조로 저장된다', async () => {
     const user = userEvent.setup();
-    render(<MaterialReview analysis={analysis} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+    await renderOpened(analysis);
 
     const removeButtons = screen.getAllByTitle('이 항목 제거');
     await user.click(removeButtons[1]); // 하위 항목(단순 연결 리스트) 제거
@@ -51,7 +60,7 @@ describe('MaterialReview - AI 분석 초안 편집', () => {
 
   it('제목을 고치면 sourceType은 그대로 유지된다(제목 수정과 근거 상실은 다른 일이다)', async () => {
     const user = userEvent.setup();
-    render(<MaterialReview analysis={analysis} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+    await renderOpened(analysis);
 
     const titleInput = screen.getByDisplayValue('연결 리스트');
     await user.clear(titleInput);
@@ -66,7 +75,7 @@ describe('MaterialReview - AI 분석 초안 편집', () => {
 
   it('최상위 항목을 추가하면 원문 근거가 없으므로 AI 세분화로 표시한다(provenance 보존)', async () => {
     const user = userEvent.setup();
-    render(<MaterialReview analysis={analysis} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+    await renderOpened(analysis);
 
     expect(screen.queryByText('AI 세분화')).not.toBeInTheDocument(); // 기존 두 항목은 모두 SOURCE
 
@@ -77,7 +86,7 @@ describe('MaterialReview - AI 분석 초안 편집', () => {
 
   it('교재명을 입력하면 적용 시 courseFields에 반영된다', async () => {
     const user = userEvent.setup();
-    render(<MaterialReview analysis={analysis} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+    await renderOpened(analysis);
 
     const textbookInput = screen.getAllByPlaceholderText('미확인')[0];
     await user.type(textbookInput, '자료구조와 함께 배우는 알고리즘');
@@ -87,6 +96,28 @@ describe('MaterialReview - AI 분석 초안 편집', () => {
     expect(materialAnalysisAPI.edit).toHaveBeenCalledWith(7, expect.objectContaining({
       courseFields: expect.objectContaining({ textbookTitle: '자료구조와 함께 배우는 알고리즘' }),
     }));
+  });
+
+  /*
+   * 기본이 접힘인 것 자체가 요구사항이다. 펼친 채로 두면 학습 내용 수십 항목이 프로젝트
+   * 화면을 통째로 밀어낸다. 다만 접기가 "숨기기"가 되면 안 되므로, 접힌 상태에서도 항목
+   * 수와 적용/폐기는 남아 있어야 한다.
+   */
+  it('기본은 접혀 있고, 접힌 상태에서도 개수와 적용·폐기는 보인다', () => {
+    render(<MaterialReview analysis={analysis} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /구조 분석 결과/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByPlaceholderText('항목 제목')).not.toBeInTheDocument();
+    expect(screen.getByText(/학습 내용 \d+개/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /적용/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '폐기' })).toBeInTheDocument();
+  });
+
+  it('펼치면 학습 내용 입력이 나타난다', async () => {
+    await renderOpened(analysis);
+
+    expect(screen.getByRole('button', { name: /구조 분석 결과/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByPlaceholderText('항목 제목').length).toBeGreaterThan(0);
   });
 
   it('적용을 누르면 edit 저장 이후 apply가 호출되고 onApplied가 불린다', async () => {
@@ -127,8 +158,8 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
     materialAnalysisAPI.apply.mockResolvedValue({});
   });
 
-  it('학습 내용과 분리해 과목 정보/평가 정보를 카테고리별로 보여준다 — Apply 전에 무엇이 확정될지 알 수 있다', () => {
-    render(<MaterialReview analysis={analysisWithNotes} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+  it('학습 내용과 분리해 과목 정보/평가 정보를 카테고리별로 보여준다 — Apply 전에 무엇이 확정될지 알 수 있다', async () => {
+    await renderOpened(analysisWithNotes);
 
     expect(screen.getByText('과목 정보')).toBeInTheDocument();
     expect(screen.getByText('평가/일정')).toBeInTheDocument();
@@ -142,7 +173,7 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
 
   it('과목 정보/평가 정보는 이 화면에서 편집하지 않지만, 적용 시 그대로 함께 저장된다', async () => {
     const user = userEvent.setup();
-    render(<MaterialReview analysis={analysisWithNotes} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+    await renderOpened(analysisWithNotes);
 
     await user.click(screen.getByRole('button', { name: '검토 완료 — 적용' }));
 
@@ -151,8 +182,8 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
     }));
   });
 
-  it('과목 정보/평가 정보가 없으면 해당 섹션을 보여주지 않는다', () => {
-    render(<MaterialReview analysis={analysis} onApplied={vi.fn()} onDismiss={vi.fn()} />);
+  it('과목 정보/평가 정보가 없으면 해당 섹션을 보여주지 않는다', async () => {
+    await renderOpened(analysis);
 
     expect(screen.queryByText('과목 정보')).not.toBeInTheDocument();
     expect(screen.queryByText('평가/일정')).not.toBeInTheDocument();

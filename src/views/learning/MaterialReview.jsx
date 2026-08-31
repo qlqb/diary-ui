@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react';
 import { materialAnalysisAPI } from '../../api/api.js';
 import { MaterialAnalysisStatus, COURSE_NOTE_CATEGORY_LABEL } from '../../types/learning.js';
 
@@ -75,6 +75,19 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
   const [topics, setTopics] = useState((analysis.payload?.topics ?? []).map(cloneWithLocalIds));
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState(null);
+  /*
+   * 기본은 접힘이다.
+   *
+   * 펼친 채로 두면 교재 4필드 + 과목 정보 + 학습 내용 수십 항목이 프로젝트 화면 한가운데
+   * 통째로 들어가, 학습 상태도 계획도 화면 밖으로 밀린다. 자료를 둘 연결하고 둘 다 분석하면
+   * 그게 두 벌 쌓인다.
+   *
+   * 접혀 있어도 헤더에 항목 수가 남는다 — "무엇이 얼마나 나왔는지"는 펼치지 않아도 보여야
+   * 하고, 그게 없으면 접기는 그냥 숨기기가 된다.
+   *
+   * 아래 조기 반환보다 위에 있어야 한다. 훅은 렌더마다 같은 순서로 불려야 한다.
+   */
+  const [open, setOpen] = useState(false);
 
   if (analysis.status === MaterialAnalysisStatus.FAILED || !analysis.payload) {
     return (
@@ -112,10 +125,38 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
     }
   };
 
+  const topicCount = countNodes(topics);
+
   return (
     <div className="learning-analysis-review material-review">
-      <p className="v6-section-desc">{analysis.payload.summary}</p>
+      <div className="material-review-head">
+        <button
+          type="button"
+          className="material-review-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <span className="material-review-head-title">구조 분석 결과</span>
+          <span className="material-review-head-count">
+            학습 내용 {topicCount}개 · 과목 정보 {courseNotes.length}건
+          </span>
+        </button>
+        <div className="material-review-head-actions">
+          <button type="button" className="v6-btn-small" onClick={handleApply} disabled={applying || !hasTopics}>
+            {applying ? '적용 중...' : '검토 완료 — 적용'}
+          </button>
+          <button type="button" className="v6-btn-small" onClick={() => onDismiss?.()} disabled={applying}>
+            폐기
+          </button>
+        </div>
+      </div>
 
+      <p className="v6-section-desc">{analysis.payload.summary}</p>
+      {error && <p className="learning-error">{error}</p>}
+
+      {!open ? null : (
+      <div className="material-review-body">
       <div className="material-review-fields">
         {COURSE_FIELD_LABELS.map(([key, label]) => (
           <label key={key} className="material-review-field-row">
@@ -181,18 +222,15 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
         <Plus size={13} /> 최상위 항목 추가
       </button>
 
-      {error && <p className="learning-error">{error}</p>}
-
-      <div className="learning-chat-input-row">
-        <button type="button" className="v6-btn-small" onClick={handleApply} disabled={applying || !hasTopics}>
-          {applying ? '적용 중...' : '검토 완료 — 적용'}
-        </button>
-        <button type="button" className="v6-btn-small" onClick={() => onDismiss?.()} disabled={applying}>
-          폐기
-        </button>
       </div>
+      )}
     </div>
   );
+}
+
+/** 트리 전체의 항목 수. 접힌 헤더가 "얼마나 나왔는지"를 말하는 데 쓴다. */
+function countNodes(nodes) {
+  return (nodes ?? []).reduce((sum, n) => sum + 1 + countNodes(n.children), 0);
 }
 
 function MaterialReviewNode({ node, depth, onChangeTitle, onRemove, onAddChild }) {

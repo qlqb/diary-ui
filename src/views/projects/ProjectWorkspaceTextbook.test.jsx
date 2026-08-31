@@ -11,7 +11,7 @@ vi.mock('../../api/api.js', () => ({
   courseNoteAPI: { list: vi.fn() },
   executionItemAPI: { getByCourse: vi.fn(), getByDateRange: vi.fn() },
   materialAPI: { upload: vi.fn(), listByCourse: vi.fn() },
-  materialAnalysisAPI: { analyze: vi.fn(), dismiss: vi.fn() },
+  materialAnalysisAPI: { analyze: vi.fn(), dismiss: vi.fn(), listByMaterial: vi.fn() },
   materialStoreAPI: { list: vi.fn(), addLink: vi.fn(), removeLink: vi.fn(), updateLinkType: vi.fn() },
   topicAPI: { getTree: vi.fn() },
   planAPI: { findCoveringDate: vi.fn() },

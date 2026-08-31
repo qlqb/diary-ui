@@ -1626,3 +1626,32 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .routine-conflict-lead { margin: 0 0 4px; }
 .routine-conflict-list { margin: 0; padding-left: 18px; }
 .routine-conflict-list li { margin: 1px 0; }
+
+/* 초안 조회 실패. 분석 버튼 대신 이것이 나온다 — 실패를 "초안 없음"으로 보여주면
+   사용자가 누르고, 그게 중복 분석을 만드는 경로다. */
+.material-draft-error {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--ws-danger);
+}
+
+/* 구조 분석 검토 폼. 기본은 접힘이고, 접힌 상태에서도 항목 수와 적용/폐기는 헤더에 남는다. */
+.material-review-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.material-review-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 6px; border: none; border-radius: 7px; background: none;
+  color: var(--ws-text); cursor: pointer; text-align: left;
+}
+.material-review-toggle:hover { background: #f0f2f5; }
+.material-review-toggle:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+.material-review-head-title { font-size: 14.5px; font-weight: 600; }
+.material-review-head-count { font-size: 13px; color: var(--ws-text-faint); }
+.material-review-head-actions { display: flex; gap: 6px; margin-left: auto; }
+
+/*
+ * 펼쳐도 페이지를 통째로 밀지 않는다. 학습 내용이 40개면 그 자체로 한 화면을 넘기는데,
+ * 그러면 프로젝트의 다른 것들이 전부 아래로 사라진다.
+ */
+.material-review-body { max-height: 420px; overflow-y: auto; padding-right: 4px; }
