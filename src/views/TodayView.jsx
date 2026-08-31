@@ -18,15 +18,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Sparkles, Clock3 } from 'lucide-react';
 import ExecutionRow from '../components/ExecutionRow.jsx';
+import TimeBlockRow from '../components/TimeBlockRow.jsx';
 import DraftRow from '../components/DraftRow.jsx';
 import ReschedulePanel from './today/ReschedulePanel.jsx';
 import { adjustmentFor } from '../ai/useProposalDraft.js';
-import { classifyToday } from '../lib/today.js';
-import { formatDateKo, formatMinutes, nowMinutes, todayString } from '../lib/datetime.js';
+import { classifyToday, isTimed } from '../lib/today.js';
+import { blockingEntries, buildTodayTimeline, todayOccupancy } from '../lib/todayTimeline.js';
+import { formatDateKo, formatMinutes, minutesOf, nowMinutes, toHHmm, todayString } from '../lib/datetime.js';
 import { executionItemAPI } from '../api/api.js';
 
+/** 발생분에는 id가 없다(서버에 행이 없다). 루틴과 날짜로 한 건을 가리킨다. */
+function blockKey(entry) {
+  return `${entry.kind}:${entry.sourceRef.routineId}:${entry.sourceRef.date}:${entry.startAt}`;
+}
+
 export default function TodayView({
-  items, loading, error, onRefresh, projectTitles,
+  items, occurrences, loading, error, onRefresh, projectTitles,
   draft, onPatchCard, onToggleExclude, onOpenAi, onAsk, onItemDeleted,
 }) {
   const today = todayString();
@@ -48,8 +55,51 @@ export default function TodayView({
   }, []);
 
   const {
-    nowState, focus, overdue, upcoming, rest, finished, minutesToNext, nextItem, remainingMinutes,
+    nowState, focus, overdue, upcoming, rest, finished, remainingMinutes,
   } = useMemo(() => classifyToday(items, now, today), [items, now, today]);
+
+  /*
+   * 시간 점유는 실행 상태와 다른 계산이다. classifyToday는 실행 조각의 상태(밀렸는가,
+   * 남은 실행량이 얼마인가)를 보고, 여기 타임라인은 "오늘 언제가 비어 있는가"를 본다.
+   * 루틴은 뒤쪽에만 들어간다 — remainingMinutes에 수업 시간이 섞이면 "남은 예정"이
+   * 해야 할 일과 못 쓰는 시간을 합친 숫자가 되어 뜻을 잃는다.
+   */
+  const timeline = useMemo(
+    () => buildTodayTimeline({ items, occurrences }, today),
+    [items, occurrences, today],
+  );
+  const { busy, nextEntry, minutesToNext } = useMemo(
+    () => todayOccupancy(timeline, now), [timeline, now],
+  );
+  /** 지금 진행 중인 실행 조각이 아닌 것(수업·알바). 있으면 "지금 이걸 하세요"를 띄우지 않는다. */
+  const runningBlocks = blockingEntries(busy);
+  /*
+   * 수업 중인데 "지금 웹서버 과제 하세요"가 뜨면 앱을 못 믿게 된다. 다만 실행 조각이
+   * 실제로 돌고 있는 경우(RUNNING)는 그대로 둔다 — 그건 지금 하고 있는 일이 맞다.
+   * 시각 없는 항목을 골라 제안하는 FOCUS만 접는다.
+   */
+  const shownFocus = runningBlocks.length > 0 && nowState === 'FOCUS' ? null : focus;
+  /** 아직 시작하지 않은 점유. "남은 오늘"에 실행 조각과 시간순으로 섞어 놓는다. */
+  const upcomingBlocks = useMemo(
+    () => timeline.filter((e) => e.kind !== 'EXECUTION' && e.startMinutes > now),
+    [timeline, now],
+  );
+
+  /*
+   * "남은 오늘"에 놓을 줄. 시각 없는 항목이 먼저고, 시각이 있는 것들은 실행 조각과 점유를
+   * 섞어 시간순으로 세운다 — 14시 수업과 15시 과제를 따로 나열하면 순서를 사용자가 다시
+   * 맞춰 읽어야 한다.
+   *
+   * focus를 접었을 때(수업 중) 그 항목이 여기로 돌아오게 한다. 안 그러면 지금 자리에서도
+   * 목록에서도 빠져 오늘 화면에서 통째로 사라진다.
+   */
+  const restRows = useMemo(() => {
+    const base = !shownFocus && focus ? [focus, ...rest] : rest;
+    const untimedRows = base.filter((i) => !isTimed(i)).map((item) => ({ at: null, item }));
+    const timedRows = base.filter(isTimed).map((item) => ({ at: minutesOf(item.startTime), item }));
+    const blockRows = upcomingBlocks.map((entry) => ({ at: entry.startMinutes, entry }));
+    return [...untimedRows, ...[...timedRows, ...blockRows].sort((a, b) => a.at - b.at)];
+  }, [shownFocus, focus, rest, upcomingBlocks]);
 
   // 보류와 완료는 같은 "끝난 것"이 아니다 — 보류는 되돌릴 수 있는 상태이므로 따로 보여준다.
   const held = finished.filter((i) => i.status === 'HOLD');
@@ -181,12 +231,17 @@ export default function TodayView({
           <section className="view-section">
             <h2 className="section-title">지금</h2>
 
-            {focus && <Row item={focus} {...rowProps} highlight />}
+            {/* 지금 못 쓰는 시간이 먼저다. 수업 중이라는 사실이 "무엇을 할까"보다 앞선다. */}
+            {runningBlocks.map((entry) => (
+              <TimeBlockRow key={blockKey(entry)} entry={entry} running />
+            ))}
+
+            {shownFocus && <Row item={shownFocus} {...rowProps} highlight />}
 
             {/* 지금 할 것이 있으면 그 줄이 주인공이므로 한 줄 띠로만 알리고, 지금 자리가 비어
                 있으면 이 안내가 곧 "지금"의 내용이다. 어느 쪽이든 "지금 잡힌 것이 없어요"로
                 끝내지 않는다. */}
-            {showOverdueCta && (focus ? (
+            {showOverdueCta && (shownFocus || runningBlocks.length > 0 ? (
               <div className="overdue-strip">
                 <p className="empty-title">예정 시간이 지난 일정이 {overdue.length}개 있어요</p>
                 <div className="overdue-actions">
@@ -213,16 +268,22 @@ export default function TodayView({
               </div>
             ))}
 
-            {!focus && overdue.length === 0 && nowState === 'UPCOMING' && (
+            {/* 다음 일정은 실행 조각일 수도 수업일 수도 있다. 둘을 나눠 세면 "다음 일정까지
+                3시간"이라고 해놓고 1시간 뒤 수업이 시작하는 상태가 만들어진다. */}
+            {!shownFocus && runningBlocks.length === 0 && overdue.length === 0 && nextEntry && (
               <div className="empty-block">
                 <p className="empty-title">
                   <Clock3 size={15} /> 다음 일정까지 {formatMinutes(minutesToNext) || '곧'} 남았어요
                 </p>
-                <p className="empty-desc">{nextItem.startTime} {nextItem.title}</p>
+                <p className="empty-desc">
+                  {toHHmm(nextEntry.startAt)} {nextEntry.title}
+                  {nextEntry.kind !== 'EXECUTION' && <span className="exec-row-dim"> · 반복 일정</span>}
+                </p>
               </div>
             )}
 
-            {!focus && overdue.length === 0 && nowState === 'EMPTY' && (
+            {!shownFocus && runningBlocks.length === 0 && overdue.length === 0 && !nextEntry
+              && nowState === 'EMPTY' && (
               <div className="empty-block">
                 <p className="empty-title">아직 계획된 항목이 없어요.</p>
                 <p className="empty-desc">직접 추가하거나, 오른쪽에서 AI에게 남은 오늘을 어떻게 쓸지 물어보세요.</p>
@@ -290,13 +351,16 @@ export default function TodayView({
               </div>
             )}
 
-            {rest.length === 0 && newDraftCards.length === 0 ? (
+            {restRows.length === 0 && newDraftCards.length === 0 ? (
               overdue.length === 0 && <p className="view-dim">남은 것이 없어요.</p>
             ) : (
               <>
                 {overdue.length > 0 && <p className="section-desc overdue-divider">앞으로 할 일</p>}
                 <div className="row-list">
-                  {rest.map((item) => <Row key={item.executionItemId} item={item} {...rowProps} />)}
+                  {restRows.map((row) => (row.entry
+                    ? <TimeBlockRow key={blockKey(row.entry)} entry={row.entry} />
+                    : <Row key={row.item.executionItemId} item={row.item} {...rowProps} />
+                  ))}
                   {newDraftCards.map((card) => (
                     <DraftRow
                       key={card.proposalItemId}

@@ -325,6 +325,21 @@
 .exec-row.is-done .exec-row-title { color: var(--ws-text-faint); text-decoration: line-through; }
 .exec-row.is-hold { background: #fafbfc; }
 .exec-row.is-compact { padding: 8px 12px; }
+
+/*
+ * 시간만 차지하는 줄(수업·알바, 나중에 약속).
+ *
+ * 회색을 하나 더 만들지 않는다 — 주간 격자의 반복 일정(#f1f3f6)이 종일 칩(#f2f4f7)과
+ * 사실상 구분되지 않는 것이 이미 그 방식의 결과다. 왼쪽 띠로 "이건 다른 종류"를 말하고,
+ * 무엇인지는 줄 안의 라벨이 글자로 말한다.
+ */
+.exec-row.is-block {
+  border-left: 3px solid var(--ws-border-strong);
+  background: #fafbfc;
+}
+.exec-row.is-block.is-running { border-left-color: var(--ws-accent); background: var(--ws-surface); }
+.block-row-range { font-variant-numeric: tabular-nums; font-weight: 600; }
+.chip-block { background: #e7eaee; color: var(--ws-text-dim); }
 .exec-row.has-draft { border-color: var(--ws-draft); box-shadow: 0 0 0 1px var(--ws-draft-soft); }
 
 .exec-row-main { min-width: 0; flex: 1; }

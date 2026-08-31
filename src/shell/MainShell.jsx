@@ -36,7 +36,7 @@ import ScheduleView from '../views/schedule/ScheduleView.jsx';
 import PlanCreateView from '../views/plan/PlanCreateView.jsx';
 import PlanView from '../views/plan/PlanView.jsx';
 import RecordView from '../views/RecordView.jsx';
-import { courseAPI, executionItemAPI } from '../api/api.js';
+import { courseAPI, executionItemAPI, routineAPI } from '../api/api.js';
 import useUndoDelete from './useUndoDelete.js';
 import UndoToast from '../components/UndoToast.jsx';
 import { todayString } from '../lib/datetime.js';
@@ -115,6 +115,11 @@ export default function MainShell({ user, onLogout }) {
 
   const today = todayString();
   const [todayItems, setTodayItems] = useState([]);
+  /**
+   * 오늘 도는 반복 일정. 실행 조각과 합치지 않고 따로 들고 간다 — 저장 원본이 다르고,
+   * 오늘 화면이 둘을 합치는 것은 "언제가 비어 있는가"를 셀 때뿐이다.
+   */
+  const [todayOccurrences, setTodayOccurrences] = useState([]);
   const [todayLoading, setTodayLoading] = useState(true);
   const [todayError, setTodayError] = useState(null);
   /** 적용 후 다른 화면들이 자기 데이터를 다시 읽게 만드는 신호. */
@@ -132,11 +137,22 @@ export default function MainShell({ user, onLogout }) {
     }
   }, []);
 
+  /*
+   * occurrences는 오늘~오늘로만 부른다. 자정 넘김(22:00~02:00 알바)은 서버가 이미
+   * 처리한다 — RoutineOccurrenceService가 창 하루 앞에서부터 전개한 뒤 반열린 구간으로
+   * 거르므로, 어제 22시에 시작해 오늘 02시에 끝나는 발생분이 이 응답에 들어 있다.
+   * 여기서 전날부터 다시 부르면 오늘과 안 겹치는 어제치까지 받아 다시 걸러야 한다.
+   */
   const loadToday = useCallback(async () => {
     setTodayLoading(true);
     setTodayError(null);
     try {
-      setTodayItems(await executionItemAPI.getByDate(today));
+      const [items, occurrences] = await Promise.all([
+        executionItemAPI.getByDate(today),
+        routineAPI.occurrences(today, today),
+      ]);
+      setTodayItems(items);
+      setTodayOccurrences(occurrences ?? []);
     } catch (err) {
       setTodayError(err.message || '오늘 항목을 불러오지 못했습니다.');
     } finally {
@@ -263,6 +279,7 @@ export default function MainShell({ user, onLogout }) {
           {tab === 'today' && (
             <TodayView
               items={todayItems}
+              occurrences={todayOccurrences}
               loading={todayLoading}
               error={todayError}
               onRefresh={loadToday}

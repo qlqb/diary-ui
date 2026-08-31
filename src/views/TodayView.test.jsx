@@ -43,6 +43,22 @@ function timed(id, title, startTime, endTime, extra = {}) {
   };
 }
 
+function untimed(id, title, extra = {}) {
+  return {
+    executionItemId: id,
+    title,
+    scheduledDate: TODAY_STRING,
+    startTime: null,
+    endTime: null,
+    estimatedMinutes: 30,
+    status: 'PLANNED',
+    priority: 'SHOULD',
+    displayOrder: id,
+    version: 0,
+    ...extra,
+  };
+}
+
 /** 15:40에 화면을 보고 있는 상황으로 고정한다 — 실제 시각에 따라 결과가 달라지면 안 된다. */
 function freezeAt(hour, minute) {
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -408,6 +424,129 @@ describe('실제 소요시간 기록', () => {
     expect(screen.getByLabelText('실제 걸린 시간(분)')).toHaveValue(70);
     // 자동 재시도 금지 — 같은 version으로 다시 보내봐야 또 막힌다.
     expect(executionItemAPI.complete).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 루틴은 시간을 막지만 실행 대상이 아니다. 오늘 화면이 그 둘을 섞지 않는지 고정한다.
+ */
+describe('반복 일정 반영', () => {
+  const CLASS_AT = (hhmm, date = TODAY_STRING) => `${date}T${hhmm}:00`;
+
+  function occurrence(routineId, title, startAt, endAt) {
+    return { routineId, courseId: null, title, location: null, startAt, endAt, moved: false };
+  }
+
+  const webClass = () => occurrence(9, '웹서버 수업', CLASS_AT('14:00'), CLASS_AT('17:00'));
+
+  it('실행 조각만 있으면 기존 동작 그대로다', () => {
+    freezeAt(15, 40);
+    renderToday([timed(4, '영어 복습', '16:30', '17:00')], { occurrences: [] });
+
+    expect(screen.getByText(/다음 일정까지 50분 남았어요/)).toBeInTheDocument();
+  });
+
+  it('실행 조각보다 루틴이 먼저 오면 다음 일정이 루틴으로 잡힌다', () => {
+    freezeAt(13, 0);
+    renderToday([timed(4, '영어 복습', '18:00', '18:30')], { occurrences: [webClass()] });
+
+    expect(screen.getByText(/다음 일정까지 1시간 남았어요/)).toBeInTheDocument();
+    // 안내 문구와 "남은 오늘" 줄 양쪽에 나온다 — 실행 조각이 다음일 때와 같은 모양이다.
+    expect(screen.getAllByText(/웹서버 수업/).length).toBeGreaterThan(0);
+  });
+
+  it('루틴이 하나뿐이어도 "계획된 항목이 없어요"로 끝내지 않는다', () => {
+    freezeAt(13, 0);
+    renderToday([], { occurrences: [webClass()] });
+
+    expect(screen.queryByText('아직 계획된 항목이 없어요.')).not.toBeInTheDocument();
+    expect(screen.getByText(/다음 일정까지 1시간 남았어요/)).toBeInTheDocument();
+  });
+
+  describe('진행 중인 루틴', () => {
+    it('진행 중으로 표시하고, 시각 없는 실행 조각을 지금 할 것으로 제안하지 않는다', () => {
+      freezeAt(15, 0);
+      renderToday([untimed(7, '웹서버 과제')], { occurrences: [webClass()] });
+
+      expect(screen.getByText('진행 중')).toBeInTheDocument();
+      expect(screen.getByText('14:00–17:00')).toBeInTheDocument();
+      // 수업 중인데 "지금 웹서버 과제 하세요"가 뜨면 앱을 못 믿게 된다.
+      expect(document.querySelector('.focus-slot')).toBeNull();
+    });
+
+    it('접힌 실행 조각은 사라지지 않고 남은 오늘로 내려간다', () => {
+      freezeAt(15, 0);
+      renderToday([untimed(7, '웹서버 과제')], { occurrences: [webClass()] });
+
+      // 지금 자리에서 뺐다고 오늘 화면에서 통째로 없애면 안 된다.
+      expect(screen.getByText('웹서버 과제')).toBeInTheDocument();
+    });
+
+    it('루틴 줄에는 실행 액션이 없다', () => {
+      freezeAt(15, 0);
+      renderToday([], { occurrences: [webClass()] });
+
+      expect(screen.queryByRole('button', { name: '완료' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '일부 했어요' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '이동' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /삭제/ })).not.toBeInTheDocument();
+    });
+
+    it('밀린 실행 조각은 그대로 남는다', () => {
+      freezeAt(15, 0);
+      renderToday([timed(1, '아침 루틴', '10:00', '10:15')], { occurrences: [webClass()] });
+
+      expect(screen.getByText('진행 중')).toBeInTheDocument();
+      expect(screen.getByText(/예정 시간이 지난 일정이 1개 있어요/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '남은 오늘 다시 잡기' })).toBeInTheDocument();
+    });
+  });
+
+  it('남은 예정 시간에 루틴 시간이 더해지지 않는다', () => {
+    freezeAt(13, 0);
+    // 실행 조각 30분 + 수업 3시간. "남은 예정"은 30분이어야 한다.
+    renderToday([timed(4, '영어 복습', '18:00', '18:30')], { occurrences: [webClass()] });
+
+    expect(screen.getByText(/남은 예정 30분/)).toBeInTheDocument();
+    expect(screen.queryByText(/남은 예정 3시간 30분/)).not.toBeInTheDocument();
+  });
+
+  it('실행 조각은 루틴이 있어도 기존 액션을 그대로 갖는다', () => {
+    freezeAt(13, 0);
+    renderToday([timed(4, '영어 복습', '18:00', '18:30')], { occurrences: [webClass()] });
+
+    expect(screen.getByRole('button', { name: '완료' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '이동' })).toBeInTheDocument();
+  });
+
+  it('같은 시간대에 겹쳐도 시간순으로 나란히 나온다', () => {
+    freezeAt(13, 0);
+    renderToday(
+      [timed(4, '영어 복습', '14:30', '15:00'), timed(5, '과제 정리', '18:00', '18:30')],
+      { occurrences: [webClass()] },
+    );
+
+    const rows = [...document.querySelectorAll('.row-list .exec-row .exec-row-title')]
+      .map((el) => el.textContent);
+    expect(rows).toEqual(['웹서버 수업', '영어 복습', '과제 정리']);
+  });
+
+  it('전날 시작해 오늘까지 이어지는 알바가 새벽에 진행 중으로 잡힌다', () => {
+    freezeAt(1, 0);
+    const yesterday = new Date(TODAY);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayString = [
+      yesterday.getFullYear(),
+      String(yesterday.getMonth() + 1).padStart(2, '0'),
+      String(yesterday.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    renderToday([], {
+      occurrences: [occurrence(3, '알바', `${yesterdayString}T22:00:00`, CLASS_AT('02:00'))],
+    });
+
+    expect(screen.getByText('알바')).toBeInTheDocument();
+    expect(screen.getByText('진행 중')).toBeInTheDocument();
   });
 });
 
