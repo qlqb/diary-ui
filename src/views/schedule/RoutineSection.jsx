@@ -22,12 +22,12 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
   const [expandedId, setExpandedId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [conflictDates, setConflictDates] = useState([]);
+  const [conflicts, setConflicts] = useState([]);
 
   const run = async (action) => {
     setBusy(true);
     setError(null);
-    setConflictDates([]);
+    setConflicts([]);
     try {
       await action();
       await onChanged();
@@ -36,10 +36,11 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
       setError(err.message || '처리하지 못했습니다.');
       /*
        * 요일·기간을 바꾸면 기존 예외가 소급으로 무효가 될 수 있고, 서버는 전체를 거부하면서
-       * 어떤 예외가 걸렸는지 details에 담아 준다. 문구를 파싱하지 않고 그 값을 그대로 쓴다.
+       * 어떤 예외가 무슨 사유로 걸렸는지 details.conflicts에 담아 준다. 문구를 파싱하지 않고
+       * 그 값을 그대로 폼에 넘긴다 — 표시는 RoutineForm이 저장 버튼 옆에서 한다.
        */
       if (err.code === 'E409_011') {
-        setConflictDates(err.details?.conflictingDates ?? []);
+        setConflicts(err.details?.conflicts ?? []);
       }
       return false;
     } finally {
@@ -50,7 +51,7 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
   const closeForm = () => {
     setEditingId(null);
     setError(null);
-    setConflictDates([]);
+    setConflicts([]);
   };
 
   return (
@@ -139,7 +140,7 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
                   courses={courses}
                   busy={busy}
                   error={error}
-                  conflictDates={conflictDates}
+                  conflicts={conflicts}
                   onCancel={closeForm}
                   onSubmit={async (payload) => {
                     if (await run(() => routineAPI.update(routine.routineId, payload))) closeForm();

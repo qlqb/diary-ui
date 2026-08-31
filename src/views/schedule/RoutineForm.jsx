@@ -9,7 +9,21 @@
 
 import { useState } from 'react';
 import { WEEKDAYS } from './routineDays.js';
-import { toHHmm } from '../../lib/datetime.js';
+import { formatDateKo, toHHmm } from '../../lib/datetime.js';
+
+/*
+ * 서버는 사유를 enum으로만 보낸다. 문구는 화면 것이다 — 서버가 문구까지 보내면 문구를
+ * 다듬는 순간 화면이 깨진다. 모르는 값이 오면 그 값을 그대로 보여준다: 사유를 늘렸는데
+ * 여기를 안 고친 경우 조용히 사라지는 것보다 낫다.
+ */
+const CONFLICT_REASON_LABELS = {
+  DAY_OF_WEEK_MISMATCH: '그 요일에 일정이 없어요',
+  OUTSIDE_EFFECTIVE_RANGE: '기간 밖이에요',
+};
+
+function reasonLabel(reason) {
+  return CONFLICT_REASON_LABELS[reason] ?? reason;
+}
 
 function initialState(routine) {
   return {
@@ -24,7 +38,7 @@ function initialState(routine) {
   };
 }
 
-export default function RoutineForm({ routine, courses, busy, error, conflictDates, onSubmit, onCancel }) {
+export default function RoutineForm({ routine, courses, busy, error, conflicts, onSubmit, onCancel }) {
   const [form, setForm] = useState(() => initialState(routine));
 
   const patch = (changes) => setForm((prev) => ({ ...prev, ...changes }));
@@ -134,11 +148,23 @@ export default function RoutineForm({ routine, courses, busy, error, conflictDat
       </p>
 
       {error && <p className="view-error">{error}</p>}
-      {conflictDates?.length > 0 && (
-        <p className="view-error">
-          이 예외들이 새 요일·기간에 맞지 않아요: {conflictDates.join(', ')}.
-          먼저 지우거나 날짜를 고친 뒤 다시 저장해 주세요.
-        </p>
+      {/*
+        걸린 예외를 날짜와 사유까지 보여준다. 사유가 없으면 "왜 안 되는지"를 사용자가
+        추측해야 하고, 요일과 기간을 한 번에 바꾼 경우에는 둘 다 나온다.
+      */}
+      {conflicts?.length > 0 && (
+        <div className="view-error">
+          <p className="routine-conflict-lead">
+            이 예외들이 새 요일·기간에 맞지 않아요. 먼저 지우거나 날짜를 고친 뒤 다시 저장해 주세요.
+          </p>
+          <ul className="routine-conflict-list">
+            {conflicts.map((conflict) => (
+              <li key={conflict.exceptionId}>
+                {formatDateKo(conflict.exceptionDate)} — {conflict.reasons.map(reasonLabel).join(', ')}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="routine-form-actions">

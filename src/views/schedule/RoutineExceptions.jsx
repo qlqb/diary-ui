@@ -39,10 +39,19 @@ export default function RoutineExceptions({ routine, busy, error, onAdd, onRemov
   const canSubmit = form.exceptionDate && !wrongWeekday && !halfTime
     && (!moved || form.movedDate);
 
-  const submit = (event) => {
+  /*
+   * 성공했을 때만 비운다. 서버가 400/409로 거절하는 경우가 실제로 있는데(같은 날짜에 예외가
+   * 이미 있음, 그 사이 루틴 요일이 바뀜), 보내자마자 비우면 사용자가 친 날짜와 보강 정보가
+   * 통째로 사라진다.
+   *
+   * 여기서 try/catch를 만들지 않는다. 부모(RoutineSection.run)가 이미 오류를 잡아 문구를
+   * 세우고 false를 돌려주므로, 반환값만 보면 된다 — 오류 처리가 두 층이 되면 어느 쪽이
+   * 문구를 세웠는지 알 수 없게 된다.
+   */
+  const submit = async (event) => {
     event.preventDefault();
     if (!canSubmit || busy) return;
-    onAdd({
+    const success = await onAdd({
       exceptionDate: form.exceptionDate,
       type: form.type,
       movedDate: moved ? form.movedDate : null,
@@ -51,8 +60,10 @@ export default function RoutineExceptions({ routine, busy, error, onAdd, onRemov
       movedLocation: moved && form.movedLocation.trim() ? form.movedLocation.trim() : null,
       note: form.note.trim() || null,
     });
-    setForm(EMPTY);
-    setAdding(false);
+    if (success) {
+      setForm(EMPTY);
+      setAdding(false);
+    }
   };
 
   return (

@@ -15,6 +15,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import RoutineSection from './RoutineSection.jsx';
+import RoutineExceptions from './RoutineExceptions.jsx';
 import { routineAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
@@ -85,7 +86,16 @@ describe('RoutineSection', () => {
     const conflict = new Error('이 변경은 기존 예외를 무효로 만듭니다. 예외를 먼저 정리해 주세요');
     conflict.status = 409;
     conflict.code = 'E409_011';
-    conflict.details = { conflictingExceptionIds: [1], conflictingDates: ['2026-09-24', '2026-10-09'] };
+    conflict.details = {
+      conflicts: [
+        { exceptionId: 1, exceptionDate: '2026-09-24', reasons: ['DAY_OF_WEEK_MISMATCH'] },
+        {
+          exceptionId: 2,
+          exceptionDate: '2026-10-09',
+          reasons: ['DAY_OF_WEEK_MISMATCH', 'OUTSIDE_EFFECTIVE_RANGE'],
+        },
+      ],
+    };
     routineAPI.update.mockRejectedValue(conflict);
 
     render(<RoutineSection routines={[routine()]} courses={[]} loading={false} onChanged={vi.fn()} />);
@@ -97,8 +107,12 @@ describe('RoutineSection', () => {
     await user.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/2026-09-24, 2026-10-09/)).toBeInTheDocument();
+      expect(screen.getByText(/9월 24일 \(목\) — 그 요일에 일정이 없어요/)).toBeInTheDocument();
     });
+    // 한 예외가 두 조건을 함께 위반하면 둘 다 나온다. 하나만 보여주면 사용자는 그것만
+    // 고친 뒤에야 나머지를 알게 된다.
+    expect(screen.getByText(/10월 9일 \(금\) — 그 요일에 일정이 없어요, 기간 밖이에요/))
+      .toBeInTheDocument();
     // 폼은 닫히지 않는다 — 사용자가 예외를 정리하고 다시 시도할 자리가 남아 있어야 한다.
     expect(screen.getByRole('button', { name: '저장' })).toBeInTheDocument();
   });
@@ -122,6 +136,36 @@ describe('RoutineSection', () => {
       effectiveUntil: '2026-12-11',
     }));
     await waitFor(() => expect(screen.queryByRole('button', { name: '저장' })).not.toBeInTheDocument());
+  });
+
+  /*
+   * 서버가 예외 추가를 거절하는 경우가 실제로 있다(같은 날짜에 예외가 이미 있음, 그 사이
+   * 루틴 요일이 바뀜). 보내자마자 폼을 비우면 사용자가 친 날짜와 보강 정보가 통째로 사라지고,
+   * 오류 문구만 남아 무엇을 다시 쳐야 하는지도 알 수 없다.
+   */
+  it('예외 추가가 실패하면 입력을 지우지 않고 폼을 열어 둔다', async () => {
+    const user = userEvent.setup();
+    // 부모(run)가 오류를 잡아 문구를 세우고 false를 돌려주는 상황 그대로.
+    const onAdd = vi.fn().mockResolvedValue(false);
+
+    render(<RoutineExceptions routine={routine()} busy={false} error="그 날짜에는 이미 예외가 있습니다"
+      onAdd={onAdd} onRemove={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: /예외 추가/ }));
+    // 2026-09-24는 목요일 — 루틴 요일과 맞으므로 화면 단 검증은 통과한다.
+    await user.type(screen.getByLabelText(/^날짜/), '2026-09-24');
+    await user.click(screen.getByLabelText(/다른 날로 옮겨요/));
+    await user.type(screen.getByLabelText(/옮길 날짜/), '2026-10-01');
+    await user.type(screen.getByLabelText(/메모/), '추석 보강');
+    await user.click(screen.getByRole('button', { name: '추가' }));
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalled());
+
+    expect(screen.getByLabelText(/^날짜/)).toHaveValue('2026-09-24');
+    expect(screen.getByLabelText(/옮길 날짜/)).toHaveValue('2026-10-01');
+    expect(screen.getByLabelText(/메모/)).toHaveValue('추석 보강');
+    expect(screen.getByRole('button', { name: '추가' })).toBeInTheDocument();
+    expect(screen.getByText('그 날짜에는 이미 예외가 있습니다')).toBeInTheDocument();
   });
 
   /*
