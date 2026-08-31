@@ -19,7 +19,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Sparkles, Loader2, Send, List, Plus, MessageCircle, ArrowLeft, PanelRightClose, CircleCheck, Trash2,
 } from 'lucide-react';
-import { conversationAPI, proposalAPI, contextSuggestionAPI } from '../api/api.js';
+import { conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI } from '../api/api.js';
+import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
 
 /** 화면별 추천 질문. 지금 이 화면에서 실제로 할 수 있는 것만 보여준다. */
 const SUGGESTED_PROMPTS = {
@@ -67,6 +68,7 @@ export default function AiPanel({
   onProposal,
   onFocusDraft,
   onDiscardDraft,
+  onScheduleApplied,
   onCollapse,
 }) {
   const [view, setView] = useState('chat'); // 'chat' | 'list'
@@ -84,6 +86,13 @@ export default function AiPanel({
 
   const [currentOffer, setCurrentOffer] = useState(null);
   const [contextSuggestions, setContextSuggestions] = useState([]);
+  /**
+   * AI가 뽑은 일정 후보(약속·반복 일정). contextSuggestions와 나란히 두되 합치지 않는다 —
+   * 저쪽은 문장 하나를 기억할지 묻는 것이고 이쪽은 구조화된 일정을 만들지 묻는 것이라,
+   * 카드도 버튼도 적용 결과도 다르다.
+   */
+  const [scheduleSuggestions, setScheduleSuggestions] = useState([]);
+  const [scheduleActionState, setScheduleActionState] = useState({});
   const [contextActionState, setContextActionState] = useState({});
   const [appliedNotice, setAppliedNotice] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -103,7 +112,7 @@ export default function AiPanel({
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [messages, currentOffer, contextSuggestions, view]);
+  }, [messages, currentOffer, contextSuggestions, scheduleSuggestions, view]);
 
   // 화면의 버튼("이어하기", "이 자료로 질문" 등)이 입력창을 대신 채운다. 바로 보내지 않는다 —
   // 무엇을 물어볼지는 사용자가 마지막으로 확인하고 고칠 수 있어야 한다.
@@ -118,6 +127,8 @@ export default function AiPanel({
     setMessages([]);
     setCurrentOffer(null);
     setContextSuggestions([]);
+    setScheduleSuggestions([]);
+    setScheduleActionState({});
     setContextActionState({});
     setSendError(null);
     setLoadError(null);
@@ -170,6 +181,8 @@ export default function AiPanel({
       try {
         const pending = await conversationAPI.getContextSuggestions(conversationId);
         if (loadTokenRef.current === myToken) setContextSuggestions(pending ?? []);
+        const pendingSchedule = await conversationAPI.getScheduleSuggestions(conversationId);
+        if (loadTokenRef.current === myToken) setScheduleSuggestions(pendingSchedule ?? []);
       } catch { /* 후보 복원 실패는 대화 표시를 막지 않는다 */ }
     } catch (err) {
       if (loadTokenRef.current === myToken) {
@@ -273,6 +286,9 @@ export default function AiPanel({
             onProposal?.(data);
           } else if (eventName === 'context.suggestions.ready') {
             setContextSuggestions((prev) => [...prev, ...(data?.suggestions ?? [])]);
+          } else if (eventName === 'schedule.suggestions.ready') {
+            // proposal.ready와 달리 여기서 카드를 그린다 — 갈 화면이 따로 없는 사실 후보다.
+            setScheduleSuggestions((prev) => [...prev, ...(data?.suggestions ?? [])]);
           } else if (eventName === 'message.completed') {
             if (data?.userMessageId) lastUserMessageIdRef.current = data.userMessageId;
             setMessages((prev) => prev.map((m) => (m.key === streamingKey
@@ -379,6 +395,28 @@ export default function AiPanel({
     }
   };
 
+  /**
+   * 적용·거절. 성공하면 카드를 지우지 않고 결과 문구로 바꾼다 — 사라지면 사용자가 방금
+   * 무엇을 승인했는지 확인할 방법이 없다.
+   *
+   * 적용 후에는 오늘·일정 화면과 가용시간이 새 사실을 봐야 하므로 새로고침을 알린다.
+   */
+  const handleScheduleAction = async (suggestionId, action, editedPayload) => {
+    setScheduleActionState((prev) => ({ ...prev, [suggestionId]: { status: 'working' } }));
+    try {
+      if (action === 'apply') await scheduleSuggestionAPI.apply(suggestionId, editedPayload ?? null);
+      else await scheduleSuggestionAPI.dismiss(suggestionId);
+      setScheduleActionState((prev) => ({
+        ...prev, [suggestionId]: { status: action === 'apply' ? 'applied' : 'dismissed' },
+      }));
+      if (action === 'apply') await onScheduleApplied?.();
+    } catch (err) {
+      setScheduleActionState((prev) => ({
+        ...prev, [suggestionId]: { status: 'error', message: err.message || '처리하지 못했습니다.' },
+      }));
+    }
+  };
+
   const prompts = SUGGESTED_PROMPTS[scope.kind] ?? SUGGESTED_PROMPTS.all;
   const visibleMessages = messages.filter((m) => m.role !== 'ASSISTANT' || m.streaming || m.content);
 
@@ -472,6 +510,16 @@ export default function AiPanel({
               <div key={m.key} className={`ai-bubble ai-bubble-${m.role.toLowerCase()}`}>
                 <p>{m.content}{m.streaming && <span className="ai-cursor" aria-hidden="true" />}</p>
               </div>
+            ))}
+
+            {scheduleSuggestions.map((suggestion) => (
+              <ScheduleSuggestionCard
+                key={suggestion.suggestionId}
+                suggestion={suggestion}
+                state={scheduleActionState[suggestion.suggestionId]}
+                onApply={(id, payload) => handleScheduleAction(id, 'apply', payload)}
+                onDismiss={(id) => handleScheduleAction(id, 'dismiss')}
+              />
             ))}
 
             {contextSuggestions.map((suggestion) => {

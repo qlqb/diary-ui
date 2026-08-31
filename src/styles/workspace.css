@@ -1438,6 +1438,56 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .ai-context-resolved { margin: 8px 0 0; font-size: 13px; color: var(--ws-ok); }
 .ai-context-actions { display: flex; gap: 6px; margin-top: 9px; }
 
+/* AI 일정 후보 카드(약속·반복 일정). Context 카드와 같은 자리에 서지만 담는 것이 다르다. */
+.ai-schedule-card {
+  padding: 11px 12px;
+  border: 1px solid var(--ws-border-strong);
+  border-left: 3px solid var(--ws-warn);
+  border-radius: 9px;
+  background: #fbfbfc;
+}
+.ai-schedule-card.is-resolved { border-left-color: var(--ws-border-strong); background: #fafbfc; }
+.ai-schedule-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ai-schedule-title { font-size: 14.5px; font-weight: 700; }
+.ai-schedule-line { margin: 3px 0 0; font-size: 13.5px; color: var(--ws-text-dim); }
+.ai-schedule-resolved { margin: 6px 0 0; font-size: 13px; color: var(--ws-ok); }
+.ai-schedule-actions { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+
+/* [수정]으로 펼치는 편집 영역. 화면을 옮기지 않고 카드 안에서 연다. */
+.ai-schedule-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--ws-border-strong);
+}
+.ai-schedule-editor input {
+  padding: 4px 7px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13.5px;
+  color: var(--ws-text);
+  min-width: 0;
+}
+.ai-schedule-days { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.chip-toggle {
+  padding: 3px 8px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  color: var(--ws-text-dim);
+  cursor: pointer;
+}
+.chip-toggle.is-on {
+  border-color: var(--ws-accent);
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+  font-weight: 700;
+}
+
 /* 열기(button)와 삭제(icon button)는 각각 독립된 조작이므로 행은 container다 —
    button 안에 button을 중첩하지 않는다. */
 .ai-conv-row {

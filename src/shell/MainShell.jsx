@@ -418,6 +418,8 @@ export default function MainShell({ user, onLogout }) {
           onProposal={handleProposal}
           onFocusDraft={focusDraft}
           onDiscardDraft={discardDraft}
+          /* 약속·반복 일정이 저장되면 오늘 시간축과 주간 격자가 새 사실을 봐야 한다. */
+          onScheduleApplied={refreshAll}
           onCollapse={() => setAiOpen(false)}
         />
       ) : (

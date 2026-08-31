@@ -676,6 +676,11 @@ export const conversationAPI = {
         return request(`/ai/conversations/${conversationId}/context-suggestions`);
     },
 
+    /** 아직 승인/거절하지 않은 일정 후보(약속·반복 일정). 새로고침 후 카드 복원용. */
+    getScheduleSuggestions: (conversationId) => {
+        return request(`/ai/conversations/${conversationId}/schedule-suggestions`);
+    },
+
     /**
      * 대화 삭제. 목록에서 사라지지만 서버는 status를 ARCHIVED로 내리는 soft delete다 —
      * 이미 나눈 메시지·제안·승인된 장기 컨텍스트를 함께 지우지 않는다.
@@ -701,6 +706,28 @@ export const contextAPI = {
  * 생성은 여기 없다 — conversationAPI.sendMessage 흐름에서 SSE(context.suggestions.ready)로
  * 도착하거나, conversationAPI.getContextSuggestions로 복원된다.
  */
+/**
+ * AI 일정 후보(약속·반복 일정)의 적용·거절.
+ *
+ * 생성은 여기 없다 — 대화 흐름에서 SSE(schedule.suggestions.ready)로 도착하거나
+ * conversationAPI.getScheduleSuggestions로 복원된다.
+ *
+ * apply에 editedPayload를 실으면 사용자가 카드에서 고친 값으로 만들어진다. 없으면
+ * 서버에 저장된 원본 후보를 그대로 쓴다.
+ */
+export const scheduleSuggestionAPI = {
+    apply: (suggestionId, editedPayload = null) => {
+        return request(`/ai/schedule-suggestions/${suggestionId}/apply`, {
+            method: 'POST',
+            body: JSON.stringify({ editedPayload }),
+        });
+    },
+
+    dismiss: (suggestionId) => {
+        return request(`/ai/schedule-suggestions/${suggestionId}/dismiss`, { method: 'POST' });
+    },
+};
+
 export const contextSuggestionAPI = {
     apply: (suggestionId) => {
         return request(`/ai/context-suggestions/${suggestionId}/apply`, { method: 'POST' });
