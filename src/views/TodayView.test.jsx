@@ -271,6 +271,146 @@ describe('보류한 것', () => {
   });
 });
 
+/**
+ * 실제 소요시간은 관찰 데이터다. 여기서 고정하는 것은 "안 쟀다"가 계획값으로 조용히
+ * 채워지지 않는다는 것과, 실패했을 때 사용자가 친 값이 사라지지 않는다는 것 두 가지다.
+ */
+describe('실제 소요시간 기록', () => {
+  const planned = () => timed(1, '웹서버 과제', '15:00', '15:45', { estimatedMinutes: 45 });
+
+  beforeEach(() => {
+    executionItemAPI.complete.mockResolvedValue({});
+    executionItemAPI.partial.mockResolvedValue({});
+  });
+
+  it('완료를 누르면 바로 보내지 않고 실제 시간을 묻는다', async () => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    renderToday([planned()], { onRefresh: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: '완료' }));
+
+    expect(screen.getByText('실제로 얼마나 걸렸어요?')).toBeInTheDocument();
+    expect(executionItemAPI.complete).not.toHaveBeenCalled();
+  });
+
+  it('예상 시간을 기본값이나 추천 버튼으로 내밀지 않는다', async () => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    renderToday([planned()], { onRefresh: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: '완료' }));
+
+    // 45분짜리 항목이지만 입력칸은 비어 있어야 한다 — 보여주면 그 근처를 고르게 된다.
+    expect(screen.getByLabelText('실제 걸린 시간(분)')).toHaveValue(null);
+    expect(screen.queryByRole('button', { name: '45분' })).not.toBeInTheDocument();
+  });
+
+  it('완료 + 70분 -> complete에 actualMinutes가 실린다', async () => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    renderToday([planned()], { onRefresh });
+
+    await user.click(screen.getByRole('button', { name: '완료' }));
+    await user.type(screen.getByLabelText('실제 걸린 시간(분)'), '70');
+    await user.click(screen.getByRole('button', { name: '완료 기록' }));
+
+    await waitFor(() => expect(executionItemAPI.complete).toHaveBeenCalledWith(1, 0, { actualMinutes: 70 }));
+    expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it('모르겠어요는 예상값을 베끼지 않고 actualMinutes 없이 완료한다', async () => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    renderToday([planned()], { onRefresh: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: '완료' }));
+    await user.click(screen.getByRole('button', { name: '모르겠어요' }));
+
+    await waitFor(() => expect(executionItemAPI.complete).toHaveBeenCalledWith(1, 0, {}));
+    // 45(estimatedMinutes)가 슬쩍 들어가면 관찰 데이터가 계획 데이터의 메아리가 된다.
+    expect(executionItemAPI.complete.mock.calls[0][2]).not.toHaveProperty('actualMinutes');
+  });
+
+  it('일부 50% + 30분 -> partial에 둘 다 실린다', async () => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    renderToday([planned()], { onRefresh: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: '일부 했어요' }));
+    await user.type(screen.getByLabelText('실제 걸린 시간(분)'), '30');
+    await user.click(screen.getByRole('button', { name: '기록' }));
+
+    await waitFor(() => expect(executionItemAPI.partial).toHaveBeenCalledWith(1, {
+      version: 0, completionPercent: 50, actualMinutes: 30,
+    }));
+  });
+
+  it('시간을 모르면 completionPercent만으로 PARTIAL을 기록한다', async () => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    renderToday([planned()], { onRefresh: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: '일부 했어요' }));
+    await user.click(screen.getByRole('button', { name: '시간은 모르겠어요' }));
+
+    await waitFor(() => expect(executionItemAPI.partial).toHaveBeenCalledWith(1, {
+      version: 0, completionPercent: 50,
+    }));
+  });
+
+  it.each([['0'], ['-5'], ['1.5']])('%s분은 제출할 수 없다', async (value) => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    renderToday([planned()], { onRefresh: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: '완료' }));
+    await user.type(screen.getByLabelText('실제 걸린 시간(분)'), value);
+
+    expect(screen.getByRole('button', { name: '완료 기록' })).toBeDisabled();
+    expect(executionItemAPI.complete).not.toHaveBeenCalled();
+  });
+
+  it('실패하면 트레이가 열린 채 입력값이 남는다', async () => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    executionItemAPI.complete.mockRejectedValue(new Error('서버가 응답하지 않습니다'));
+    renderToday([planned()], { onRefresh: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: '완료' }));
+    await user.type(screen.getByLabelText('실제 걸린 시간(분)'), '70');
+    await user.click(screen.getByRole('button', { name: '완료 기록' }));
+
+    // 화면 위쪽 배너에도 뜨지만, 여기서 고정하는 것은 트레이 안에 남는 쪽이다 —
+    // 입력값 옆에 있어야 무엇을 다시 할지 알 수 있다.
+    const shown = await screen.findAllByText('서버가 응답하지 않습니다');
+    expect(shown.some((el) => el.classList.contains('exec-tray-error'))).toBe(true);
+    // 다시 칠 필요가 없어야 한다 — 값이 사라지면 오류 문구만 남고 무엇을 쳤는지도 잃는다.
+    expect(screen.getByLabelText('실제 걸린 시간(분)')).toHaveValue(70);
+  });
+
+  it('버전 충돌이면 재시도가 아니라 새로고침을 안내한다', async () => {
+    freezeAt(15, 50);
+    const user = userEvent.setup();
+    const conflict = new Error('다른 곳에서 먼저 변경되었습니다');
+    conflict.code = 'E409_004';
+    executionItemAPI.complete.mockRejectedValue(conflict);
+    renderToday([planned()], { onRefresh: vi.fn() });
+
+    await user.click(screen.getByRole('button', { name: '완료' }));
+    await user.type(screen.getByLabelText('실제 걸린 시간(분)'), '70');
+    await user.click(screen.getByRole('button', { name: '완료 기록' }));
+
+    await waitFor(() => expect(
+      screen.getByText('목록이 바뀌었어요. 새로고침 후 다시 기록해 주세요'),
+    ).toBeInTheDocument());
+    expect(screen.getByLabelText('실제 걸린 시간(분)')).toHaveValue(70);
+    // 자동 재시도 금지 — 같은 version으로 다시 보내봐야 또 막힌다.
+    expect(executionItemAPI.complete).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('이동 액션', () => {
   it('"미루기"가 아니라 "이동"이고, 오늘 뒤로 / 내일로 / 날짜 선택을 준다', async () => {
     freezeAt(15, 40);

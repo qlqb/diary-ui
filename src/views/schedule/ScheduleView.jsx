@@ -91,10 +91,11 @@ export default function ScheduleView({
   );
   const adjustedItems = items.filter((i) => adjustmentFor(draft, i.executionItemId));
 
+  /** 결과를 돌려준다 — ExecutionRow가 성공했을 때만 트레이를 닫는다(TodayView와 같은 계약). */
   const handleAction = async (action, item, payload) => {
     setBusyId(item.executionItemId);
     try {
-      if (action === 'complete') await executionItemAPI.complete(item.executionItemId, item.version);
+      if (action === 'complete') await executionItemAPI.complete(item.executionItemId, item.version, payload ?? {});
       else if (action === 'partial') await executionItemAPI.partial(item.executionItemId, { version: item.version, ...payload });
       else if (action === 'reduce') await executionItemAPI.reduce(item.executionItemId, { version: item.version, ...payload });
       else if (action === 'move') {
@@ -111,8 +112,10 @@ export default function ScheduleView({
       }
       setSelected(null);
       await load();
+      return { ok: true };
     } catch (err) {
       setError(err.message || '처리하지 못했습니다.');
+      return { ok: false, code: err.code ?? null, message: err.message ?? null };
     } finally {
       setBusyId(null);
     }

@@ -63,12 +63,19 @@ export default function TodayView({
     (c) => c.operation === 'CREATE' && c.scheduledDate === today,
   );
 
+  /**
+   * 실행 액션. 결과를 돌려준다 — ExecutionRow가 성공했을 때만 트레이를 닫고, 실패하면
+   * 사용자가 친 값을 그대로 둔 채 그 자리에 이유를 보여주기 위해서다.
+   *
+   * 오류를 잡는 곳은 여기 하나다. code까지 함께 넘기는 것은 버전 충돌(E409_004)만
+   * 화면이 다르게 말해야 하기 때문이고, 문구를 파싱하는 방식은 쓰지 않는다.
+   */
   const handleAction = async (action, item, payload) => {
     setBusyId(item.executionItemId);
     setActionError(null);
     try {
       if (action === 'complete') {
-        await executionItemAPI.complete(item.executionItemId, item.version);
+        await executionItemAPI.complete(item.executionItemId, item.version, payload ?? {});
       } else if (action === 'partial') {
         await executionItemAPI.partial(item.executionItemId, { version: item.version, ...payload });
       } else if (action === 'reduce') {
@@ -88,8 +95,10 @@ export default function TodayView({
         onItemDeleted?.(item);
       }
       await onRefresh?.();
+      return { ok: true };
     } catch (err) {
       setActionError(err.message || '처리하지 못했습니다.');
+      return { ok: false, code: err.code ?? null, message: err.message ?? null };
     } finally {
       setBusyId(null);
     }

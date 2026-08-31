@@ -476,6 +476,28 @@
 .exec-tray-move { flex-wrap: wrap; }
 .exec-tray-group { display: inline-flex; align-items: center; gap: 4px; }
 
+/* 완료·일부 수행 기록. 실제 소요시간 입력이 붙어 한 줄에 다 들어가지 않는다. */
+.exec-tray-record { flex-wrap: wrap; }
+.exec-tray-lead { font-size: 13.5px; color: var(--ws-text-dim); }
+
+.exec-tray-record input[type='number'] {
+  width: 68px;
+  padding: 4px 7px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13.5px;
+  color: var(--ws-text);
+}
+
+/* 실패 이유는 트레이 안에 남는다 — 입력값 옆에 있어야 무엇을 다시 할지 알 수 있다. */
+.exec-tray-error {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ws-danger);
+}
+
 .exec-tray input[type='time'],
 .exec-tray input[type='date'] {
   padding: 4px 7px;
