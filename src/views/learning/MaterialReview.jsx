@@ -222,8 +222,22 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
       )}
 
       <h4 className="material-review-notes-title">학습 내용</h4>
+      {/*
+        학습 내용이 0개인 것은 실패가 아니다.
+        - 강의계획서에 주차별 목차가 없는 경우
+        - 이 자료의 내용이 이미 확정된 학습 구조에 다 들어 있는 경우
+        둘 다 정상이고, 화면은 이 둘을 구분할 방법이 없다(payload에 남는 것은 topics: []뿐이다).
+
+        전에는 빨간 오류 상자로 "교재 목차 자료를 올려주세요"라고 시켰다. 두 가지가 잘못됐다.
+        첫째, 정상적인 결과를 고장처럼 보이게 했다. 둘째, 알 수 없는 것을 단정하고 행동까지
+        지시했다 — 이미 다 들어 있어서 비어 있는 경우에는 그 지시가 틀렸고, 그대로 따르면
+        자료를 또 올리고 그 자료에 "구조 분석" 버튼이 또 생기는 고리에 들어간다. 실제로
+        그렇게 보고받았다.
+
+        이유는 바로 위 요약(payload.summary)이 이미 말하고 있다. 여기서는 사실만 적는다.
+      */}
       {!hasTopics ? (
-        <p className="learning-error">목차 근거를 찾지 못했어요 — 교재 목차 자료를 올려주세요.</p>
+        <p className="view-dim">이 자료에서 새로 추가할 학습 내용은 없어요.</p>
       ) : (
         <ul className="learning-topic-preview material-review-tree">
           {topics.map((node) => (

@@ -270,4 +270,46 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
     });
   });
 
+
+  /*
+   * 학습 내용 0개는 실패가 아니다. 강의계획서에 목차가 없거나, 이 자료 내용이 이미 확정된
+   * 학습 구조에 다 들어 있으면 정상적으로 0개가 된다 — 화면은 둘을 구분할 수 없다.
+   */
+  describe('학습 내용이 0개인 것을 오류로 보여주지 않는다', () => {
+    const alreadyCovered = {
+      analysisId: 7,
+      status: 'DRAFT',
+      payload: {
+        summary: '이미 확정된 학습 구조에 해당 항목들이 포함되어 있어 새로 추가할 topics는 없습니다.',
+        courseFields: { textbookTitle: null, textbookAuthor: null, textbookPublisher: null, textbookIsbn: null },
+        courseNotes: [],
+        keyDates: [],
+        topics: [],
+      },
+    };
+
+    it('자료를 더 올리라고 시키지 않는다', async () => {
+      await renderOpened(alreadyCovered);
+
+      // 이미 다 들어 있어서 비어 있는 경우 이 지시는 틀렸고, 따르면 올리고 또 분석하는
+      // 고리에 들어간다. 이유는 바로 위 요약이 이미 말하고 있다.
+      expect(screen.queryByText(/교재 목차 자료를 올려주세요/)).not.toBeInTheDocument();
+      expect(screen.getByText('이 자료에서 새로 추가할 학습 내용은 없어요.')).toBeInTheDocument();
+    });
+
+    it('오류 스타일로 보여주지 않는다', async () => {
+      await renderOpened(alreadyCovered);
+
+      const line = screen.getByText('이 자료에서 새로 추가할 학습 내용은 없어요.');
+      // learning-error는 실제 분석 실패와 적용 오류가 쓰는 빨간 상자다.
+      expect(line).not.toHaveClass('learning-error');
+    });
+
+    it('AI가 남긴 이유(요약)는 그대로 보여준다', async () => {
+      await renderOpened(alreadyCovered);
+
+      expect(screen.getByText(/이미 확정된 학습 구조에 해당 항목들이 포함되어 있어/))
+        .toBeInTheDocument();
+    });
+  });
 });
