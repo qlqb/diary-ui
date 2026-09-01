@@ -40,6 +40,7 @@ import { commitmentAPI, courseAPI, executionItemAPI, routineAPI } from '../api/a
 import useUndoDelete from './useUndoDelete.js';
 import UndoToast from '../components/UndoToast.jsx';
 import { todayString } from '../lib/datetime.js';
+import { tabForProposal } from './proposalTab.js';
 
 const TABS = [
   { key: 'today', label: '오늘', icon: CalendarCheck2 },
@@ -230,9 +231,7 @@ export default function MainShell({ user, onLogout }) {
   const handleProposal = useCallback(async (proposal) => {
     await openDraft(proposal, { courseId: scope.courseId ?? null });
     if (tab === 'projects') return;
-    const dates = new Set((proposal.items ?? []).map((i) => i.targetDate));
-    const onlyToday = dates.size === 1 && dates.has(today);
-    setTab(onlyToday ? 'today' : 'schedule');
+    setTab(tabForProposal(proposal.items, today));
   }, [openDraft, scope.courseId, tab, today]);
 
   const focusDraft = useCallback(() => {
