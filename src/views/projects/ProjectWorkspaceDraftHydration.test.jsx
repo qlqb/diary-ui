@@ -193,4 +193,51 @@ describe('구조 분석 초안 복원', () => {
 
     expect(await screen.findByRole('button', { name: /구조 분석 결과/ })).toBeInTheDocument();
   });
+
+  /*
+   * 프로젝트를 바꾸는 순간 courseId는 즉시 바뀌지만 materials는 load()가 끝나야 바뀐다.
+   * 그 틈에 복원이 돌면 "새 프로젝트 번호 × 이전 프로젝트 자료"라는 있지도 않은 조합으로
+   * 요청이 나가고, 서버는 연결되지 않은 자료라며 404를 준다. 실제 콘솔에 그 404가 사이드바를
+   * 오르내린 만큼 쌓여 있었다(32/92, 33/93, 190/92 ... 전부 한 칸씩 어긋난 조합).
+   */
+  describe('프로젝트 전환', () => {
+    const OTHER_COURSE_ID = 7;
+
+    it('이전 프로젝트의 자료로 새 프로젝트에 묻지 않는다', async () => {
+      // 두 번째 프로젝트의 자료 조회를 붙잡아 둔다 — materials가 아직 안 바뀐 상태를 만든다.
+      let releaseMaterials;
+      const pending = new Promise((resolve) => { releaseMaterials = resolve; });
+
+      const { rerender } = renderWorkspace();
+      await waitFor(() =>
+        expect(materialAnalysisAPI.listByMaterial).toHaveBeenCalledWith(COURSE_ID, 4));
+
+      materialAPI.listByCourse.mockReturnValue(pending);
+      courseAPI.get.mockResolvedValue({ courseId: OTHER_COURSE_ID, title: '빅데이터분석', status: 'ACTIVE' });
+      materialAnalysisAPI.listByMaterial.mockClear();
+
+      rerender(
+        <ProjectWorkspace
+          courseId={OTHER_COURSE_ID}
+          onBack={vi.fn()}
+          onAsk={vi.fn()}
+          draft={null}
+          onPatchCard={vi.fn()}
+          onToggleExclude={vi.fn()}
+          onProjectsChanged={vi.fn()}
+        />,
+      );
+
+      // 자료 목록이 아직 이전 프로젝트 것인 동안에는 아무것도 묻지 않는다.
+      await Promise.resolve();
+      expect(materialAnalysisAPI.listByMaterial).not.toHaveBeenCalled();
+
+      releaseMaterials([material(9, '빅데이터분석.pdf')]);
+
+      // 새 자료가 도착한 뒤에야, 그것도 올바른 조합으로만 묻는다.
+      await waitFor(() =>
+        expect(materialAnalysisAPI.listByMaterial).toHaveBeenCalledWith(OTHER_COURSE_ID, 9));
+      expect(materialAnalysisAPI.listByMaterial).not.toHaveBeenCalledWith(OTHER_COURSE_ID, 4);
+    });
+  });
 });

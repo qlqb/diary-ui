@@ -87,6 +87,14 @@ export default function ProjectWorkspace({
   const [planItems, setPlanItems] = useState([]);
   const [planLoading, setPlanLoading] = useState(true);
   const [materials, setMaterials] = useState([]);
+  /**
+   * 지금 들고 있는 materials가 어느 프로젝트 것인지.
+   *
+   * courseId는 prop이라 프로젝트를 바꾸는 순간 바뀌지만, materials는 load()가 끝날 때까지
+   * 이전 프로젝트 것이 남아 있다. 그 틈을 구분할 값이 없으면 MaterialsSection의 초안
+   * 복원이 "새 courseId × 이전 프로젝트 자료"로 서버에 묻게 된다.
+   */
+  const [materialsCourseId, setMaterialsCourseId] = useState(null);
   const [topics, setTopics] = useState([]);
   const [notes, setNotes] = useState([]);
   const [executions, setExecutions] = useState([]);
@@ -111,6 +119,8 @@ export default function ProjectWorkspace({
       ]);
       setProject(projectData);
       setMaterials(materialsData ?? []);
+      // 목록과 그 목록의 주인을 함께 세운다. 따로 두면 그 사이가 또 틈이 된다.
+      setMaterialsCourseId(courseId);
       setTopics(topicsData ?? []);
       setNotes(notesData ?? []);
       setExecutions(executionsData ?? []);
@@ -351,6 +361,7 @@ export default function ProjectWorkspace({
       <MaterialsSection
         courseId={courseId}
         materials={materials}
+        materialsCourseId={materialsCourseId}
         onChanged={load}
         onAsk={onAsk}
       />
@@ -487,7 +498,7 @@ function latestDraft(history) {
   return (history ?? []).find((a) => a.status === 'DRAFT') ?? null;
 }
 
-function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
+function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, onAsk }) {
   const [error, setError] = useState(null);
   const [analyses, setAnalyses] = useState({});
   /** materialId -> 'loading' | 'ready' | 'error'. 초안 조회가 끝났는지 자료마다 따로 안다. */
@@ -510,8 +521,22 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
    *
    * 자료마다 요청이 하나씩 나간다(자료 6개면 6개). 지금은 연결 자료가 한 자릿수라 batch
    * API를 만들지 않았다 — 프로젝트당 연결 자료가 10개를 넘기 시작하면 그때 다시 검토한다.
+   *
+   * ★ materials가 이 프로젝트 것으로 바뀐 뒤에만 묻는다.
+   *
+   * courseId는 즉시 바뀌고 materials는 load()가 끝나야 바뀐다. 그 틈에 이 effect가 한 번
+   * 돌면 "새 프로젝트 번호 × 이전 프로젝트 자료"라는 있지도 않은 조합으로 요청이 나가고,
+   * 서버는 연결되지 않은 자료라며 404를 준다(사이드바를 오르내린 만큼 한 칸씩 어긋난
+   * 요청이 쌓인다). 아래 세대 값은 늦게 온 응답을 버릴 뿐, 나가는 요청 자체는 못 막는다 —
+   * 그 404가 최신 세대이면 결과가 그대로 반영돼 멀쩡한 자료에 "초안을 확인하지 못했어요"가
+   * 뜬다.
+   *
+   * 여기서는 상태를 지우지도 않는다. 지우면 이전 프로젝트 화면이 한 번 깜빡인다 —
+   * 어차피 materials가 도착하면 이 effect가 다시 돈다.
    */
   useEffect(() => {
+    if (materialsCourseId !== courseId) return;
+
     const generation = hydrationRef.current + 1;
     hydrationRef.current = generation;
     if (materials.length === 0) {
@@ -545,7 +570,7 @@ function MaterialsSection({ courseId, materials, onChanged, onAsk }) {
       setAnalyses(nextAnalyses);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, materialIds]);
+  }, [courseId, materialsCourseId, materialIds]);
 
   /** 한 자료의 조회만 다시. 다른 자료의 복원 결과는 건드리지 않는다. */
   const retryDraft = async (materialId) => {
