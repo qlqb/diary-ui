@@ -188,4 +188,86 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
     expect(screen.queryByText('과목 정보')).not.toBeInTheDocument();
     expect(screen.queryByText('평가/일정')).not.toBeInTheDocument();
   });
+  /*
+   * 주차별 토픽이 없는 강의계획서는 드문 일이 아니다. 그때도 교재 정보와 과목 정보는
+   * 뽑히고, 서버 apply는 그 상태를 이미 정상 처리한다 — 화면만 막고 있었다.
+   */
+  describe('학습 내용이 없어도 나머지는 적용할 수 있다', () => {
+    const syllabusOnly = {
+      analysisId: 7,
+      status: 'DRAFT',
+      payload: {
+        summary: '주차별/주제별 학습 토픽은 제공되지 않습니다.',
+        courseFields: {
+          textbookTitle: 'NEW English Conversation Arts 1',
+          textbookAuthor: 'Michael Putlack, 이현호',
+          textbookPublisher: '형설출판사',
+          textbookIsbn: null,
+        },
+        courseNotes: [
+          { category: 'COURSE_INFO', label: '담당교수', detail: 'Stephen' },
+          { category: 'ASSESSMENT', label: '성적평가 비율', detail: '중간 40%, 기말 40%, 출석 20%' },
+        ],
+        keyDates: [],
+        topics: [],
+      },
+    };
+
+    it('토픽이 0개여도 과목 정보가 있으면 적용할 수 있다', async () => {
+      const user = userEvent.setup();
+      const onApplied = vi.fn();
+      render(<MaterialReview analysis={syllabusOnly} onApplied={onApplied} onDismiss={vi.fn()} />);
+
+      const apply = screen.getByRole('button', { name: '검토 완료 — 적용' });
+      expect(apply).toBeEnabled();
+
+      await user.click(apply);
+
+      // 서버는 topics가 비면 건너뛰고 courseNotes와 교재 정보를 저장한다.
+      expect(materialAnalysisAPI.edit).toHaveBeenCalledWith(7, expect.objectContaining({
+        topics: [],
+        courseNotes: syllabusOnly.payload.courseNotes,
+        courseFields: expect.objectContaining({ textbookTitle: 'NEW English Conversation Arts 1' }),
+      }));
+      expect(materialAnalysisAPI.apply).toHaveBeenCalledWith(7);
+      expect(onApplied).toHaveBeenCalled();
+    });
+
+    it('과목 정보가 없어도 교재 정보만 있으면 적용할 수 있다', () => {
+      render(
+        <MaterialReview
+          analysis={{
+            ...syllabusOnly,
+            payload: { ...syllabusOnly.payload, courseNotes: [] },
+          }}
+          onApplied={vi.fn()}
+          onDismiss={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: '검토 완료 — 적용' })).toBeEnabled();
+    });
+
+    it('정말 아무것도 없으면 잠그되, 왜 잠겼는지 말한다', () => {
+      render(
+        <MaterialReview
+          analysis={{
+            ...syllabusOnly,
+            payload: {
+              ...syllabusOnly.payload,
+              courseFields: { textbookTitle: null, textbookAuthor: null, textbookPublisher: null, textbookIsbn: null },
+              courseNotes: [],
+            },
+          }}
+          onApplied={vi.fn()}
+          onDismiss={vi.fn()}
+        />,
+      );
+
+      // 눌러도 아무 일이 없는 버튼은 사용자가 앱이 고장났다고 읽는다.
+      expect(screen.getByRole('button', { name: '검토 완료 — 적용' })).toBeDisabled();
+      expect(screen.getByText('적용할 내용이 없어요')).toBeInTheDocument();
+    });
+  });
+
 });

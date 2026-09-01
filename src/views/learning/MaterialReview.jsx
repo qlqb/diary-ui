@@ -101,6 +101,25 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
 
   const courseNotes = analysis.payload.courseNotes ?? [];
 
+  const hasCourseFields = COURSE_FIELD_LABELS.some(([key]) => {
+    const value = courseFields[key];
+    return value != null && String(value).trim() !== '';
+  });
+
+  /*
+   * 적용할 것이 하나라도 있으면 적용할 수 있다.
+   *
+   * 전에는 topics만 봤다. 그런데 강의계획서에 주차별 토픽이 없는 것은 드문 일이 아니고
+   * (이 화면의 요약이 "주차별/주제별 학습 토픽은 제공되지 않습니다"라고 말하는 바로 그
+   * 경우다), 그때도 교재 정보와 과목 정보는 멀쩡히 뽑혀 있다.
+   *
+   * 서버 apply는 이미 그 상태를 정상 처리한다 — topics가 비면 건너뛰고 교재 정보와
+   * courseNotes는 그대로 저장한다. 화면만 막고 있었던 셈이라, "과목 정보 6건"이라고 써
+   * 놓고 그 6건을 적용할 방법을 주지 않았다. 남는 선택은 폐기뿐이고 그건 제대로 뽑힌
+   * 사실을 버리는 것이다.
+   */
+  const hasAnythingToApply = hasTopics || courseNotes.length > 0 || hasCourseFields;
+
   const buildPayload = () => ({
     summary: analysis.payload.summary,
     courseFields,
@@ -143,7 +162,15 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
           </span>
         </button>
         <div className="material-review-head-actions">
-          <button type="button" className="v6-btn-small" onClick={handleApply} disabled={applying || !hasTopics}>
+          {/*
+            잠겼으면 왜 잠겼는지 그 자리에서 말한다. 눌러도 아무 일이 없는 버튼은 사용자가
+            앱이 고장났다고 읽는다 — 실제로 그렇게 보고받았다.
+          */}
+          {!hasAnythingToApply && (
+            <span className="material-review-head-count">적용할 내용이 없어요</span>
+          )}
+          <button type="button" className="v6-btn-small" onClick={handleApply}
+            disabled={applying || !hasAnythingToApply}>
             {applying ? '적용 중...' : '검토 완료 — 적용'}
           </button>
           <button type="button" className="v6-btn-small" onClick={() => onDismiss?.()} disabled={applying}>
