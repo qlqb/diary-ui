@@ -5721,9 +5721,23 @@ body {
   transition: background 0.15s, border-color 0.15s;
 }
 
-.v6-btn-small:hover {
+.v6-btn-small:hover:not(:disabled) {
   background: #f9fafb;
   border-color: #d1d5db;
+}
+
+/*
+ * 잠긴 버튼은 잠긴 것처럼 보여야 한다.
+ *
+ * 이 클래스만 :disabled 규칙이 없어서, 잠긴 버튼이 멀쩡한 버튼과 똑같이 보이고 손가락
+ * 커서에 hover 반응까지 했다. 사용자에게는 "눌러도 아무 일이 없는 버튼"으로만 보이고
+ * 그건 고장으로 읽힌다 — 실제로 그렇게 보고받았다.
+ *
+ * 값은 이 프로젝트가 이미 쓰는 것과 같다(btn-primary/btn-ghost/pagination 등).
+ */
+.v6-btn-small:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .v6-btn-link {
@@ -5738,7 +5752,9 @@ body {
   cursor: pointer;
 }
 
-.v6-btn-link:hover {
+.v6-btn-link:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.v6-btn-link:hover:not(:disabled) {
   text-decoration: underline;
 }
 
