@@ -147,6 +147,8 @@ export default function PlanDraftReview({
           selectedMinutes={selectedMinutes}
           buffer={buffer}
           confidence={draft.availabilityConfidenceSummary}
+          cappedByItemLimit={draft.targetCappedByItemLimit}
+          uncoveredMinutes={draft.uncoveredMinutes}
         />
         <TimeGauge selectedMinutes={selectedMinutes} targetMinutes={target} intensity={draft.intensity} />
         {/* 예전 서버가 이유를 보내면 그대로 보여준다. 새 서버는 예산을 직접 계산하므로 비어 있다. */}
@@ -211,7 +213,9 @@ export default function PlanDraftReview({
  * 시간 요약. 값이 없는(예전 서버) 필드는 그 조각만 뺀다 — 0으로 보여주지 않는다.
  * 목표보다 선택 합계가 적어도 경고하지 않는다.
  */
-function PlanSummary({ available, target, selectedCount, selectedMinutes, buffer, confidence }) {
+function PlanSummary({
+  available, target, selectedCount, selectedMinutes, buffer, confidence, cappedByItemLimit, uncoveredMinutes,
+}) {
   const lowConfidence = confidence != null && confidence.includes('기본 시간대');
   return (
     <div className="plan-summary">
@@ -219,6 +223,17 @@ function PlanSummary({ available, target, selectedCount, selectedMinutes, buffer
         {available != null && <>추정 남는 시간 {formatMinutes(available)} · </>}
         학습 목표 {formatMinutes(target)}
       </p>
+      {/*
+        한 번에 담을 수 있는 최대(항목 30개 × 120분)를 넘어 목표가 깎인 경우. 실패가 아니라
+        "이 기간을 한 계획에 다 담지는 못한다"는 사실이라 그대로 말한다.
+      */}
+      {cappedByItemLimit && (
+        <p className="plan-summary-line plan-summary-capped">
+          이 기간의 남는 시간을 한 계획에 다 담지는 못했어요
+          {uncoveredMinutes ? <> · 약 {formatMinutes(uncoveredMinutes)}이 남아요</> : null}.
+          주 단위로 나눠 만들면 더 담을 수 있어요.
+        </p>
+      )}
       <p className="plan-summary-line">
         선택한 항목 {selectedCount}개 · 합계 {formatMinutes(selectedMinutes)}
         {buffer != null && <> · 여유/휴식 약 {formatMinutes(buffer)}</>}

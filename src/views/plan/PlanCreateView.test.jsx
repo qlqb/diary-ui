@@ -176,6 +176,31 @@ describe('계획 초안 검토', () => {
     expect(screen.queryByText(/부족|미달|실패/)).not.toBeInTheDocument();
   });
 
+  /*
+   * 8일 이상 계획은 강도 예산이 한 계획의 최대(30개 × 120분)를 넘을 수 있다. 서버가 목표를
+   * 깎아 보내고, 화면은 그 사실을 실패가 아니라 사실로 말한다.
+   */
+  it('예산이 상한으로 깎였으면 다 담지 못했다고 말한다', async () => {
+    planAPI.createDraft.mockResolvedValue({
+      ...DRAFT, days: 31, targetMinutes: 3600, estimatedAvailableMinutes: 7980,
+      reservedBufferMinutes: 4380, targetCappedByItemLimit: true, uncoveredMinutes: 3180,
+    });
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+
+    expect(await screen.findByText(/한 계획에 다 담지는 못했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/약 53h이 남아요/)).toBeInTheDocument();
+    expect(screen.getByText(/주 단위로 나눠 만들면/)).toBeInTheDocument();
+    // 실패가 아니다 — 확정은 그대로 할 수 있다.
+    expect(screen.getByRole('button', { name: '계획 확정' })).toBeEnabled();
+  });
+
+  it('상한에 닿지 않으면 그 줄을 그리지 않는다', async () => {
+    await openDraft();
+
+    expect(screen.queryByText(/한 계획에 다 담지는 못했어요/)).not.toBeInTheDocument();
+  });
+
   it('남는 시간이 0이면 빈 초안 대신 안내와 수정 경로를 보여준다', async () => {
     planAPI.createDraft.mockResolvedValue({
       ...DRAFT, proposalId: null, proposal: null, targetMinutes: 0, estimatedAvailableMinutes: 0,

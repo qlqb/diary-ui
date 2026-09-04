@@ -1800,3 +1800,4 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .plan-draft-empty { display: flex; flex-direction: column; gap: 6px; }
 .ai-quick-replies { display: flex; flex-wrap: wrap; gap: 6px; }
 .ai-offer { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.plan-summary-capped { color: var(--ws-text-dim); }
