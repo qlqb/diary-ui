@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PlanCreateView from './PlanCreateView.jsx';
-import { planAPI } from '../../api/api.js';
+import { planAPI, schedulePreviewAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
   planAPI: { createDraft: vi.fn(), confirm: vi.fn(), findCoveringDate: vi.fn() },
+  schedulePreviewAPI: { get: vi.fn(), recompute: vi.fn() },
 }));
 
 /**
@@ -19,8 +20,12 @@ const DRAFT = {
   endDate: '2026-08-30',
   days: 7,
   intensity: 'FOCUSED',
-  baselineMinutes: 1080,
+  baselineMinutes: 390,
   targetMinutes: 390,
+  estimatedAvailableMinutes: 600,
+  availabilityConfidenceSummary: '기본 시간대(평일 19~22시, 주말 10~18시)를 사용한 추정',
+  reservedBufferMinutes: 210,
+  noAvailableTime: false,
   targetMinutesReason: '알바 일정을 고려해 낮게 잡았어요',
   suggestedTitle: '이번 주 계획',
   goalSummary: '3장까지 훑기',
@@ -42,6 +47,9 @@ describe('계획 초안 검토', () => {
     vi.clearAllMocks();
     planAPI.findCoveringDate.mockResolvedValue([{ planVersionId: 1 }]);
     planAPI.createDraft.mockResolvedValue(DRAFT);
+    // 배치 미리보기는 기본적으로 "아직 없음". 있는 경우는 개별 테스트에서 채운다.
+    schedulePreviewAPI.get.mockResolvedValue(null);
+    schedulePreviewAPI.recompute.mockResolvedValue(null);
   });
 
   async function openDraft() {
@@ -67,8 +75,8 @@ describe('계획 초안 검토', () => {
     await openDraft();
 
     expect(screen.getByText('알바 일정을 고려해 낮게 잡았어요')).toBeInTheDocument();
-    // 목표는 기준선(1080분)이 아니라 조정된 값(390분 = 6h 30m)이다.
-    expect(screen.getByText(/목표 6h 30m/)).toBeInTheDocument();
+    // 목표는 서버가 계산한 값(390분 = 6h 30m)이다. 요약 줄과 게이지 라벨 두 곳에 나온다.
+    expect(screen.getAllByText(/목표 6h 30m/).length).toBeGreaterThan(0);
   });
 
   it('조정이 없으면 이유 줄을 그리지 않는다', async () => {
@@ -148,5 +156,89 @@ describe('계획 초안 검토', () => {
     }
 
     expect(screen.getByRole('button', { name: '계획 확정' })).toBeDisabled();
+  });
+
+  /*
+   * 강도는 남는 시간의 비율이다. 요약 줄에 추정 남는 시간·학습 목표·선택 합계·여유를 함께
+   * 보여주고, 항목을 빼면 합계와 여유가 바로 바뀐다. 목표보다 적어도 경고하지 않는다.
+   */
+  it('요약에 추정 남는 시간·목표·선택 합계·여유를 보여주고, 빼면 여유가 늘어난다', async () => {
+    await openDraft();
+
+    expect(screen.getByText(/추정 남는 시간 10h · 학습 목표 6h 30m/)).toBeInTheDocument();
+    // 600 - 150 = 450분 = 7h 30m
+    expect(screen.getByText(/선택한 항목 4개 · 합계 2h 30m · 여유\/휴식 약 7h 30m/)).toBeInTheDocument();
+    expect(screen.getByText(/기본 시간대.*추정/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /과제 2번/ }));
+
+    await waitFor(() => expect(screen.getByText(/선택한 항목 3개 · 합계 1h 30m · 여유\/휴식 약 8h 30m/)).toBeInTheDocument());
+    expect(screen.queryByText(/부족|미달|실패/)).not.toBeInTheDocument();
+  });
+
+  it('남는 시간이 0이면 빈 초안 대신 안내와 수정 경로를 보여준다', async () => {
+    planAPI.createDraft.mockResolvedValue({
+      ...DRAFT, proposalId: null, proposal: null, targetMinutes: 0, estimatedAvailableMinutes: 0,
+      noAvailableTime: true, availabilityConfidenceSummary: '배치할 수 있는 시간이 없음',
+    });
+    const onOpenSchedule = vi.fn();
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} onOpenSchedule={onOpenSchedule} />);
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+
+    expect(await screen.findByText(/배치할 수 있는 시간이 없어요/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '계획 확정' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '일정에서 남는 시간 확인' }));
+    expect(onOpenSchedule).toHaveBeenCalled();
+  });
+
+  /*
+   * 확정 전에 첫 7일의 정확한 시각을 미리보기로 계산해 보여주고, 그 시각을 확정 요청에 그대로
+   * 싣는다. 배치 안 된 항목은 실패라고 말하고 원본(미배치) 그대로 간다. OpenAI는 부르지 않는다.
+   */
+  it('미리보기의 정확한 시각을 보여주고 확정에 그대로 싣는다', async () => {
+    schedulePreviewAPI.recompute.mockResolvedValue({
+      proposalId: 77, horizonStart: '2026-08-24', horizonEnd: '2026-08-30',
+      placedItems: [{
+        proposalItemId: 1, title: '연결 리스트 구현', placementType: 'TIME_FIXED', scheduledDate: '2026-08-25',
+        scheduledStartAt: '2026-08-25T19:00:00', scheduledEndAt: '2026-08-25T19:40:00',
+      }],
+      unplacedItems: [{ proposalItemId: 3, title: '통계 복습', reason: '남는 시간이 없어요' }],
+    });
+    planAPI.confirm.mockResolvedValue({ planVersionId: 9 });
+    await openDraft();
+
+    expect(await screen.findByText(/8\/25 화 19:00~19:40/)).toBeInTheDocument();
+    expect(screen.getByText(/배치 안 됨 · 남는 시간이 없어요/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '계획 확정' }));
+    await waitFor(() => expect(planAPI.confirm).toHaveBeenCalled());
+    const [, body] = planAPI.confirm.mock.calls[0];
+    expect(body.editedItems).toEqual([{
+      proposalItemId: 1, placementType: 'TIME_FIXED', scheduledDate: '2026-08-25',
+      scheduledStartAt: '2026-08-25T19:00:00', scheduledEndAt: '2026-08-25T19:40:00',
+    }]);
+  });
+
+  /*
+   * AI 패널에서 만든 기간 계획은 같은 검토 화면으로 들어온다. 기간·강도 폼은 접고 바로 검토다.
+   * 5개를 넘는 항목도 그대로 그린다 — 일반 제안의 5개 상한은 여기에 없다.
+   */
+  it('AI 대화에서 넘어온 초안은 바로 검토로 시작하고 5개 넘는 항목도 그린다', async () => {
+    const manyItems = Array.from({ length: 9 }, (_, i) => ({
+      proposalItemId: 100 + i, title: `항목 ${i + 1}`, expectedMinutes: 30, courseId: 6, targetDate: null,
+      placementType: 'UNSCHEDULED',
+    }));
+    const fromAi = { ...DRAFT, proposalId: 88, proposal: { proposalId: 88, items: manyItems } };
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} initialDraft={fromAi} />);
+
+    expect(await screen.findByText(/AI 대화에서 만든 기간 계획이에요/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /초안 만들기/ })).not.toBeInTheDocument();
+    for (let i = 1; i <= 9; i++) {
+      expect(screen.getByText(`항목 ${i}`)).toBeInTheDocument();
+    }
+    expect(screen.getAllByRole('checkbox').length).toBeGreaterThanOrEqual(9);
+    expect(screen.getByRole('button', { name: '계획 확정' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /적용/ })).not.toBeInTheDocument();
+    expect(planAPI.createDraft).not.toHaveBeenCalled();
   });
 });

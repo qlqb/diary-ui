@@ -219,10 +219,14 @@ export const PLAN_INTENSITY_LABEL = Object.freeze({
   FOCUSED: '집중',
 });
 
+/**
+ * 강도는 "추정 남는 시간 중 얼마를 공부로 채울지"다(서버 PlanIntensity의 비율과 같아야 한다).
+ * 예전의 "주 N시간쯤"은 시간표를 보지 않는 고정값이라 뺐다.
+ */
 export const PLAN_INTENSITY_HINT = Object.freeze({
-  LIGHT: '주 4시간쯤',
-  NORMAL: '주 10시간쯤',
-  FOCUSED: '주 18시간쯤',
+  LIGHT: '남는 시간의 40% · 핵심만',
+  NORMAL: '남는 시간의 65% · 고르게',
+  FOCUSED: '남는 시간의 85% · 여유는 남기고',
 });
 
 /**

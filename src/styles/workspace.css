@@ -1789,3 +1789,14 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
  * 그러면 프로젝트의 다른 것들이 전부 아래로 사라진다.
  */
 .material-review-body { max-height: 420px; overflow-y: auto; padding-right: 4px; }
+
+/* ===== plan draft review (shared by plan tab and AI panel period plans) ===== */
+.plan-summary { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
+.plan-summary-line { margin: 0; font-size: 13px; color: var(--ws-text); }
+.plan-summary-low { color: var(--ws-text-dim); }
+.plan-item-time { margin: 2px 0 0 24px; font-size: 12px; color: var(--ws-text-dim); display: flex; align-items: center; gap: 4px; }
+.plan-item-time.is-unplaced { color: var(--ws-warn, #b45309); }
+.plan-item-time.is-later { font-style: italic; }
+.plan-draft-empty { display: flex; flex-direction: column; gap: 6px; }
+.ai-quick-replies { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-offer { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }

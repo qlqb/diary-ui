@@ -59,6 +59,106 @@ it('lists conversations with the current screen scope, never by courseId alone',
   expect(conversationAPI.list).not.toHaveBeenCalledWith(null);
 });
 
+/*
+ * 기간 계획: OFFER 버튼의 type이 경로를 정한다. CREATE_PERIOD_PLAN이면 버튼이 들고 있던
+ * 기간·강도·대상 프로젝트를 그대로 되돌려 보내고, 돌아온 초안(period_plan.ready)은 일반
+ * 제안(onProposal)이 아니라 onPeriodPlan으로 검토 화면에 넘긴다.
+ */
+describe('기간 계획 OFFER와 강도 선택지', () => {
+  function streamOffer(offerAction, completedExtra = {}) {
+    conversationAPI.sendMessage.mockImplementationOnce(async (_id, _payload, { onEvent }) => {
+      onEvent('message.started', {});
+      onEvent('message.delta', { text: '이번 주 남은 기간으로 잡아볼까요?' });
+      if (offerAction) onEvent('offer.ready', { offerAction });
+      onEvent('message.completed', {
+        responseType: offerAction ? 'OFFER' : 'CHAT', reply: '이번 주 남은 기간으로 잡아볼까요?',
+        userMessageId: 5, assistantMessageId: 6, quickReplies: [], ...completedExtra,
+      });
+    });
+  }
+
+  async function sendFirstMessage(user) {
+    await user.type(screen.getByRole('textbox'), '이번 주 계획 짜줘');
+    await user.click(screen.getByRole('button', { name: '보내기' }));
+  }
+
+  it('CREATE_PERIOD_PLAN 버튼을 누르면 기간·강도·프로젝트를 되돌려 보내고 초안은 onPeriodPlan으로 간다', async () => {
+    const user = userEvent.setup();
+    conversationAPI.list.mockResolvedValue([]);
+    conversationAPI.create.mockResolvedValue({ conversationId: 1 });
+    const onPeriodPlan = vi.fn();
+    const onProposal = vi.fn();
+    streamOffer({
+      type: 'CREATE_PERIOD_PLAN', label: '이 내용으로 계획 초안 만들기',
+      periodStartDate: '2026-09-04', periodEndDate: '2026-09-06', intensity: 'FOCUSED', courseIds: [36],
+    });
+    const draft = { proposalId: 77, proposal: { proposalId: 77, items: [{ proposalItemId: 1 }, { proposalItemId: 2 }] } };
+    conversationAPI.sendMessage.mockImplementationOnce(async (_id, _payload, { onEvent }) => {
+      onEvent('message.started', {});
+      onEvent('period_plan.ready', draft);
+      onEvent('message.completed', {
+        responseType: 'PROPOSAL', reply: '초안을 만들었어요.', proposalId: 77, userMessageId: 7, assistantMessageId: 8,
+        periodPlanDraft: draft, quickReplies: [],
+      });
+    });
+
+    render(<AiPanel scope={SCOPE} onPeriodPlan={onPeriodPlan} onProposal={onProposal} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    await sendFirstMessage(user);
+
+    expect(await screen.findByText(/9\/4~9\/6 · 집중 · 검토 후 계획으로 확정돼요/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '이 내용으로 계획 초안 만들기' }));
+
+    await waitFor(() => expect(conversationAPI.sendMessage).toHaveBeenCalledTimes(2));
+    const payload = conversationAPI.sendMessage.mock.calls[1][1];
+    expect(payload.requestedAction).toBe('CREATE_PERIOD_PLAN');
+    expect(payload.sourceMessageId).toBe(5);
+    expect(payload.periodPlan).toEqual({
+      periodStartDate: '2026-09-04', periodEndDate: '2026-09-06', intensity: 'FOCUSED', courseIds: [36],
+    });
+    await waitFor(() => expect(onPeriodPlan).toHaveBeenCalledWith(draft));
+    expect(onProposal).not.toHaveBeenCalled();
+    expect(await screen.findByText(/계획 초안 2개를 계획 화면에 표시했어요/)).toBeInTheDocument();
+  });
+
+  it('일반 OFFER(CREATE_PROPOSAL)는 예전처럼 CREATE_PROPOSAL로 보낸다', async () => {
+    const user = userEvent.setup();
+    conversationAPI.list.mockResolvedValue([]);
+    conversationAPI.create.mockResolvedValue({ conversationId: 1 });
+    streamOffer({ type: 'CREATE_PROPOSAL', label: '이 내용으로 계획 초안 만들기' });
+    conversationAPI.sendMessage.mockImplementationOnce(async () => {});
+
+    render(<AiPanel scope={SCOPE} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    await sendFirstMessage(user);
+    await user.click(await screen.findByRole('button', { name: '이 내용으로 계획 초안 만들기' }));
+
+    await waitFor(() => expect(conversationAPI.sendMessage).toHaveBeenCalledTimes(2));
+    const payload = conversationAPI.sendMessage.mock.calls[1][1];
+    expect(payload.requestedAction).toBe('CREATE_PROPOSAL');
+    expect(payload).not.toHaveProperty('periodPlan');
+  });
+
+  it('강도 질문의 선택지를 누르면 그 문장을 일반 메시지로 보낸다', async () => {
+    const user = userEvent.setup();
+    conversationAPI.list.mockResolvedValue([]);
+    conversationAPI.create.mockResolvedValue({ conversationId: 1 });
+    streamOffer(null, { reply: '어느 정도로 채울까요?', quickReplies: ['가볍게', '보통', '집중'] });
+    conversationAPI.sendMessage.mockImplementationOnce(async () => {});
+
+    render(<AiPanel scope={SCOPE} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    await sendFirstMessage(user);
+
+    await user.click(await screen.findByRole('button', { name: '집중' }));
+
+    await waitFor(() => expect(conversationAPI.sendMessage).toHaveBeenCalledTimes(2));
+    const payload = conversationAPI.sendMessage.mock.calls[1][1];
+    expect(payload).toMatchObject({ message: '집중', requestedAction: 'AUTO' });
+    expect(screen.queryByRole('button', { name: '가볍게' })).not.toBeInTheDocument();
+  });
+});
+
 /**
  * 대화 목록 화면까지 열어준다. 이 시점까지 conversationAPI.list는 두 번 불린다
  * (scope 진입 시 한 번, 목록 화면을 열 때 한 번) — 삭제 후의 목록은 이 함수가 끝난 뒤

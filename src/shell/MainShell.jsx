@@ -106,6 +106,11 @@ export default function MainShell({ user, onLogout }) {
    * 사용자가 누른 버튼과 결과가 어긋난다. null이면 전체 프로젝트다.
    */
   const [planScopeCourseId, setPlanScopeCourseId] = useState(null);
+  /**
+   * AI 패널에서 만든 기간 계획 초안(PlanDraftResponse). 어느 탭에서 만들었든 계획 탭의 같은
+   * 검토·확정 화면으로 데려간다 — 일반 제안의 ghost·적용 바가 아니라 PlanVersion 확정이다.
+   */
+  const [aiPeriodDraft, setAiPeriodDraft] = useState(null);
   const [openProjectId, setOpenProjectId] = useState(null);
   const [aiOpen, setAiOpen] = useState(true);
   const [prefill, setPrefill] = useState(null);
@@ -234,6 +239,17 @@ export default function MainShell({ user, onLogout }) {
     setTab(tabForProposal(proposal.items, today));
   }, [openDraft, scope.courseId, tab, today]);
 
+  /**
+   * 기간 계획 초안은 탭과 무관하게 계획 화면의 검토로 간다. 오늘·일정·프로젝트 탭에서 시작해도
+   * 같은 컴포넌트, 같은 confirm API, 같은 PlanVersion 기록이다.
+   */
+  const handlePeriodPlan = useCallback((periodDraft) => {
+    if (!periodDraft) return;
+    setAiPeriodDraft(periodDraft);
+    setOpenPlanId(null);
+    setTab('plan');
+  }, []);
+
   const focusDraft = useCallback(() => {
     if (!draft) return;
     if (tab === 'projects') return;
@@ -338,8 +354,12 @@ export default function MainShell({ user, onLogout }) {
               projectTitles={projectTitles}
               scopeCourseId={planScopeCourseId}
               onClearScope={() => setPlanScopeCourseId(null)}
+              initialDraft={aiPeriodDraft}
+              onInitialDraftCleared={() => setAiPeriodDraft(null)}
+              onOpenSchedule={() => setTab('schedule')}
               onConfirmed={(plan) => {
                 // 확정하면 바로 그 계획으로 들어간다 — 확정 직후 할 일은 "이번 주 배치하기"다.
+                setAiPeriodDraft(null);
                 setOpenPlanId(plan.planVersionId);
                 refreshAll();
               }}
@@ -415,6 +435,7 @@ export default function MainShell({ user, onLogout }) {
           draft={draft}
           prefill={prefill}
           onProposal={handleProposal}
+          onPeriodPlan={handlePeriodPlan}
           onFocusDraft={focusDraft}
           onDiscardDraft={discardDraft}
           /* 약속·반복 일정이 저장되면 오늘 시간축과 주간 격자가 새 사실을 봐야 한다. */

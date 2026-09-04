@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI } from '../api/api.js';
 import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
+import { PLAN_INTENSITY_LABEL } from '../types/execution.js';
 
 /** 화면별 추천 질문. 지금 이 화면에서 실제로 할 수 있는 것만 보여준다. */
 const SUGGESTED_PROMPTS = {
@@ -52,6 +53,15 @@ function newIdempotencyKey() {
   return `idem-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function formatPeriod(startIso, endIso) {
+  const fmt = (iso) => {
+    const [, m, d] = String(iso).split('-');
+    return `${Number(m)}/${Number(d)}`;
+  };
+  if (!startIso) return '';
+  return !endIso || endIso === startIso ? fmt(startIso) : `${fmt(startIso)}~${fmt(endIso)}`;
+}
+
 function formatRelativeTime(iso) {
   if (!iso) return '';
   const date = new Date(iso);
@@ -66,6 +76,8 @@ export default function AiPanel({
   draft,
   prefill,
   onProposal,
+  /** 기간 계획 초안(PlanDraftResponse). 일반 제안과 달리 공통 검토·확정 화면으로 간다. */
+  onPeriodPlan,
   onFocusDraft,
   onDiscardDraft,
   onScheduleApplied,
@@ -85,6 +97,13 @@ export default function AiPanel({
   const [sendError, setSendError] = useState(null);
 
   const [currentOffer, setCurrentOffer] = useState(null);
+  /**
+   * 되묻는 질문에 붙는 짧은 선택지(강도: 가볍게/보통/집중). 누르면 그 문장을 일반 메시지로
+   * 보낸다 — 서버가 붙여 준 것만 그린다. 다음 턴이 시작되면 사라진다.
+   */
+  const [quickReplies, setQuickReplies] = useState([]);
+  /** 기간 계획 초안을 검토 화면으로 넘겼다는 안내. 항목 수만 든다. */
+  const [periodPlanNotice, setPeriodPlanNotice] = useState(null);
   const [contextSuggestions, setContextSuggestions] = useState([]);
   /**
    * AI가 뽑은 일정 후보(약속·반복 일정). contextSuggestions와 나란히 두되 합치지 않는다 —
@@ -126,6 +145,8 @@ export default function AiPanel({
   const resetTurnState = useCallback(() => {
     setMessages([]);
     setCurrentOffer(null);
+    setQuickReplies([]);
+    setPeriodPlanNotice(null);
     setContextSuggestions([]);
     setScheduleSuggestions([]);
     setScheduleActionState({});
@@ -227,7 +248,7 @@ export default function AiPanel({
     })();
 
     return () => { cancelled = true; };
-  }, [scopeKey, scope.courseId, resetTurnState, selectConversation]);
+  }, [scopeKey, scope.courseId, scope.conversationScope, resetTurnState, selectConversation]);
 
   const openList = async () => {
     setView('list');
@@ -249,6 +270,8 @@ export default function AiPanel({
     setSending(true);
     setSendError(null);
     setCurrentOffer(null);
+    setQuickReplies([]);
+    setPeriodPlanNotice(null);
     setAppliedNotice(false);
 
     if (optimisticUserText) {
@@ -284,6 +307,11 @@ export default function AiPanel({
           } else if (eventName === 'proposal.ready') {
             // 카드를 여기서 그리지 않는다 — 초안은 실제 화면으로 넘긴다.
             onProposal?.(data);
+          } else if (eventName === 'period_plan.ready') {
+            // 기간 계획은 일반 제안(적용 바)이 아니라 계획 검토·확정 화면으로 간다 — 계획
+            // 탭에서 만든 것과 같은 화면, 같은 확정 API다.
+            setPeriodPlanNotice(data?.proposal?.items?.length ?? 0);
+            onPeriodPlan?.(data);
           } else if (eventName === 'context.suggestions.ready') {
             setContextSuggestions((prev) => [...prev, ...(data?.suggestions ?? [])]);
           } else if (eventName === 'schedule.suggestions.ready') {
@@ -294,6 +322,7 @@ export default function AiPanel({
             setMessages((prev) => prev.map((m) => (m.key === streamingKey
               ? { ...m, content: data.reply ?? m.content, responseType: data.responseType, streaming: false }
               : m)));
+            setQuickReplies(Array.isArray(data?.quickReplies) ? data.quickReplies : []);
           } else if (eventName === 'message.error') {
             setMessages((prev) => prev.filter((m) => m.key !== streamingKey));
             setSendError(data?.message || 'AI 응답을 받지 못했습니다.');
@@ -323,13 +352,41 @@ export default function AiPanel({
       { optimisticUserText: text });
   };
 
+  /**
+   * OFFER 버튼. 버튼의 type이 경로를 정한다 — 서버가 만든 값이고 탭과 무관하다.
+   * CREATE_PERIOD_PLAN이면 버튼이 들고 있던 기간·강도·대상 프로젝트를 그대로 되돌려 보내고,
+   * 서버가 계획 화면과 같은 생성기로 초안을 만든다(period_plan.ready로 돌아온다).
+   */
   const handleCreateProposalFromOffer = async () => {
     if (sending || !activeConversationId) return;
+    const offer = currentOffer;
+    if (offer?.type === 'CREATE_PERIOD_PLAN') {
+      await runTurn({
+        requestedAction: 'CREATE_PERIOD_PLAN',
+        sourceMessageId: lastUserMessageIdRef.current,
+        idempotencyKey: newIdempotencyKey(),
+        periodPlan: {
+          periodStartDate: offer.periodStartDate,
+          periodEndDate: offer.periodEndDate,
+          intensity: offer.intensity,
+          courseIds: offer.courseIds ?? [],
+        },
+      });
+      return;
+    }
     await runTurn({
       requestedAction: 'CREATE_PROPOSAL',
       sourceMessageId: lastUserMessageIdRef.current,
       idempotencyKey: newIdempotencyKey(),
     });
+  };
+
+  /** 강도 선택지처럼 서버가 붙인 짧은 답. 사용자가 직접 친 것과 같은 일반 메시지로 보낸다. */
+  const handleQuickReply = async (text) => {
+    if (sending || !text) return;
+    setQuickReplies([]);
+    await runTurn({ message: text, requestedAction: 'AUTO', idempotencyKey: newIdempotencyKey() },
+      { optimisticUserText: text });
   };
 
   /**
@@ -565,10 +622,35 @@ export default function AiPanel({
               );
             })}
 
+            {quickReplies.length > 0 && !sending && (
+              <div className="ai-quick-replies" role="group" aria-label="빠른 답">
+                {quickReplies.map((text) => (
+                  <button key={text} type="button" className="chip" onClick={() => handleQuickReply(text)}>
+                    {text}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {currentOffer && !sending && (
-              <button type="button" className="btn-primary ai-offer-btn" onClick={handleCreateProposalFromOffer}>
-                {currentOffer.label || '이 내용으로 초안 만들기'}
-              </button>
+              <div className="ai-offer">
+                {currentOffer.type === 'CREATE_PERIOD_PLAN' && currentOffer.periodStartDate && (
+                  <p className="ai-hint">
+                    {formatPeriod(currentOffer.periodStartDate, currentOffer.periodEndDate)}
+                    {currentOffer.intensity ? ` · ${PLAN_INTENSITY_LABEL[currentOffer.intensity] ?? currentOffer.intensity}` : ''}
+                    {' · '}검토 후 계획으로 확정돼요
+                  </p>
+                )}
+                <button type="button" className="btn-primary ai-offer-btn" onClick={handleCreateProposalFromOffer}>
+                  {currentOffer.label || '이 내용으로 초안 만들기'}
+                </button>
+              </div>
+            )}
+
+            {periodPlanNotice != null && (
+              <p className="ai-applied">
+                <Sparkles size={13} /> 계획 초안 {periodPlanNotice}개를 계획 화면에 표시했어요. 확인하고 확정해주세요.
+              </p>
             )}
 
             {/* 초안 자체는 화면에 있다. 여기서는 그쪽을 가리키기만 한다. */}
