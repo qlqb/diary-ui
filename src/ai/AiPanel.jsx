@@ -217,7 +217,7 @@ export default function AiPanel({
       setInputText('');
       setView('chat');
       try {
-        const list = await conversationAPI.list(scope.courseId ?? null);
+        const list = await conversationAPI.list(scope.courseId ?? null, scope.conversationScope);
         if (cancelled) return;
         setConversationList(list);
         if (list.length > 0) await selectConversation(list[0].conversationId);
@@ -233,7 +233,7 @@ export default function AiPanel({
     setView('list');
     setListLoading(true);
     try {
-      setConversationList(await conversationAPI.list(scope.courseId ?? null));
+      setConversationList(await conversationAPI.list(scope.courseId ?? null, scope.conversationScope));
     } catch (err) {
       setLoadError(err.message || '대화 목록을 불러오지 못했습니다.');
     } finally {
@@ -370,7 +370,7 @@ export default function AiPanel({
     setDeletingId(null);
 
     try {
-      const list = await conversationAPI.list(scope.courseId ?? null);
+      const list = await conversationAPI.list(scope.courseId ?? null, scope.conversationScope);
       setConversationList(list);
       if (isActive) {
         // 남은 대화가 있으면 가장 최근 것을 열고, 없으면 새 대화 준비 상태로 둔다.

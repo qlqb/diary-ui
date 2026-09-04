@@ -650,10 +650,15 @@ export const conversationAPI = {
     /**
      * 내 대화 목록. 마지막 메시지 시각 내림차순, 첫 메시지를 아직 안 보낸 빈 대화는 제외됨.
      * courseId를 주면 그 프로젝트 대화만, 주지 않으면 프로젝트에 속하지 않은 대화만 돌아온다.
+     * scope(TODAY/EXECUTION/MIXED/PLAN)를 주면 그 화면에서 만든 대화만 돌아온다 — 오늘·일정·
+     * 전체 탭은 전부 courseId가 없어서, 이 값 없이는 다른 탭의 최근 대화를 이어가게 된다.
      */
-    list: (courseId = null) => {
-        const params = courseId != null ? `?courseId=${courseId}` : '';
-        return request(`/ai/conversations${params}`);
+    list: (courseId = null, scope = null) => {
+        const params = new URLSearchParams();
+        if (courseId != null) params.set('courseId', courseId);
+        if (scope) params.set('scope', scope);
+        const query = params.toString();
+        return request(`/ai/conversations${query ? `?${query}` : ''}`);
     },
 
     /** 새로고침 후 대화 이력 복원 */

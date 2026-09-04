@@ -47,6 +47,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/*
+ * Today, Schedule and "all" conversations all have courseId=null. Without the scope
+ * filter the Today tab reopened the most recent Schedule conversation. The panel must
+ * always send its own conversationScope when listing.
+ */
+it('lists conversations with the current screen scope, never by courseId alone', async () => {
+  conversationAPI.list.mockResolvedValue([]);
+  render(<AiPanel scope={SCOPE} />);
+  await waitFor(() => expect(conversationAPI.list).toHaveBeenCalledWith(null, 'TODAY'));
+  expect(conversationAPI.list).not.toHaveBeenCalledWith(null);
+});
+
 /**
  * 대화 목록 화면까지 열어준다. 이 시점까지 conversationAPI.list는 두 번 불린다
  * (scope 진입 시 한 번, 목록 화면을 열 때 한 번) — 삭제 후의 목록은 이 함수가 끝난 뒤
