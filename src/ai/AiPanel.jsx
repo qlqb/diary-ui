@@ -374,9 +374,13 @@ export default function AiPanel({
       });
       return;
     }
+    // 카드에 보인 기간을 그대로 되돌려 보낸다 — 사용자가 그 날짜를 보고 눌렀으므로 이 값이
+    // 이번 계획의 확정 기간이다. 서버는 이 단계에서 기간을 다시 해석하지 않는다.
     await runTurn({
       requestedAction: 'CREATE_PROPOSAL',
       sourceMessageId: lastUserMessageIdRef.current,
+      periodStartDate: offer?.periodStartDate,
+      periodEndDate: offer?.periodEndDate,
       idempotencyKey: newIdempotencyKey(),
     });
   };
@@ -632,13 +636,23 @@ export default function AiPanel({
               </div>
             )}
 
-            {currentOffer && !sending && (
+            {/*
+              기간이 없는 OFFER는 무엇을 만들지 모르는 버튼이다 — 눌러도 서버가 400으로
+              거절한다. 정상 응답에는 서버가 항상 기간을 싣지만, 그렇지 않은 응답에서는
+              눌리는 버튼 대신 아무것도 보여주지 않는다.
+            */}
+            {currentOffer?.periodStartDate && !sending && (
               <div className="ai-offer">
-                {currentOffer.type === 'CREATE_PERIOD_PLAN' && currentOffer.periodStartDate && (
+                {/*
+                  기간을 숨기고 버튼만 보여주면 사용자는 AI가 어떻게 해석했는지 모르는 채로
+                  누르게 된다. 그러면 "사용자가 승인한 기간"이라고 부를 수 없다 — 날짜를 보고
+                  누른 것만 승인이다. 다르면 대화로 고쳐 말하면 새 OFFER가 온다.
+                */}
+                {currentOffer.periodStartDate && (
                   <p className="ai-hint">
-                    {formatPeriod(currentOffer.periodStartDate, currentOffer.periodEndDate)}
+                    계획 기간 {formatPeriod(currentOffer.periodStartDate, currentOffer.periodEndDate)}
                     {currentOffer.intensity ? ` · ${PLAN_INTENSITY_LABEL[currentOffer.intensity] ?? currentOffer.intensity}` : ''}
-                    {' · '}검토 후 계획으로 확정돼요
+                    {currentOffer.type === 'CREATE_PERIOD_PLAN' ? ' · 검토 후 계획으로 확정돼요' : ''}
                   </p>
                 )}
                 <button type="button" className="btn-primary ai-offer-btn" onClick={handleCreateProposalFromOffer}>

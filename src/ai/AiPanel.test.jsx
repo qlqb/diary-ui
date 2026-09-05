@@ -106,7 +106,7 @@ describe('기간 계획 OFFER와 강도 선택지', () => {
     await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
     await sendFirstMessage(user);
 
-    expect(await screen.findByText(/9\/4~9\/6 · 집중 · 검토 후 계획으로 확정돼요/)).toBeInTheDocument();
+    expect(await screen.findByText(/계획 기간 9\/4~9\/6 · 집중 · 검토 후 계획으로 확정돼요/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '이 내용으로 계획 초안 만들기' }));
 
     await waitFor(() => expect(conversationAPI.sendMessage).toHaveBeenCalledTimes(2));
@@ -121,22 +121,47 @@ describe('기간 계획 OFFER와 강도 선택지', () => {
     expect(await screen.findByText(/계획 초안 2개를 계획 화면에 표시했어요/)).toBeInTheDocument();
   });
 
-  it('일반 OFFER(CREATE_PROPOSAL)는 예전처럼 CREATE_PROPOSAL로 보낸다', async () => {
+  it('일반 OFFER(CREATE_PROPOSAL)는 카드가 보여준 기간을 그대로 되돌려 보낸다', async () => {
     const user = userEvent.setup();
     conversationAPI.list.mockResolvedValue([]);
     conversationAPI.create.mockResolvedValue({ conversationId: 1 });
-    streamOffer({ type: 'CREATE_PROPOSAL', label: '이 내용으로 계획 초안 만들기' });
+    streamOffer({
+      type: 'CREATE_PROPOSAL', label: '이 내용으로 계획 초안 만들기',
+      periodStartDate: '2026-09-05', periodEndDate: '2026-09-13',
+    });
     conversationAPI.sendMessage.mockImplementationOnce(async () => {});
 
     render(<AiPanel scope={SCOPE} />);
     await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
     await sendFirstMessage(user);
+
+    // 누르기 전에 기간이 보여야 한다 — 날짜를 보고 누른 것만 승인이다.
+    expect(await screen.findByText(/계획 기간 9\/5~9\/13/)).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: '이 내용으로 계획 초안 만들기' }));
 
     await waitFor(() => expect(conversationAPI.sendMessage).toHaveBeenCalledTimes(2));
     const payload = conversationAPI.sendMessage.mock.calls[1][1];
     expect(payload.requestedAction).toBe('CREATE_PROPOSAL');
+    expect(payload.sourceMessageId).toBe(5);
+    expect(payload.periodStartDate).toBe('2026-09-05');
+    expect(payload.periodEndDate).toBe('2026-09-13');
     expect(payload).not.toHaveProperty('periodPlan');
+  });
+
+  it('하루짜리 OFFER는 기간을 한 날짜로 보여준다', async () => {
+    const user = userEvent.setup();
+    conversationAPI.list.mockResolvedValue([]);
+    conversationAPI.create.mockResolvedValue({ conversationId: 1 });
+    streamOffer({
+      type: 'CREATE_PROPOSAL', label: '이 내용으로 계획 초안 만들기',
+      periodStartDate: '2026-09-05', periodEndDate: '2026-09-05',
+    });
+
+    render(<AiPanel scope={SCOPE} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    await sendFirstMessage(user);
+
+    expect(await screen.findByText('계획 기간 9/5')).toBeInTheDocument();
   });
 
   it('강도 질문의 선택지를 누르면 그 문장을 일반 메시지로 보낸다', async () => {
