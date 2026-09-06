@@ -106,6 +106,7 @@ export default function ProjectWorkspace({
   const [selectedTopicId, setSelectedTopicId] = useState(null);
   const [renaming, setRenaming] = useState(false);
 
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -130,6 +131,20 @@ export default function ProjectWorkspace({
       setLoading(false);
     }
   }, [courseId]);
+
+  /**
+   * 항목의 익숙함 표식. 계획이 이 값을 근거로 읽어 "이미 알아요"한 내용을 빼거나 훑는다.
+   *
+   * 진행 상태를 건드리지 않는다 — 그쪽은 "이 앱에서 학습했는가"이고 이건 "이미 알고
+   * 있는가"다. 실패하면 조용히 지나가지 않고 목록을 다시 읽어 화면과 서버를 맞춘다.
+   */
+  const markTopic = useCallback(async (topicId, mark) => {
+    try {
+      await topicAPI.updateUserMark(topicId, mark);
+    } finally {
+      load();
+    }
+  }, [load]);
 
   useEffect(() => { load(); }, [load, refreshToken]);
 
@@ -386,6 +401,7 @@ export default function ProjectWorkspace({
                 topics={topics}
                 selectedTopicId={selectedTopicId}
                 onSelectTopic={(topic) => setSelectedTopicId(topic.topicId)}
+                onMarkTopic={markTopic}
               />
               <TopicDetail
                 courseTitle={project?.title}

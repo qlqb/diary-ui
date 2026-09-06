@@ -45,7 +45,7 @@ function computeAutoExpandIds(topics, selectedTopicId) {
   return expandIds;
 }
 
-export default function LearningMap({ topics, selectedTopicId, onSelectTopic }) {
+export default function LearningMap({ topics, selectedTopicId, onSelectTopic, onMarkTopic }) {
   const autoExpandIds = useMemo(
     () => computeAutoExpandIds(topics, selectedTopicId),
     [topics, selectedTopicId],
@@ -60,6 +60,7 @@ export default function LearningMap({ topics, selectedTopicId, onSelectTopic }) 
           depth={0}
           selectedTopicId={selectedTopicId}
           onSelectTopic={onSelectTopic}
+          onMarkTopic={onMarkTopic}
           autoExpandIds={autoExpandIds}
         />
       ))}
@@ -67,7 +68,36 @@ export default function LearningMap({ topics, selectedTopicId, onSelectTopic }) 
   );
 }
 
-function LearningMapNode({ topic, depth, selectedTopicId, onSelectTopic, autoExpandIds }) {
+/**
+ * 항목 행의 익숙함 표식. 필수 단계가 아니라 눈에 띌 때 누르는 것이라 안내 문구를 두지 않는다.
+ *
+ * 진행 상태 아이콘과 자리를 나눈 이유는 두 값이 다른 축이기 때문이다 — 아이콘은 "이 앱에서
+ * 학습했는가"이고 이 버튼은 "이미 알고 있는가"다. 한 자리에 합치면 앱을 쓰기 전부터 알던
+ * 내용을 표현할 방법이 없어진다.
+ */
+function TopicMarkButtons({ topic, onMarkTopic }) {
+  const mark = topic.userMark ?? null;
+  const set = (next) => onMarkTopic?.(topic.topicId, next === mark ? null : next);
+
+  return (
+    <span className="learning-map-marks">
+      <button type="button"
+        className={`btn-ghost btn-sm${mark === 'KNOWN' ? ' is-active' : ''}`}
+        aria-pressed={mark === 'KNOWN'}
+        onClick={() => set('KNOWN')}>
+        이미 알아요
+      </button>
+      <button type="button"
+        className={`btn-ghost btn-sm${mark === 'DEFER' ? ' is-active' : ''}`}
+        aria-pressed={mark === 'DEFER'}
+        onClick={() => set('DEFER')}>
+        나중에
+      </button>
+    </span>
+  );
+}
+
+function LearningMapNode({ topic, depth, selectedTopicId, onSelectTopic, onMarkTopic, autoExpandIds }) {
   const hasChildren = topic.children && topic.children.length > 0;
   // null = 사용자가 아직 손대지 않음 -> 자동 규칙을 따른다. true/false면 사용자가 직접 정한 값을 유지한다.
   const [manualExpanded, setManualExpanded] = useState(null);
@@ -102,6 +132,8 @@ function LearningMapNode({ topic, depth, selectedTopicId, onSelectTopic, autoExp
           <StatusIcon size={14} className="learning-map-status-icon" />
           <span className="learning-map-title">{topic.title}</span>
         </button>
+
+        {onMarkTopic && <TopicMarkButtons topic={topic} onMarkTopic={onMarkTopic} />}
       </div>
 
       {hasChildren && expanded && (
@@ -113,6 +145,7 @@ function LearningMapNode({ topic, depth, selectedTopicId, onSelectTopic, autoExp
               depth={depth + 1}
               selectedTopicId={selectedTopicId}
               onSelectTopic={onSelectTopic}
+              onMarkTopic={onMarkTopic}
               autoExpandIds={autoExpandIds}
             />
           ))}

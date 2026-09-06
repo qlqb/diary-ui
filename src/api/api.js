@@ -983,6 +983,19 @@ export const topicAPI = {
             body: JSON.stringify({ status }),
         });
     },
+
+    /**
+     * 사용자가 직접 남기는 익숙함 표식. KNOWN(이미 알아요) / DEFER(나중에) / null(해제).
+     *
+     * 진행 상태와 다른 축이라 경로가 다르다 — progress는 "이 앱에서 학습했는가"이고
+     * 이쪽은 "이미 알고 있는가"다. 앱을 쓰기 전부터 알던 내용은 progress로 표현할 수 없다.
+     */
+    updateUserMark: (topicId, mark) => {
+        return request(`/topics/${topicId}/user-mark`, {
+            method: 'PATCH',
+            body: JSON.stringify({ mark }),
+        });
+    },
 };
 
 /**
@@ -1143,11 +1156,29 @@ export const routineAPI = {
 
 export const planAPI = {
     /** 초안 생성. intensity를 생략하면 서버가 직전 계획에서 승계한다. */
-    createDraft: ({ startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null }) => {
+    createDraft: ({
+        startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null,
+        familiarityAnswer = null, familiarityTopicIds = null,
+    }) => {
         return request('/plans/draft', {
             method: 'POST',
-            body: JSON.stringify({ startDate, endDate, intensity, title, instruction, courseIds }),
+            body: JSON.stringify({
+                startDate, endDate, intensity, title, instruction, courseIds,
+                // 되묻기에 답한 뒤의 재요청. 이 값이 없으면 서버가 같은 질문을 다시 던진다 —
+                // "처음이에요"는 저장할 상태가 없어서 요청에 실어야만 사슬이 끝난다.
+                familiarityAnswer, familiarityTopicIds,
+            }),
         });
+    },
+
+    /**
+     * 판단은 그대로 두고 조각만 다시 만든다.
+     *
+     * 새 제안이 만들어지고 원본은 폐기되므로 응답의 proposalId가 바뀐다 — 호출부는 돌려받은
+     * 초안으로 통째로 갈아끼운다.
+     */
+    regenerateItems: (proposalId) => {
+        return request(`/plans/drafts/${proposalId}/items:regenerate`, { method: 'POST' });
     },
 
     confirm: (proposalId, { editedItems = null, excludedItemIds = null, title = null, goalSummary = null }) => {

@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarRange, Sparkles } from 'lucide-react';
 import { planAPI } from '../../api/api.js';
+import PlanAskCard from './PlanAskCard.jsx';
 import { PLAN_INTENSITY_HINT, PLAN_INTENSITY_LABEL, PlanIntensity } from '../../types/execution.js';
 import { addDays, daysBetween, formatMinutes, periodPresets, toIsoDate } from '../../lib/planTime.js';
 import PlanDraftReview from './PlanDraftReview.jsx';
@@ -71,7 +72,12 @@ export default function PlanCreateView({
     clearDraft();
   };
 
-  const handleDraft = async () => {
+  /**
+   * 초안 요청. 되묻기에 답한 뒤의 재요청도 같은 경로를 지난다 — 답만 함께 실어 보낸다.
+   *
+   * @param answer 되묻기 답. { familiarityAnswer, familiarityTopicIds } 또는 null
+   */
+  const handleDraft = async (answer = null) => {
     if (!periodValid || loading) return;
     setLoading(true);
     setError(null);
@@ -82,6 +88,8 @@ export default function PlanCreateView({
         // 프로젝트 화면에서 들어왔으면 그 프로젝트만 대상으로 한다. 안 넘기면 서버가
         // 전체 ACTIVE 프로젝트를 대상으로 잡아, 누른 버튼과 결과가 어긋난다.
         courseIds: scopeCourseId != null ? [scopeCourseId] : null,
+        familiarityAnswer: answer?.familiarityAnswer ?? null,
+        familiarityTopicIds: answer?.familiarityTopicIds ?? null,
       });
       setDraft(result);
     } catch (err) {
@@ -176,7 +184,8 @@ export default function PlanCreateView({
           </label>
 
           {!draft && (
-            <button type="button" className="btn-primary" disabled={!periodValid || loading} onClick={handleDraft}>
+            <button type="button" className="btn-primary" disabled={!periodValid || loading}
+              onClick={() => handleDraft()}>
               <Sparkles size={16} /> {loading ? '초안을 만들고 있어요…' : '초안 만들기'}
             </button>
           )}
@@ -185,7 +194,15 @@ export default function PlanCreateView({
 
       {error && <p className="error-text">{error}</p>}
 
-      {draft && (
+      {/*
+        되묻는 중이면 초안이 없다. 만들어 놓고 묻지 않는 이유는, 만들어진 계획이 그 자체로
+        화면의 기준점이 되어 사용자가 답을 고르기 전에 이미 대답을 유도하기 때문이다.
+      */}
+      {draft?.ask && (
+        <PlanAskCard ask={draft.ask} answering={loading} onAnswer={(answer) => handleDraft(answer)} />
+      )}
+
+      {draft && !draft.ask && (
         <PlanDraftReview
           key={draft.proposalId ?? 'no-time'}
           draft={draft}

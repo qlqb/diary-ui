@@ -18,10 +18,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Clock3 } from 'lucide-react';
-import { planAPI, schedulePreviewAPI } from '../../api/api.js';
+import { planAPI, schedulePreviewAPI, topicAPI } from '../../api/api.js';
 import { PLAN_INTENSITY_LABEL } from '../../types/execution.js';
 import { formatDateKo, formatMinutes } from '../../lib/planTime.js';
 import { groupItems, initialCollapsed, placementsToEditedItems } from '../../lib/planDraft.js';
+import {
+  ACTION_TYPE_LABEL, PRIORITY_LABEL, TREATMENT_LABEL, formatDeadline, formatEstimate,
+} from '../../lib/planLabels.js';
+import PlanStrategyPanel from './PlanStrategyPanel.jsx';
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -35,9 +39,19 @@ export default function PlanDraftReview({
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
   const [previewNote, setPreviewNote] = useState(null);
+  /*
+   * 재생성은 새 제안을 만들고 원본을 폐기하므로 proposalId가 바뀐다. 호출부의 초안을
+   * 갈아끼우는 대신 여기서 들고 있는다 — 부모가 다시 그리면 key가 바뀌어 검토 상태
+   * (제외·접힘·제목)가 통째로 초기화되고, 사용자는 방금 푼 체크가 되돌아온 것을 본다.
+   */
+  const [regenerated, setRegenerated] = useState(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [toast, setToast] = useState(null);
 
-  const proposalId = draft?.proposalId ?? null;
-  const noAvailableTime = Boolean(draft?.noAvailableTime);
+  const current = regenerated ?? draft;
+  const strategy = current?.strategy ?? null;
+  const proposalId = current?.proposalId ?? null;
+  const noAvailableTime = Boolean(current?.noAvailableTime);
 
   /*
    * 배치 미리보기. 저장된 것이 있으면 그대로, 없으면 한 번 계산한다. OpenAI를 부르지 않는다.
@@ -59,7 +73,26 @@ export default function PlanDraftReview({
     return () => { cancelled = true; };
   }, [proposalId, noAvailableTime]);
 
-  const items = useMemo(() => draft?.proposal?.items ?? [], [draft]);
+  const items = useMemo(() => current?.proposal?.items ?? [], [current]);
+
+  /** 조각의 취급은 판단에 있다. 복사하지 않고 topicId로 이어 붙인다. */
+  const treatmentByTopic = useMemo(() => {
+    const map = new Map();
+    (strategy?.topics ?? []).forEach((topic) => map.set(topic.topicId, topic.treatment));
+    return map;
+  }, [strategy]);
+
+  /*
+   * 같은 과목 조각들이 공유하는 마감 시각. 그 시각이 수업 시작이면 "화요일 수업 전"으로
+   * 읽어 준다 — 조각마다 마감이 같은 것은 그것이 수업 시각이기 때문이다.
+   */
+  const classAtByCourse = useMemo(() => {
+    const map = new Map();
+    items.forEach((item) => {
+      if (item.courseId != null && item.deadlineAt) map.set(item.courseId, item.deadlineAt);
+    });
+    return map;
+  }, [items]);
 
   const placedById = useMemo(
     () => new Map((preview?.placedItems ?? []).map((p) => [p.proposalItemId, p])),
@@ -77,11 +110,11 @@ export default function PlanDraftReview({
     [items, excluded],
   );
   const selectedMinutes = selectedItems.reduce((sum, item) => sum + (item.expectedMinutes || 0), 0);
-  const available = draft?.estimatedAvailableMinutes ?? null;
-  const target = draft?.targetMinutes ?? 0;
+  const available = current?.estimatedAvailableMinutes ?? null;
+  const target = current?.targetMinutes ?? 0;
   const buffer = available != null ? Math.max(0, available - selectedMinutes) : null;
   const allExcluded = items.length > 0 && excluded.size >= items.length;
-  const longPlan = (draft?.days ?? 0) > 7;
+  const longPlan = (current?.days ?? 0) > 7;
 
   const toggleItem = useCallback((proposalItemId) => {
     setExcluded((prev) => {
@@ -92,6 +125,54 @@ export default function PlanDraftReview({
     });
   }, []);
 
+  /**
+   * 조각만 다시 만든다. 판단은 서버가 그대로 두고, 표식이 가리키는 항목만 뺀다.
+   *
+   * 전략 영역은 로딩으로 덮지 않는다 — 판단이 안 바뀐다는 것을 화면이 보여주는 편이,
+   * 안 바뀐다고 글로 적는 것보다 낫다.
+   */
+  const regenerate = useCallback(async (note) => {
+    if (!proposalId || regenerating) return;
+    setRegenerating(true);
+    setError(null);
+    try {
+      const next = await planAPI.regenerateItems(proposalId);
+      setRegenerated(next);
+      // 제외 체크는 이번 조각 목록에만 의미가 있다. 새 조각에 옛 id를 들고 있으면
+      // 엉뚱한 항목이 빠진 채 확정된다.
+      setExcluded(new Set());
+      setPreview(null);
+      if (note) setToast(note);
+    } catch (err) {
+      setError(err.message || '실행 방법을 다시 만들지 못했습니다.');
+    } finally {
+      setRegenerating(false);
+    }
+  }, [proposalId, regenerating]);
+
+  /**
+   * 「이미 알아요」. 표식을 저장하고 조각을 다시 만든다.
+   *
+   * 확인 다이얼로그를 두지 않는다 — 되돌리기가 한 번에 되는 동작에 확인을 붙이면 그 확인이
+   * 오히려 "되돌릴 수 없는 일"이라는 신호가 된다. 되돌리기는 토스트에 둔다.
+   */
+  const markKnown = useCallback(async (topicId) => {
+    if (topicId == null || regenerating) return;
+    try {
+      await topicAPI.updateUserMark(topicId, 'KNOWN');
+    } catch (err) {
+      setError(err.message || '표시를 저장하지 못했습니다.');
+      return;
+    }
+    await regenerate({
+      message: '다음 계획부터도 이 내용은 건너뛸게요',
+      undo: async () => {
+        await topicAPI.updateUserMark(topicId, null);
+        await regenerate(null);
+      },
+    });
+  }, [regenerate, regenerating]);
+
   const handleConfirm = async () => {
     if (!draft || confirming || allExcluded) return;
     setConfirming(true);
@@ -99,11 +180,11 @@ export default function PlanDraftReview({
     try {
       // 미리보기에서 승인한 시각을 그대로 싣는다. 배치되지 않은 항목은 원본(미배치) 그대로다.
       const editedItems = placementsToEditedItems(selectedItems, placedById);
-      const plan = await planAPI.confirm(draft.proposalId, {
+      const plan = await planAPI.confirm(proposalId, {
         excludedItemIds: [...excluded],
         editedItems: editedItems.length > 0 ? editedItems : null,
-        title: title.trim() || draft.suggestedTitle,
-        goalSummary: draft.goalSummary,
+        title: title.trim() || current.suggestedTitle,
+        goalSummary: current.goalSummary,
       });
       onConfirmed?.(plan);
     } catch (err) {
@@ -118,10 +199,10 @@ export default function PlanDraftReview({
     return (
       <div className="plan-draft plan-draft-empty">
         <p className="plan-summary-line">
-          {PLAN_INTENSITY_LABEL[draft.intensity] ?? ''} 계획 · 기간 {formatDateKo(draft.startDate)} ~ {formatDateKo(draft.endDate)}
+          {PLAN_INTENSITY_LABEL[current.intensity] ?? ''} 계획 · 기간 {formatDateKo(current.startDate)} ~ {formatDateKo(current.endDate)}
         </p>
         <p>현재 추정으로는 이 기간에 배치할 수 있는 시간이 없어요. 항목을 억지로 만들지 않았어요.</p>
-        {draft.availabilityConfidenceSummary && <p className="hint">{draft.availabilityConfidenceSummary}</p>}
+        {current.availabilityConfidenceSummary && <p className="hint">{current.availabilityConfidenceSummary}</p>}
         <p className="hint">남는 시간을 고치거나 기간·강도를 다시 고르면 다시 만들 수 있어요.</p>
         <div className="plan-draft-actions">
           {onDiscard && <button type="button" className="btn-ghost" onClick={onDiscard}>기간·강도 다시 고르기</button>}
@@ -137,8 +218,8 @@ export default function PlanDraftReview({
     <div className="plan-draft">
       <div className="plan-draft-head">
         <p className="plan-summary-line">
-          <strong>{PLAN_INTENSITY_LABEL[draft.intensity] ?? ''} 계획</strong>
-          {' · '}기간 {formatDateKo(draft.startDate)} ~ {formatDateKo(draft.endDate)}
+          <strong>{PLAN_INTENSITY_LABEL[current.intensity] ?? ''} 계획</strong>
+          {' · '}기간 {formatDateKo(current.startDate)} ~ {formatDateKo(current.endDate)}
         </p>
         <PlanSummary
           available={available}
@@ -146,14 +227,29 @@ export default function PlanDraftReview({
           selectedCount={selectedItems.length}
           selectedMinutes={selectedMinutes}
           buffer={buffer}
-          confidence={draft.availabilityConfidenceSummary}
-          cappedByItemLimit={draft.targetCappedByItemLimit}
-          uncoveredMinutes={draft.uncoveredMinutes}
+          confidence={current.availabilityConfidenceSummary}
+          cappedByItemLimit={current.targetCappedByItemLimit}
+          uncoveredMinutes={current.uncoveredMinutes}
         />
-        <TimeGauge selectedMinutes={selectedMinutes} targetMinutes={target} intensity={draft.intensity} />
+        <TimeGauge selectedMinutes={selectedMinutes} targetMinutes={target} intensity={current.intensity} />
         {/* 예전 서버가 이유를 보내면 그대로 보여준다. 새 서버는 예산을 직접 계산하므로 비어 있다. */}
-        {draft.targetMinutesReason && <p className="plan-draft-reason">{draft.targetMinutesReason}</p>}
+        {current.targetMinutesReason && <p className="plan-draft-reason">{current.targetMinutesReason}</p>}
       </div>
+
+      {/* 판단은 조각보다 먼저 온다. 무엇을 하는지보다 왜 그렇게 보는지가 먼저 읽혀야 한다. */}
+      <PlanStrategyPanel strategy={strategy} projectTitles={projectTitles} />
+
+      {toast && (
+        <p className="plan-toast" role="status">
+          {toast.message}
+          {toast.undo && (
+            <button type="button" className="btn-ghost btn-sm"
+              onClick={() => { const undo = toast.undo; setToast(null); undo(); }}>
+              되돌리기
+            </button>
+          )}
+        </p>
+      )}
 
       <label className="plan-title-field">
         <span>계획 이름</span>
@@ -177,6 +273,10 @@ export default function PlanDraftReview({
           placedById={placedById}
           unplacedById={unplacedById}
           previewLoaded={preview != null}
+          treatmentByTopic={treatmentByTopic}
+          classAtByCourse={classAtByCourse}
+          onMarkKnown={markKnown}
+          busy={regenerating}
           onToggleCollapse={() => setCollapsed((prev) => {
             const next = new Set(prev);
             if (next.has(group.key)) next.delete(group.key);
@@ -199,6 +299,12 @@ export default function PlanDraftReview({
       <div className="plan-draft-actions">
         {onDiscard && (
           <button type="button" className="btn-ghost" onClick={onDiscard}>{discardLabel}</button>
+        )}
+        {strategy && (
+          <button type="button" className="btn-ghost" disabled={regenerating}
+            onClick={() => regenerate({ message: '판단은 그대로 두고 실행 방법만 다시 만들었어요' })}>
+            {regenerating ? '다시 만드는 중…' : '실행 방법 다시 제안'}
+          </button>
         )}
         <button type="button" className="btn-primary" disabled={confirming || allExcluded} onClick={handleConfirm}>
           {confirming ? '확정하는 중…' : '계획 확정'}
@@ -276,6 +382,7 @@ function TimeGauge({ selectedMinutes, targetMinutes, intensity }) {
 
 function PlanDraftGroup({
   group, excluded, collapsed, placedById, unplacedById, previewLoaded, onToggleCollapse, onToggleItem, onToggleGroup,
+  treatmentByTopic, classAtByCourse, onMarkKnown, busy,
 }) {
   const groupMinutes = group.items
     .filter((item) => !excluded.has(item.proposalItemId))
@@ -309,16 +416,58 @@ function PlanDraftGroup({
                 <span className="plan-item-title">{item.title}</span>
                 <span className="plan-item-meta">
                   {/*
-                    targetDate가 아니라 placementType으로 판단한다. 제안의 targetDate는 서버가
-                    요청 기간의 시작일로 강제하는 값이라 미배치 항목에도 값이 들어 있다.
+                    취급과 우선순위는 다른 축이다 — "꼭 하기 · 핵심만 보기"가 성립한다.
+                    한쪽으로 합치면 "중요한데 짧게 본다"를 말할 수 없다.
                   */}
-                  {item.expectedMinutes}분 ·{' '}
-                  {item.placementType === 'UNSCHEDULED' || !item.targetDate
-                    ? '날짜 미정'
-                    : formatDateKo(item.targetDate)}
+                  {[
+                    PRIORITY_LABEL[item.priority],
+                    treatmentByTopic?.get(item.topicId) != null
+                      ? TREATMENT_LABEL[treatmentByTopic.get(item.topicId)]
+                      : null,
+                    ACTION_TYPE_LABEL[item.actionType],
+                    formatEstimate(item.expectedMinutes),
+                    formatDeadline(item.deadlineAt, classAtByCourse?.get(item.courseId)),
+                    /*
+                      targetDate가 아니라 placementType으로 판단한다. 제안의 targetDate는 서버가
+                      요청 기간의 시작일로 강제하는 값이라 미배치 항목에도 값이 들어 있다.
+                    */
+                    item.placementType === 'UNSCHEDULED' || !item.targetDate
+                      ? null
+                      : formatDateKo(item.targetDate),
+                  ].filter(Boolean).join(' · ')}
                 </span>
               </label>
-              {item.description && <p className="plan-item-reason">{item.description}</p>}
+
+              {item.sourceLocator && <p className="plan-item-source">{item.sourceLocator}</p>}
+
+              {item.doneCriteria && (
+                <p className="plan-item-done">
+                  <span className="plan-item-done-label">완료 기준</span>
+                  {item.doneCriteria}
+                  {/*
+                    서버가 채운 문장은 항목 제목에서 기계적으로 뽑은 것이라 덜 구체적이다.
+                    그 사실을 숨기면 사용자는 왜 어떤 조각만 밋밋한지 알 수 없다.
+                  */}
+                  {item.doneCriteriaSource === 'DEFAULT' && <span className="plan-item-tag">기본</span>}
+                </p>
+              )}
+
+              {item.reason && <p className="plan-item-reason">{item.reason}</p>}
+              {!item.doneCriteria && item.description && (
+                <p className="plan-item-reason">{item.description}</p>
+              )}
+
+              {item.topicId != null && onMarkKnown && (
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm plan-item-known"
+                  disabled={busy}
+                  onClick={() => onMarkKnown(item.topicId)}
+                >
+                  이미 알아요
+                </button>
+              )}
+
               <PlacementLine
                 item={item}
                 placed={placedById.get(item.proposalItemId)}
