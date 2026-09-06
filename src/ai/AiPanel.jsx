@@ -18,9 +18,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Sparkles, Loader2, Send, List, Plus, MessageCircle, ArrowLeft, PanelRightClose, CircleCheck, Trash2,
+  ImagePlus,
 } from 'lucide-react';
-import { conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI } from '../api/api.js';
+import {
+  conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI, scheduleImportAPI,
+} from '../api/api.js';
 import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
+import ScheduleImportReviewModal from './ScheduleImportReviewModal.jsx';
 import { PLAN_INTENSITY_LABEL } from '../types/execution.js';
 
 /** 화면별 추천 질문. 지금 이 화면에서 실제로 할 수 있는 것만 보여준다. */
@@ -116,8 +120,19 @@ export default function AiPanel({
   const [appliedNotice, setAppliedNotice] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
+  /*
+   * 이미지에서 일정 가져오기. 읽는 중 -> 검토 -> 후보 카드 순으로 간다.
+   * 읽은 결과(extraction)는 서버가 아니라 여기서 들고 있다가 confirm에 그대로 돌려준다 —
+   * 확정 전 상태를 DB에 두면 "아직 확정되지 않은 일정"이라는 상태가 하나 더 생긴다.
+   */
+  const [importing, setImporting] = useState(false);
+  const [extraction, setExtraction] = useState(null);
+  const [importError, setImportError] = useState(null);
+  const [batchState, setBatchState] = useState(null);
+
   const bodyRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const abortControllerRef = useRef(null);
   const activeStreamConversationIdRef = useRef(null);
   const lastUserMessageIdRef = useRef(null);
@@ -462,6 +477,84 @@ export default function AiPanel({
    *
    * 적용 후에는 오늘·일정 화면과 가용시간이 새 사실을 봐야 하므로 새로고침을 알린다.
    */
+  /**
+   * 일정표 이미지를 읽는다. 대화가 아직 없으면 먼저 만든다 — 후보는 대화에 매달린다.
+   *
+   * 실패해도 아무것도 저장되지 않았으므로 다시 고르면 그만이다.
+   */
+  /** 아직 적용도 거절도 되지 않은 후보. [모두 적용]이 다루는 범위다. */
+  const pendingScheduleIds = scheduleSuggestions
+    .filter((s) => {
+      const status = scheduleActionState[s.suggestionId]?.status;
+      return status !== 'applied' && status !== 'dismissed' && status !== 'working';
+    })
+    .map((s) => s.suggestionId);
+
+  const handleImageChosen = useCallback(async (file) => {
+    if (!file || importing) return;
+    setImportError(null);
+    setImporting(true);
+    try {
+      let targetConversationId = activeConversationId;
+      if (!targetConversationId) {
+        const created = await conversationAPI.create(scope.conversationScope, scope.courseId ?? null);
+        targetConversationId = created.conversationId;
+        setActiveConversationId(targetConversationId);
+      }
+      const result = await scheduleImportAPI.extract(targetConversationId, file);
+      setExtraction({ ...result, conversationId: targetConversationId });
+    } catch (err) {
+      setImportError(err.message || '조금 뒤에 다시 시도해 주세요.');
+    } finally {
+      setImporting(false);
+    }
+  }, [activeConversationId, importing, scope]);
+
+  /**
+   * 입력창에 이미지를 붙여넣으면 그대로 읽는다.
+   *
+   * 캡처 도구로 잘라 바로 붙여넣는 것이 근무표를 가져오는 가장 흔한 경로다. 파일로 저장한
+   * 뒤 다시 고르게 하면 그 사이에 사진이 디스크에 남는다.
+   */
+  const handlePaste = useCallback((event) => {
+    const item = [...(event.clipboardData?.items ?? [])]
+      .find((i) => i.kind === 'file' && i.type.startsWith('image/'));
+    if (!item) return;
+    const file = item.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    handleImageChosen(file);
+  }, [handleImageChosen]);
+
+  const handleImportConfirm = async ({ conversationId, ...body }) => {
+    const created = await scheduleImportAPI.confirm(conversationId, {
+      idempotencyKey: crypto.randomUUID(),
+      ...body,
+    });
+    setExtraction(null);
+    setScheduleSuggestions((prev) => [...prev, ...created]);
+  };
+
+  /**
+   * 화면에 남아 있는 후보를 한 번에 적용한다. 전부 되거나 전부 안 된다 — 서버가 한
+   * 트랜잭션으로 묶으므로 절반만 들어간 상태가 없다.
+   */
+  const handleApplyAll = async (ids) => {
+    setBatchState({ status: 'working' });
+    try {
+      await scheduleSuggestionAPI.applyBatch(ids);
+      setScheduleActionState((prev) => {
+        const next = { ...prev };
+        ids.forEach((id) => { next[id] = { status: 'applied' }; });
+        return next;
+      });
+      setBatchState(null);
+      await onScheduleApplied?.();
+    } catch (err) {
+      setBatchState({ status: 'error', message: err.message || '조금 뒤에 다시 시도해 주세요.' });
+    }
+  };
+
   const handleScheduleAction = async (suggestionId, action, editedPayload) => {
     setScheduleActionState((prev) => ({ ...prev, [suggestionId]: { status: 'working' } }));
     try {
@@ -573,6 +666,24 @@ export default function AiPanel({
               </div>
             ))}
 
+            {/*
+              * 후보가 여럿이면 한 번에 적용할 수 있게 한다. 근무표 한 장이 대여섯 개를
+              * 만들고, 그것을 하나씩 누르게 하는 것은 화면이 사용자에게 일을 넘기는 것이다.
+              * 카드는 그대로 둔다 — 새 카드를 만들면 같은 후보를 두 곳에서 그리게 된다.
+              */}
+            {pendingScheduleIds.length > 1 && (
+              <div className="ai-schedule-batch">
+                <span>일정 후보 {pendingScheduleIds.length}개</span>
+                <button type="button" className="btn-ghost btn-sm"
+                  disabled={batchState?.status === 'working'}
+                  onClick={() => handleApplyAll(pendingScheduleIds)}>
+                  {batchState?.status === 'working'
+                    ? <Loader2 size={13} className="spin" /> : null} 모두 적용
+                </button>
+              </div>
+            )}
+            {batchState?.status === 'error' && <p className="ai-error">{batchState.message}</p>}
+
             {scheduleSuggestions.map((suggestion) => (
               <ScheduleSuggestionCard
                 key={suggestion.suggestionId}
@@ -683,12 +794,36 @@ export default function AiPanel({
           </div>
 
           <footer className="ai-panel-foot">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                // 같은 파일을 다시 고를 수 있게 값을 비운다. 안 그러면 두 번째 선택에서
+                // change가 안 뜬다.
+                e.target.value = '';
+                handleImageChosen(file);
+              }}
+            />
+            <button
+              type="button"
+              className="btn-ghost ai-attach"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending || loadingHistory || importing}
+              aria-label="일정표 이미지 첨부"
+              title="근무표 같은 일정표 이미지를 넣으면 일정 후보로 만들어요"
+            >
+              {importing ? <Loader2 size={15} className="spin" /> : <ImagePlus size={15} />}
+            </button>
             <textarea
               ref={inputRef}
               className="ai-textarea"
               placeholder={scope.placeholder}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
               }}
@@ -705,6 +840,22 @@ export default function AiPanel({
               {sending ? <Loader2 size={15} className="spin" /> : <Send size={15} />}
             </button>
           </footer>
+
+          {importing && (
+            <p className="ai-import-status" role="status">
+              <Loader2 size={13} className="spin" /> 표를 읽고 있어요. 십여 초 걸려요.
+            </p>
+          )}
+          {importError && <p className="ai-error">{importError}</p>}
+
+          {extraction && (
+            <ScheduleImportReviewModal
+              extraction={extraction}
+              conversationId={extraction.conversationId}
+              onCancel={() => setExtraction(null)}
+              onConfirm={handleImportConfirm}
+            />
+          )}
         </>
       )}
     </aside>

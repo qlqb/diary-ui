@@ -731,6 +731,49 @@ export const scheduleSuggestionAPI = {
     dismiss: (suggestionId) => {
         return request(`/ai/schedule-suggestions/${suggestionId}/dismiss`, { method: 'POST' });
     },
+
+    /**
+     * 여러 후보를 한 번에 적용한다. 전부 되거나 전부 안 된다 — 서버가 한 트랜잭션으로 묶는다.
+     *
+     * editedPayload를 받지 않는다. 일괄 적용은 고치지 않고 그대로 받아들이는 동작이고,
+     * 고칠 것이 있으면 그 한 건만 apply로 보낸다.
+     */
+    applyBatch: (suggestionIds) => {
+        return request('/ai/schedule-suggestions/apply-batch', {
+            method: 'POST',
+            body: JSON.stringify({ suggestionIds }),
+        });
+    },
+};
+
+/**
+ * 근무표 같은 일정표 이미지에서 일정을 가져온다.
+ *
+ * 두 단계다. extract는 이미지를 읽어 해석 결과만 돌려주고 아무것도 저장하지 않는다.
+ * confirm이 사용자가 고른 행으로 후보를 만든다. 그 사이의 상태는 서버가 아니라 화면이
+ * 들고 있는다 — 그래서 confirm에 표 원문(raw)을 그대로 되돌려준다.
+ *
+ * ★ confirm에 셀 해석 결과를 보내지 않는다. 서버가 raw만 받아 처음부터 다시 파싱한다.
+ * 화면이 계산한 시간을 보내면, 화면 코드가 바뀔 때 달력에 들어가는 값이 조용히 달라진다.
+ */
+export const scheduleImportAPI = {
+    /** 이미지 한 장을 표로 읽는다. 모델 호출이라 십수 초 걸린다. */
+    extract: (conversationId, file) => {
+        const formData = new FormData();
+        formData.append('image', file);
+        return requestMultipart(`/ai/conversations/${conversationId}/schedule-image/extract`, formData);
+    },
+
+    /**
+     * @param body {{ idempotencyKey, raw, rowIndex, periodStartDate, title, legendOverrides }}
+     *        legendOverrides는 범례에 없던 코드에 사용자가 알려준 시간이다({ "A": "10~15" }).
+     */
+    confirm: (conversationId, body) => {
+        return request(`/ai/conversations/${conversationId}/schedule-image/confirm`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+    },
 };
 
 export const contextSuggestionAPI = {

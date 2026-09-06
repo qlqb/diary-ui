@@ -1453,6 +1453,109 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .ai-schedule-resolved { margin: 6px 0 0; font-size: 13px; color: var(--ws-ok); }
 .ai-schedule-actions { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
 
+/* 후보가 여럿일 때만 뜨는 줄. 카드 위에 얹고 카드 자체는 건드리지 않는다. */
+.ai-schedule-batch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 9px;
+  background: #fbfbfc;
+  font-size: 13.5px;
+  color: var(--ws-text-dim);
+}
+
+/* 이미지 첨부. 보내기 버튼과 크기를 맞추되 강조하지 않는다 — 대화가 주 경로다. */
+.ai-attach { width: 40px; height: 40px; padding: 0; flex-shrink: 0; }
+
+.ai-import-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 16px 12px;
+  font-size: 13px;
+  color: var(--ws-text-dim);
+}
+
+/* ===== 이미지에서 일정 가져오기 검토 ===== */
+
+.schedule-import-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+}
+.schedule-import-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 16px 18px 18px;
+  border-radius: 12px;
+  background: #fff;
+}
+.schedule-import-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.schedule-import-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 15px;
+}
+.schedule-import-caption { margin: 0; font-size: 13px; color: var(--ws-text-faint); }
+.schedule-import-note { margin: 0; font-size: 13px; color: var(--ws-text-dim); }
+.schedule-import-codes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px dashed var(--ws-border-strong);
+  border-radius: 8px;
+}
+
+/* 무엇이 저장될지 전부 보여준다. 휴무 칸도 숨기지 않는다 — 빠진 날이 있으면
+   사용자가 알아채야 한다. */
+.schedule-import-preview {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 9px 0 0;
+  border-top: 1px dashed var(--ws-border-strong);
+  font-size: 13.5px;
+}
+.schedule-import-preview li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.schedule-import-preview li.is-off { color: var(--ws-text-faint); }
+.schedule-import-day { color: var(--ws-text-dim); }
+
+/* 두 버튼에 시각적 우열을 주지 않는다. 가져오는 것과 나중에 하는 것 모두 정상 선택이다. */
+.schedule-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 3px;
+}
+
 /* [수정]으로 펼치는 편집 영역. 화면을 옮기지 않고 카드 안에서 연다. */
 .ai-schedule-editor {
   display: flex;
