@@ -1452,6 +1452,13 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .ai-schedule-line { margin: 3px 0 0; font-size: 13.5px; color: var(--ws-text-dim); }
 .ai-schedule-resolved { margin: 6px 0 0; font-size: 13px; color: var(--ws-ok); }
 .ai-schedule-actions { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+/* 서버가 규칙대로 채운 값의 안내(추측 아님). 요약 줄과 같은 톤, 조금 더 흐리게. */
+.ai-schedule-note { margin: 4px 0 0; font-size: 12.5px; color: var(--ws-text-dim); opacity: 0.85; }
+/* 확인 없이 넣은 값이 있을 때만 뜨는 뱃지. 안내 줄보다 눈에 띄어야 한다 — 적용 전에 봐야 하는 것. */
+.ai-schedule-assumed {
+  display: inline-block; margin: 6px 0 0; padding: 3px 8px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 600; color: #8a4b00; background: #fff3e0; border: 1px solid #f1c48a;
+}
 
 /* 후보가 여럿일 때만 뜨는 줄. 카드 위에 얹고 카드 자체는 건드리지 않는다. */
 .ai-schedule-batch {

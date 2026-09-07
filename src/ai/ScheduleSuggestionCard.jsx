@@ -27,6 +27,28 @@ const KIND = {
   ROUTINE: { label: '반복 일정', Icon: Repeat },
 };
 
+/**
+ * 서버가 규칙대로 채운 값의 안내(fieldNotes.reason → 문장). 추측이 아니라 정책값·저장된 사실이다.
+ * 모르는 reason은 한 문장으로 뭉뚱그린다 — 서버가 reason을 늘려도 카드가 깨지지 않는다.
+ */
+const FIELD_NOTE_TEXT = {
+  ACTIVE_SEMESTER_END: '학기 종료일은 프로젝트 설정 기준으로 넣었어요',
+  CURRENT_DATE: '오늘부터 시작으로 넣었어요',
+};
+const FIELD_NOTE_FALLBACK = '자동으로 채운 값이에요';
+/** 확인 없이 넣은 추측(assumedFields)이 하나라도 있으면 안내 줄보다 눈에 띄게 알린다. */
+const ASSUMED_BADGE_TEXT = '확인 없이 넣은 값이 있어요 — 적용 전에 살펴봐 주세요';
+
+/** reason별로 한 번씩만 문장을 만든다. 같은 reason이 여러 필드에 붙어도 줄이 늘지 않는다. */
+function fieldNoteLines(notes) {
+  const lines = [];
+  for (const note of notes ?? []) {
+    const text = FIELD_NOTE_TEXT[note?.reason] ?? FIELD_NOTE_FALLBACK;
+    if (!lines.includes(text)) lines.push(text);
+  }
+  return lines;
+}
+
 /** "9/4 19:00 ~ 21:00" — 날짜가 넘어가면 종료 쪽 날짜도 보여준다. */
 function commitmentRange(payload) {
   const startDate = String(payload.startAt ?? '').slice(0, 10);
@@ -185,6 +207,8 @@ export default function ScheduleSuggestionCard({ suggestion, state, onApply, onD
   const resolved = state?.status === 'applied' || state?.status === 'dismissed';
   const working = state?.status === 'working';
   const applicable = isApplicable(suggestion.kind, draft);
+  const noteLines = fieldNoteLines(suggestion.fieldNotes);
+  const hasAssumed = (suggestion.assumedFields ?? []).length > 0;
 
   if (resolved) {
     return (
@@ -217,6 +241,14 @@ export default function ScheduleSuggestionCard({ suggestion, state, onApply, onD
           <p className="ai-schedule-line">{routineRange(draft)}</p>
         </>
       )}
+
+      {/* 서버가 채운 값과 확인 없이 넣은 값은 다르다 — 후자만 눈에 띄는 뱃지다. 둘 다 없으면 기존 그대로. */}
+      {hasAssumed && (
+        <p className="ai-schedule-assumed" role="status">{ASSUMED_BADGE_TEXT}</p>
+      )}
+      {noteLines.map((line) => (
+        <p key={line} className="ai-schedule-note">{line}</p>
+      ))}
 
       {editing && (suggestion.kind === 'COMMITMENT'
         ? <CommitmentEditor draft={draft} onChange={setDraft} />

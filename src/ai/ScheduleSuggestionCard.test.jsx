@@ -183,6 +183,47 @@ describe('반복 일정 후보 카드', () => {
   });
 });
 
+describe('서버가 채운 값과 확인 없이 넣은 값', () => {
+  it('fieldNotes가 있으면 reason별 안내 줄을 한 번씩 보여준다', () => {
+    renderCard({
+      ...routine({ effectiveUntil: '2026-12-11' }),
+      fieldNotes: [
+        { field: 'effectiveUntil', reason: 'ACTIVE_SEMESTER_END' },
+        { field: 'effectiveFrom', reason: 'CURRENT_DATE' },
+        { field: 'title', reason: 'DRAFT_LABEL' },
+        { field: 'classDaysOnly', reason: 'ANCHOR_IMPLIES' },
+      ],
+      assumedFields: [],
+    });
+
+    expect(screen.getByText('학기 종료일은 프로젝트 설정 기준으로 넣었어요')).toBeInTheDocument();
+    expect(screen.getByText('오늘부터 시작으로 넣었어요')).toBeInTheDocument();
+    // 모르는 reason 둘은 한 줄로 합쳐진다.
+    expect(screen.getAllByText('자동으로 채운 값이에요')).toHaveLength(1);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('assumedFields가 있으면 안내 줄과 별개의 뱃지를 띄운다', () => {
+    renderCard({
+      ...routine(),
+      fieldNotes: [{ field: 'effectiveFrom', reason: 'CURRENT_DATE' }],
+      assumedFields: [{ field: 'anchor', reason: 'UNCONFIRMED' }],
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('확인 없이 넣은 값이 있어요');
+    expect(screen.getByText('오늘부터 시작으로 넣었어요')).toBeInTheDocument();
+    // 뱃지가 떠도 적용은 막지 않는다 — 사용자가 보고 결정한다.
+    expect(screen.getByRole('button', { name: /적용$/ })).toBeEnabled();
+  });
+
+  it('둘 다 없으면 기존 렌더링 그대로다', () => {
+    renderCard(routine());
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText('자동으로 채운 값이에요')).not.toBeInTheDocument();
+  });
+});
+
 describe('처리 결과', () => {
   it('적용하면 카드가 사라지지 않고 결과를 남긴다', () => {
     renderCard(commitment(), { state: { status: 'applied' } });
