@@ -11,8 +11,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarRange, Sparkles } from 'lucide-react';
-import { planAPI } from '../../api/api.js';
+import { planAPI, routineAPI } from '../../api/api.js';
 import PlanAskCard from './PlanAskCard.jsx';
+import LeadMinutesCard from './LeadMinutesCard.jsx';
 import { PLAN_INTENSITY_HINT, PLAN_INTENSITY_LABEL, PlanIntensity } from '../../types/execution.js';
 import { addDays, daysBetween, formatMinutes, periodPresets, toIsoDate } from '../../lib/planTime.js';
 import PlanDraftReview from './PlanDraftReview.jsx';
@@ -37,6 +38,14 @@ export default function PlanCreateView({
   const [error, setError] = useState(null);
   /** 확정 이력이 없으면(=첫 계획) 강도를 펼친 상태로 시작한다. */
   const [hasHistory, setHasHistory] = useState(true);
+  /**
+   * 초안보다 먼저 물어야 할 이동시간(이 기간에 도는 수업 중 아직 정하지 않은 것). 비어 있지
+   * 않으면 초안 생성을 부르지 않고 카드를 띄운다. 답하면 저장한 뒤 초안을, 「나중에」면 저장
+   * 없이 초안을 만든다(다음번에 다시 뜬다).
+   */
+  const [leadPending, setLeadPending] = useState(null);
+  const [leadSaving, setLeadSaving] = useState(false);
+  const [leadError, setLeadError] = useState(null);
 
   // AI 패널에서 만든 기간 계획이 넘어오면 그 초안으로 검토를 시작한다. 같은 초안이 다시 오면 무시한다.
   useEffect(() => {
@@ -82,6 +91,33 @@ export default function PlanCreateView({
     setLoading(true);
     setError(null);
     try {
+      /*
+       * 처음 누를 때만 이동시간을 묻는다. 되묻기(answer)에 답한 재요청은 이미 지나온 길이다.
+       * 조회가 실패하면 묻지 않고 초안으로 간다 — 질문 하나 때문에 초안을 막지 않는다.
+       */
+      if (answer == null) {
+        const pending = await Promise.resolve()
+          .then(() => routineAPI.pendingLeadMinutes(startDate, endDate))
+          .catch(() => []);
+        if (Array.isArray(pending) && pending.length > 0) {
+          setLeadPending(pending);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (err) {
+      setError(err.message || '초안을 만들지 못했습니다.');
+      setLoading(false);
+      return;
+    }
+    await requestDraft(answer);
+  };
+
+  /** 실제 초안 요청. 이동시간 카드를 지난 뒤(또는 물을 것이 없을 때) 여기로 온다. */
+  const requestDraft = async (answer) => {
+    setLoading(true);
+    setError(null);
+    try {
       const result = await planAPI.createDraft({
         startDate, endDate, intensity,
         instruction: instruction.trim() || null,
@@ -97,6 +133,28 @@ export default function PlanCreateView({
     } finally {
       setLoading(false);
     }
+  };
+
+  /** 카드의 답을 저장한 뒤 초안으로 간다. 저장이 안 되면 카드를 그대로 두고 이유를 보여준다. */
+  const handleLeadSubmit = async (entries) => {
+    setLeadSaving(true);
+    setLeadError(null);
+    try {
+      await routineAPI.updateLeadMinutes(entries);
+    } catch (err) {
+      setLeadError(err.message || '이동시간을 저장하지 못했어요.');
+      setLeadSaving(false);
+      return;
+    }
+    setLeadSaving(false);
+    setLeadPending(null);
+    await requestDraft(null);
+  };
+
+  /** 「나중에」 — 저장 없이 초안으로. 다음번에 다시 묻는다. */
+  const handleLeadLater = async () => {
+    setLeadPending(null);
+    await requestDraft(null);
   };
 
   const fromAi = draft != null && initialDraft != null && draft === initialDraft;
@@ -183,7 +241,7 @@ export default function PlanCreateView({
             />
           </label>
 
-          {!draft && (
+          {!draft && !leadPending && (
             <button type="button" className="btn-primary" disabled={!periodValid || loading}
               onClick={() => handleDraft()}>
               <Sparkles size={16} /> {loading ? '초안을 만들고 있어요…' : '초안 만들기'}
@@ -193,6 +251,20 @@ export default function PlanCreateView({
       )}
 
       {error && <p className="error-text">{error}</p>}
+
+      {/*
+        이동시간을 아직 정하지 않은 반복 일정이 있으면 초안보다 먼저 묻는다. 초안이 없는
+        상태에서만 뜬다 — 초안을 만들어 놓고 물으면 그 초안이 이미 수업 직전 시간을 쓴 뒤다.
+      */}
+      {!draft && leadPending && (
+        <LeadMinutesCard
+          groups={leadPending}
+          busy={leadSaving || loading}
+          error={leadError}
+          onSubmit={handleLeadSubmit}
+          onLater={handleLeadLater}
+        />
+      )}
 
       {/*
         되묻는 중이면 초안이 없다. 만들어 놓고 묻지 않는 이유는, 만들어진 계획이 그 자체로

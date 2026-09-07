@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { WEEKDAYS } from './routineDays.js';
 import { formatDateKo, toHHmm } from '../../lib/datetime.js';
+import { LEAD_MINUTES_MAX } from '../plan/leadMinutes.js';
 
 /*
  * 서버는 사유를 enum으로만 보낸다. 문구는 화면 것이다 — 서버가 문구까지 보내면 문구를
@@ -35,7 +36,17 @@ function initialState(routine) {
     endTime: toHHmm(routine?.endTime) ?? '',
     effectiveFrom: routine?.effectiveFrom ?? '',
     effectiveUntil: routine?.effectiveUntil ?? '',
+    // 비워 두면 "아직 정하지 않음"이고 서버는 저장된 값을 건드리지 않는다. 0은 "없음"이다.
+    leadMinutes: routine?.leadMinutes != null ? String(routine.leadMinutes) : '',
   };
+}
+
+/** '' → null(유지), 정수 0~480 → 그 값, 그 밖은 undefined(보낼 수 없음). */
+function leadMinutesOf(text) {
+  if (text === '') return null;
+  if (!/^\d+$/.test(text)) return undefined;
+  const value = Number(text);
+  return value >= 0 && value <= LEAD_MINUTES_MAX ? value : undefined;
 }
 
 export default function RoutineForm({ routine, courses, busy, error, conflicts, onSubmit, onCancel }) {
@@ -58,8 +69,9 @@ export default function RoutineForm({ routine, courses, busy, error, conflicts, 
    */
   const crossesMidnight = Boolean(form.startTime && form.endTime && form.endTime <= form.startTime);
   const sameTime = Boolean(form.startTime && form.endTime && form.startTime === form.endTime);
+  const leadMinutes = leadMinutesOf(form.leadMinutes);
   const canSubmit = form.title.trim() && form.daysOfWeek.length > 0
-    && form.startTime && form.endTime && form.effectiveFrom && !sameTime;
+    && form.startTime && form.endTime && form.effectiveFrom && !sameTime && leadMinutes !== undefined;
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -73,6 +85,7 @@ export default function RoutineForm({ routine, courses, busy, error, conflicts, 
       endTime: form.endTime,
       effectiveFrom: form.effectiveFrom,
       effectiveUntil: form.effectiveUntil || null,
+      leadMinutes,
     });
   };
 
@@ -138,6 +151,13 @@ export default function RoutineForm({ routine, courses, busy, error, conflicts, 
         <label className="inline-field">
           <input type="date" value={form.effectiveUntil}
             onChange={(e) => patch({ effectiveUntil: e.target.value })} />
+        </label>
+        <label className="inline-field">
+          이동시간(분)
+          <input type="number" min={0} max={LEAD_MINUTES_MAX} step={5} inputMode="numeric"
+            value={form.leadMinutes} placeholder="아직 안 정함"
+            aria-label="이동시간(분)"
+            onChange={(e) => patch({ leadMinutes: e.target.value })} />
         </label>
       </div>
 

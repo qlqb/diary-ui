@@ -22,6 +22,7 @@ vi.mock('../../api/api.js', () => ({
   routineAPI: {
     list: vi.fn(), occurrences: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(),
     addException: vi.fn(), updateException: vi.fn(), removeException: vi.fn(),
+    pendingLeadMinutes: vi.fn(), updateLeadMinutes: vi.fn(),
   },
 }));
 
@@ -184,5 +185,51 @@ describe('RoutineSection', () => {
     expect(await screen.findByText(/목요일에만 있어요/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '추가' })).toBeDisabled();
     expect(routineAPI.addException).not.toHaveBeenCalled();
+  });
+
+  /*
+   * 수업을 새로 넣으면 저장 직후 이동시간을 한 번 묻는다 — 계획을 만들 때 묻는 카드와 같다.
+   * 수업이 아닌 루틴(알바)은 묻지 않는다. 통학 정책은 수업의 것이다.
+   */
+  describe('저장 직후 이동시간 질문', () => {
+    async function createRoutine(user, onChanged) {
+      render(<RoutineSection routines={[]} courses={[{ courseId: 6, title: '자료구조' }]}
+        loading={false} onChanged={onChanged} />);
+      await user.click(screen.getByRole('button', { name: '반복 일정 추가' }));
+      await user.type(screen.getByPlaceholderText('빅데이터분석'), '자료구조');
+      await user.click(screen.getByRole('button', { name: '화' }));
+      const timeInputs = document.querySelectorAll('input[type="time"]');
+      await user.type(timeInputs[0], '14:00');
+      await user.type(timeInputs[1], '17:00');
+      await user.type(document.querySelector('input[type="date"]'), '2026-08-25');
+      // 새 폼의 제출 버튼은 '추가'다(수정 폼이 '저장').
+      await user.click(screen.getByRole('button', { name: '추가' }));
+    }
+
+    it('수업이면 카드가 뜨고, 답하면 저장한 뒤 목록을 다시 읽는다', async () => {
+      const user = userEvent.setup();
+      const onChanged = vi.fn().mockResolvedValue(undefined);
+      routineAPI.create.mockResolvedValue(routine({ routineId: 9, courseId: 6, leadMinutes: null, daysOfWeek: ['TUESDAY'], startTime: '14:00:00' }));
+      routineAPI.updateLeadMinutes.mockResolvedValue([]);
+
+      await createRoutine(user, onChanged);
+
+      expect(await screen.findByText('빅데이터분석 전 이동시간은 얼마나 걸리나요?')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: '1시간' }));
+      await user.click(screen.getByRole('button', { name: '이대로 저장' }));
+
+      await waitFor(() => expect(routineAPI.updateLeadMinutes).toHaveBeenCalledWith([{ routineId: 9, leadMinutes: 60 }]));
+      await waitFor(() => expect(screen.queryByText(/이동시간은 얼마나 걸리나요/)).not.toBeInTheDocument());
+    });
+
+    it('수업이 아니면 묻지 않는다', async () => {
+      const user = userEvent.setup();
+      routineAPI.create.mockResolvedValue(routine({ routineId: 9, courseId: null, leadMinutes: null }));
+
+      await createRoutine(user, vi.fn().mockResolvedValue(undefined));
+
+      await waitFor(() => expect(routineAPI.create).toHaveBeenCalled());
+      expect(screen.queryByText(/이동시간은 얼마나 걸리나요/)).not.toBeInTheDocument();
+    });
   });
 });

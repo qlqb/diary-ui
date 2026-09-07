@@ -87,7 +87,7 @@ function clampSegment(segment) {
 
 export default function WeekGrid({
   dates, items, draftCards, occurrences, commitments, todayDate,
-  onPatchCard, onSelectItem, onSelectCommitment,
+  onPatchCard, onSelectItem, onSelectCommitment, onSelectRoutine,
 }) {
   const gridRef = useRef(null);
   /*
@@ -241,26 +241,51 @@ export default function WeekGrid({
               반복 일정은 실행 조각과 형태로 구분한다 — 행이 없는 값이라 클릭할 상세도 없고,
               끌어 옮길 수도 없다. 색만으로 나누지 않는 것은 이 화면 전체의 규칙이다.
             */}
-            {routineByDate[date].map(({ occurrence, segment, lane, laneCount }, index) => (
-              <div
-                key={`ro-${occurrence.routineId}-${occurrence.sourceDate}-${index}`}
-                className="grid-block is-routine"
-                title={`${occurrence.title}${occurrence.location ? ` · ${occurrence.location}` : ''}`}
-                style={{
-                  top: topOf(segment.startTime),
-                  height: heightOf(segment.startTime, segment.endTime),
-                  left: `calc(3px + ${lane} * (100% - 6px) / ${laneCount})`,
-                  width: `calc((100% - 6px) / ${laneCount})`,
-                  right: 'auto',
-                }}
-              >
-                <span className="grid-block-time">
-                  {segment.startTime}
-                  {occurrence.moved && <span className="grid-block-badge">보강</span>}
-                </span>
-                <span className="grid-block-title">{occurrence.title}</span>
-              </div>
-            ))}
+            {routineByDate[date].map(({ occurrence, segment, lane, laneCount }, index) => {
+              const style = {
+                top: topOf(segment.startTime),
+                height: heightOf(segment.startTime, segment.endTime),
+                left: `calc(3px + ${lane} * (100% - 6px) / ${laneCount})`,
+                width: `calc((100% - 6px) / ${laneCount})`,
+                right: 'auto',
+              };
+              /*
+               * 이동시간 발생분은 보조 스타일이고 누르면 원 루틴으로 간다. 편집할 것이 없다 —
+               * 값은 루틴의 이동시간 하나이고, 그것을 고치는 자리는 아래 반복 일정 목록이다.
+               */
+              if (occurrence.lead) {
+                return (
+                  <button
+                    key={`rl-${occurrence.routineId}-${occurrence.sourceDate}-${index}`}
+                    type="button"
+                    className="grid-block is-routine is-lead"
+                    title={`${occurrence.title} · 반복 일정의 이동시간`}
+                    style={style}
+                    onClick={() => onSelectRoutine?.(occurrence.routineId)}
+                  >
+                    <span className="grid-block-time">
+                      {segment.startTime}
+                      <span className="grid-block-badge is-lead">이동</span>
+                    </span>
+                    <span className="grid-block-title">{occurrence.title}</span>
+                  </button>
+                );
+              }
+              return (
+                <div
+                  key={`ro-${occurrence.routineId}-${occurrence.sourceDate}-${index}`}
+                  className="grid-block is-routine"
+                  title={`${occurrence.title}${occurrence.location ? ` · ${occurrence.location}` : ''}`}
+                  style={style}
+                >
+                  <span className="grid-block-time">
+                    {segment.startTime}
+                    {occurrence.moved && <span className="grid-block-badge">보강</span>}
+                  </span>
+                  <span className="grid-block-title">{occurrence.title}</span>
+                </div>
+              );
+            })}
 
             {/*
               약속은 반복 일정과 같은 회색 계열이지만 클릭이 열린다 — 고칠 수 있는 행이

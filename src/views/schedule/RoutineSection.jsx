@@ -9,20 +9,53 @@
  * 종료일에 마지막 날을 넣는 것이 곧 종료다.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import RoutineForm from './RoutineForm.jsx';
 import RoutineExceptions from './RoutineExceptions.jsx';
+import LeadMinutesCard from '../plan/LeadMinutesCard.jsx';
 import { formatDays } from './routineDays.js';
 import { formatDateShort, toHHmm } from '../../lib/datetime.js';
 import { routineAPI } from '../../api/api.js';
 
-export default function RoutineSection({ routines, courses, loading, onChanged }) {
+/**
+ * @param focusRoutine { routineId, token } — 격자의 이동시간 블록에서 넘어온 원 루틴. 그 줄을
+ *                     펼치고 화면에 보이게 한다. token은 같은 루틴을 다시 눌러도 반응하게 한다
+ */
+export default function RoutineSection({ routines, courses, loading, onChanged, focusRoutine = null }) {
   const [editingId, setEditingId] = useState(null); // 'new' 또는 routineId
   const [expandedId, setExpandedId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [conflicts, setConflicts] = useState([]);
+  /**
+   * 방금 만든 수업. 저장 직후 이동시간을 한 번 묻는다 — 계획을 만들 때 묻는 것과 같은 카드다.
+   * 「나중에」면 계획을 만들 때 다시 뜬다.
+   */
+  const [leadAsk, setLeadAsk] = useState(null);
+  const [leadSaving, setLeadSaving] = useState(false);
+  const [leadError, setLeadError] = useState(null);
+
+  useEffect(() => {
+    if (focusRoutine?.routineId == null) return;
+    setExpandedId(focusRoutine.routineId);
+    document.getElementById(`routine-${focusRoutine.routineId}`)
+      ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [focusRoutine]);
+
+  const submitLead = async (entries) => {
+    setLeadSaving(true);
+    setLeadError(null);
+    try {
+      await routineAPI.updateLeadMinutes(entries);
+      setLeadAsk(null);
+      await onChanged();
+    } catch (err) {
+      setLeadError(err.message || '이동시간을 저장하지 못했어요.');
+    } finally {
+      setLeadSaving(false);
+    }
+  };
 
   const run = async (action) => {
     setBusy(true);
@@ -78,8 +111,32 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
           error={error}
           onCancel={closeForm}
           onSubmit={async (payload) => {
-            if (await run(() => routineAPI.create(payload))) closeForm();
+            let created = null;
+            if (await run(async () => { created = await routineAPI.create(payload); })) {
+              closeForm();
+              // 이동시간을 아직 정하지 않은 새 수업(프로젝트에 묶인 루틴)이면 지금 한 번 묻는다.
+              // 통학 정책은 수업의 것이라 알바·운동은 묻지 않는다 — 필요하면 수정 폼에서 넣는다.
+              if (created?.routineId != null && created.courseId != null && created.leadMinutes == null) {
+                setLeadAsk(created);
+              }
+            }
           }}
+        />
+      )}
+
+      {leadAsk && (
+        <LeadMinutesCard
+          groups={[{
+            groupKey: `routine-${leadAsk.routineId}`,
+            label: leadAsk.title,
+            routineIds: [leadAsk.routineId],
+            sample: (leadAsk.daysOfWeek ?? []).slice(0, 3)
+              .map((dayOfWeek) => ({ dayOfWeek, startTime: leadAsk.startTime })),
+          }]}
+          busy={leadSaving}
+          error={leadError}
+          onSubmit={submitLead}
+          onLater={() => setLeadAsk(null)}
         />
       )}
 
@@ -94,7 +151,8 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
           const expanded = expandedId === routine.routineId;
           const course = courses?.find((c) => c.courseId === routine.courseId);
           return (
-            <li key={routine.routineId} className={`routine-row${routine.ended ? ' is-ended' : ''}`}>
+            <li key={routine.routineId} id={`routine-${routine.routineId}`}
+              className={`routine-row${routine.ended ? ' is-ended' : ''}`}>
               <div className="routine-row-main">
                 <button type="button" className="routine-row-toggle"
                   aria-expanded={expanded}
@@ -110,6 +168,7 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
                   {formatDays(routine.daysOfWeek)} {toHHmm(routine.startTime)}-{toHHmm(routine.endTime)}
                   {routine.crossesMidnight && <span className="routine-row-next-day"> (다음 날)</span>}
                   {routine.location && ` · ${routine.location}`}
+                  {routine.leadMinutes > 0 && <span className="routine-row-lead"> · 이동 {routine.leadMinutes}분</span>}
                 </span>
 
                 <button type="button" className="btn-ghost btn-sm" disabled={busy}

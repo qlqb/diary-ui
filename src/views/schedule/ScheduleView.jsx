@@ -34,6 +34,8 @@ export default function ScheduleView({
   const [commitmentsLoading, setCommitmentsLoading] = useState(true);
   /** 격자에서 약속을 누르면 아래 목록의 그 줄이 편집으로 열린다. */
   const [editingCommitmentId, setEditingCommitmentId] = useState(null);
+  /** 격자에서 이동시간 블록을 누르면 아래 목록의 원 루틴이 펼쳐진다. 편집은 거기서 한다. */
+  const [focusRoutine, setFocusRoutine] = useState(null);
   const today = todayString();
 
   const load = async () => {
@@ -172,6 +174,7 @@ export default function ScheduleView({
         onPatchCard={onPatchCard}
         onSelectItem={setSelected}
         onSelectCommitment={(c) => setEditingCommitmentId(c.commitmentId)}
+        onSelectRoutine={(routineId) => setFocusRoutine({ routineId, token: Date.now() })}
       />
 
       {selected && (
@@ -230,6 +233,7 @@ export default function ScheduleView({
         courses={projects}
         loading={routinesLoading}
         onChanged={loadRoutines}
+        focusRoutine={focusRoutine}
       />
 
       {!loading && items.length === 0 && draftCards.length === 0 && occurrences.length === 0

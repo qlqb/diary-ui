@@ -8,6 +8,7 @@ vi.mock('../../api/api.js', () => ({
   planAPI: {
     createDraft: vi.fn(), confirm: vi.fn(), findCoveringDate: vi.fn(), regenerateItems: vi.fn(),
   },
+  routineAPI: { pendingLeadMinutes: vi.fn().mockResolvedValue([]), updateLeadMinutes: vi.fn() },
   schedulePreviewAPI: { get: vi.fn(), recompute: vi.fn() },
   topicAPI: { updateUserMark: vi.fn() },
 }));

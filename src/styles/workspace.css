@@ -1845,6 +1845,21 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 }
 .grid-block.is-routine:hover { filter: none; }
 
+/* 이동시간 발생분. 반복 일정보다 한 단계 더 옅다 — 시간을 막을 뿐 갈 곳이 아니다.
+   누르면 아래 목록의 원 루틴이 펼쳐진다(값을 고치는 자리가 거기다). */
+.grid-block.is-routine.is-lead {
+  border-style: dashed;
+  border-left-style: solid;
+  background: #f7f8fa;
+  color: var(--ws-text-faint);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.grid-block.is-routine.is-lead:hover { background: #eef0f4; }
+.grid-block-badge.is-lead { background: #e7eaee; color: var(--ws-text-faint); }
+.routine-row-lead { color: var(--ws-text-faint); }
+
 /* 약속. 반복 일정과 같은 계열이지만 누를 수 있다 — 고칠 수 있는 행이 실제로 있다. */
 .grid-block.is-commitment {
   border: 1px solid var(--ws-border-strong);
@@ -1904,3 +1919,23 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .ai-quick-replies { display: flex; flex-wrap: wrap; gap: 6px; }
 .ai-offer { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .plan-summary-capped { color: var(--ws-text-dim); }
+
+/* 이동시간 질문 카드. 계획 초안 전과 반복 일정 저장 직후, 같은 카드다. */
+.lead-minutes-card {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--ws-border);
+  border-left: 3px solid var(--ws-accent);
+  border-radius: 10px;
+  background: #fff;
+}
+.lead-minutes-question { margin: 0; font-weight: 600; }
+.lead-minutes-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.lead-minutes-row { display: flex; flex-direction: column; gap: 6px; }
+.lead-minutes-row-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lead-minutes-label { font-weight: 600; }
+.lead-minutes-sample { font-size: 13px; color: var(--ws-text-dim); }
+.lead-minutes-choices { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lead-minutes-custom { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.lead-minutes-custom input { width: 72px; padding: 4px 6px; border: 1px solid var(--ws-border); border-radius: 6px; }
+.lead-minutes-actions { display: flex; gap: 8px; }

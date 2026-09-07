@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PlanCreateView from './PlanCreateView.jsx';
-import { planAPI, schedulePreviewAPI } from '../../api/api.js';
+import { planAPI, routineAPI, schedulePreviewAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
   planAPI: { createDraft: vi.fn(), confirm: vi.fn(), findCoveringDate: vi.fn() },
+  routineAPI: { pendingLeadMinutes: vi.fn(), updateLeadMinutes: vi.fn() },
   schedulePreviewAPI: { get: vi.fn(), recompute: vi.fn() },
 }));
 
@@ -47,6 +48,9 @@ describe('계획 초안 검토', () => {
     vi.clearAllMocks();
     planAPI.findCoveringDate.mockResolvedValue([{ planVersionId: 1 }]);
     planAPI.createDraft.mockResolvedValue(DRAFT);
+    // 물을 이동시간이 없는 것이 기본이다. 있는 경우는 개별 테스트에서 채운다.
+    routineAPI.pendingLeadMinutes.mockResolvedValue([]);
+    routineAPI.updateLeadMinutes.mockResolvedValue([]);
     // 배치 미리보기는 기본적으로 "아직 없음". 있는 경우는 개별 테스트에서 채운다.
     schedulePreviewAPI.get.mockResolvedValue(null);
     schedulePreviewAPI.recompute.mockResolvedValue(null);
@@ -265,5 +269,87 @@ describe('계획 초안 검토', () => {
     expect(screen.getByRole('button', { name: '계획 확정' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /적용/ })).not.toBeInTheDocument();
     expect(planAPI.createDraft).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 이동시간을 아직 정하지 않은 반복 일정이 있으면 초안보다 먼저 묻는다. 여기서 고정하는 것은
+ * 순서다 — 카드가 떠 있는 동안 초안 요청이 나가지 않고, 답하면 저장 → 초안, 「나중에」면
+ * 저장 없이 초안이다.
+ */
+describe('초안 전 이동시간 질문', () => {
+  const PENDING = [{
+    groupKey: 'class', label: '수업', routineIds: [1, 7],
+    sample: [{ dayOfWeek: 'TUESDAY', startTime: '14:00:00' }, { dayOfWeek: 'THURSDAY', startTime: '10:00:00' }],
+  }];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    planAPI.findCoveringDate.mockResolvedValue([{ planVersionId: 1 }]);
+    planAPI.createDraft.mockResolvedValue(DRAFT);
+    routineAPI.updateLeadMinutes.mockResolvedValue([]);
+    schedulePreviewAPI.get.mockResolvedValue(null);
+    schedulePreviewAPI.recompute.mockResolvedValue(null);
+  });
+
+  it('정하지 않은 이동시간이 있으면 카드가 먼저 뜨고 초안은 아직 만들지 않는다', async () => {
+    routineAPI.pendingLeadMinutes.mockResolvedValue(PENDING);
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+
+    expect(await screen.findByText('수업 전 이동시간은 얼마나 걸리나요?')).toBeInTheDocument();
+    expect(planAPI.createDraft).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /초안 만들기/ })).not.toBeInTheDocument();
+    // 기간을 함께 보낸다 — 그 기간에 도는 수업만 묻는다.
+    expect(routineAPI.pendingLeadMinutes).toHaveBeenCalledWith(
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  it('답하면 저장한 뒤 초안을 만든다', async () => {
+    routineAPI.pendingLeadMinutes.mockResolvedValue(PENDING);
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+    await screen.findByText('수업 전 이동시간은 얼마나 걸리나요?');
+
+    await userEvent.click(screen.getByRole('button', { name: '1시간' }));
+    await userEvent.click(screen.getByRole('button', { name: '이대로 저장' }));
+
+    await screen.findByRole('button', { name: '계획 확정' });
+    expect(routineAPI.updateLeadMinutes).toHaveBeenCalledWith([{ routineId: 1, leadMinutes: 60 }, { routineId: 7, leadMinutes: 60 }]);
+    expect(planAPI.createDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('「나중에」면 저장 없이 초안을 만든다', async () => {
+    routineAPI.pendingLeadMinutes.mockResolvedValue(PENDING);
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+    await screen.findByText('수업 전 이동시간은 얼마나 걸리나요?');
+
+    await userEvent.click(screen.getByRole('button', { name: '나중에' }));
+
+    await screen.findByRole('button', { name: '계획 확정' });
+    expect(routineAPI.updateLeadMinutes).not.toHaveBeenCalled();
+    expect(planAPI.createDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('물을 것이 없으면 바로 초안을 만든다', async () => {
+    routineAPI.pendingLeadMinutes.mockResolvedValue([]);
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+
+    await screen.findByRole('button', { name: '계획 확정' });
+    expect(routineAPI.updateLeadMinutes).not.toHaveBeenCalled();
+  });
+
+  it('이동시간 조회가 안 되면 묻지 않고 초안으로 간다', async () => {
+    routineAPI.pendingLeadMinutes.mockRejectedValue(new Error('network'));
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+
+    await screen.findByRole('button', { name: '계획 확정' });
+    expect(planAPI.createDraft).toHaveBeenCalledTimes(1);
   });
 });

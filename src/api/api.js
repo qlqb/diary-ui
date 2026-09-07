@@ -1195,6 +1195,23 @@ export const routineAPI = {
     async removeException(routineId, routineExceptionId) {
         return request(`/routines/${routineId}/exceptions/${routineExceptionId}`, { method: 'DELETE' });
     },
+
+    /**
+     * 그 기간에 도는, 아직 이동시간을 정하지 않은 수업(한 묶음). 비어 있으면 초안을 바로 만든다.
+     * [{ groupKey, label, routineIds, sample: [{ dayOfWeek, startTime }] }]
+     */
+    async pendingLeadMinutes(startDate, endDate) {
+        const params = new URLSearchParams({ startDate, endDate });
+        return request(`/routines/lead-minutes/pending?${params.toString()}`);
+    },
+
+    /**
+     * 여러 루틴의 이동시간을 한 번에. 전부 되거나 전부 안 된다(남의 루틴이 섞이면 403).
+     * entries: [{ routineId, leadMinutes }]. "없음"은 0이다.
+     */
+    async updateLeadMinutes(entries) {
+        return request('/routines/lead-minutes', { method: 'PATCH', body: JSON.stringify(entries) });
+    },
 };
 
 export const planAPI = {
