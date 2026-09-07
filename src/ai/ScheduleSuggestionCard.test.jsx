@@ -213,3 +213,70 @@ describe('처리 결과', () => {
     expect(screen.getByRole('button', { name: /적용 안 함/ })).toBeDisabled();
   });
 });
+
+/**
+ * 이동시간 후보. 새 일정이 아니라 이미 있는 수업들의 값이다. 시간을 말하지 않은 후보는
+ * 카드에서 고른 뒤에만 적용할 수 있고, 적용 결과 문장은 서버가 만든 것을 그대로 보여준다.
+ */
+describe('이동시간 후보 카드', () => {
+  const lead = (payload = {}) => ({
+    suggestionId: 702,
+    kind: 'ROUTINE_LEAD',
+    status: 'PROPOSED',
+    payload: { routineIds: [1, 2, 3, 4, 5], leadMinutes: 60, targetSummary: '자료구조 외 4개', ...payload },
+  });
+
+  it('대상 요약과 승인하면 비워질 시간을 말한다', () => {
+    renderCard(lead());
+
+    expect(screen.getByText('자료구조 외 4개 앞 이동시간')).toBeInTheDocument();
+    expect(screen.getByText('승인하면 자료구조 외 4개 앞 1시간이 비워져요.')).toBeInTheDocument();
+    expect(screen.getByText('이동시간')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /적용$/ })).toBeEnabled();
+  });
+
+  it('그대로 적용하면 대상 id와 분을 그대로 보낸다', async () => {
+    const user = userEvent.setup();
+    const { onApply } = renderCard(lead());
+
+    await user.click(screen.getByRole('button', { name: /적용$/ }));
+
+    expect(onApply).toHaveBeenCalledWith(702, expect.objectContaining({ routineIds: [1, 2, 3, 4, 5], leadMinutes: 60 }));
+  });
+
+  it('시간이 없으면 선택지가 펼쳐지고 고르기 전에는 적용할 수 없다', async () => {
+    const user = userEvent.setup();
+    const { onApply } = renderCard(lead({ leadMinutes: null }));
+
+    expect(screen.getByText('아직 시간을 정하지 않았어요. 골라 주세요.')).toBeInTheDocument();
+    const apply = screen.getByRole('button', { name: /적용$/ });
+    expect(apply).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: '없음' }));
+    expect(apply).toBeEnabled();
+    await user.click(apply);
+
+    // "없음"은 0이다 — null이 아니다. null이면 서버가 거절하고 다음에 또 묻는다.
+    expect(onApply).toHaveBeenCalledWith(702, expect.objectContaining({ leadMinutes: 0 }));
+  });
+
+  it('직접 입력은 0~480 정수만 적용할 수 있다', async () => {
+    const user = userEvent.setup();
+    renderCard(lead({ leadMinutes: null }));
+    const apply = screen.getByRole('button', { name: /적용$/ });
+
+    await user.click(screen.getByRole('button', { name: '직접 입력' }));
+    const input = screen.getByRole('spinbutton', { name: '이동시간(분)' });
+    await user.type(input, '481');
+    expect(apply).toBeDisabled();
+    await user.clear(input);
+    await user.type(input, '45');
+    expect(apply).toBeEnabled();
+  });
+
+  it('적용된 뒤에는 서버가 만든 확인 문장을 보여준다', () => {
+    renderCard(lead(), { state: { status: 'applied', systemNote: '수업 일정의 이동시간을 60분으로 저장했어요.' } });
+
+    expect(screen.getByText('수업 일정의 이동시간을 60분으로 저장했어요.')).toBeInTheDocument();
+  });
+});

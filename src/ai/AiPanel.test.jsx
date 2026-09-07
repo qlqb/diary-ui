@@ -164,6 +164,28 @@ describe('기간 계획 OFFER와 강도 선택지', () => {
     expect(await screen.findByText('계획 기간 9/5')).toBeInTheDocument();
   });
 
+  /*
+   * 확인 문장(systemNote)은 서버가 실제로 저장된 것으로 만든다. 모델이 "반영해둘게요"라고
+   * 해도 이 줄이 실제를 말하므로, 답변과 구분해 보여줘야 한다.
+   */
+  it('서버가 만든 확인 문장을 답변 아래 따로 보여준다', async () => {
+    const user = userEvent.setup();
+    conversationAPI.list.mockResolvedValue([]);
+    conversationAPI.create.mockResolvedValue({ conversationId: 1 });
+    streamOffer(null, {
+      reply: '수업 전 이동시간 1시간, 반영해둘게요.',
+      systemNote: '이동시간 후보 1건을 만들었어요. 승인하면 자료구조 외 4개 앞 60분이 비워져요.',
+    });
+
+    render(<AiPanel scope={SCOPE} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    await sendFirstMessage(user);
+
+    expect(await screen.findByText('이동시간 후보 1건을 만들었어요. 승인하면 자료구조 외 4개 앞 60분이 비워져요.'))
+      .toBeInTheDocument();
+    expect(screen.getByText('수업 전 이동시간 1시간, 반영해둘게요.')).toBeInTheDocument();
+  });
+
   it('강도 질문의 선택지를 누르면 그 문장을 일반 메시지로 보낸다', async () => {
     const user = userEvent.setup();
     conversationAPI.list.mockResolvedValue([]);

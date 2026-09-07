@@ -334,8 +334,16 @@ export default function AiPanel({
             setScheduleSuggestions((prev) => [...prev, ...(data?.suggestions ?? [])]);
           } else if (eventName === 'message.completed') {
             if (data?.userMessageId) lastUserMessageIdRef.current = data.userMessageId;
+            /*
+             * systemNote는 서버가 실제로 저장된 것으로 만든 확인 문장이다. 모델의 답과 섞지
+             * 않고 말풍선 아래 따로 보여준다 — "반영해둘게요"라는 말과 실제가 다를 때 이
+             * 줄이 실제를 말한다.
+             */
             setMessages((prev) => prev.map((m) => (m.key === streamingKey
-              ? { ...m, content: data.reply ?? m.content, responseType: data.responseType, streaming: false }
+              ? {
+                ...m, content: data.reply ?? m.content, responseType: data.responseType, streaming: false,
+                systemNote: data.systemNote ?? null,
+              }
               : m)));
             setQuickReplies(Array.isArray(data?.quickReplies) ? data.quickReplies : []);
           } else if (eventName === 'message.error') {
@@ -542,10 +550,12 @@ export default function AiPanel({
   const handleApplyAll = async (ids) => {
     setBatchState({ status: 'working' });
     try {
-      await scheduleSuggestionAPI.applyBatch(ids);
+      const applied = await scheduleSuggestionAPI.applyBatch(ids);
+      // 서버가 만든 확인 문장(무엇을 얼마로 저장했는지)을 카드가 그대로 보여준다.
+      const noteById = Object.fromEntries((applied ?? []).map((r) => [r.suggestionId, r.systemNote ?? null]));
       setScheduleActionState((prev) => {
         const next = { ...prev };
-        ids.forEach((id) => { next[id] = { status: 'applied' }; });
+        ids.forEach((id) => { next[id] = { status: 'applied', systemNote: noteById[id] ?? null }; });
         return next;
       });
       setBatchState(null);
@@ -558,10 +568,15 @@ export default function AiPanel({
   const handleScheduleAction = async (suggestionId, action, editedPayload) => {
     setScheduleActionState((prev) => ({ ...prev, [suggestionId]: { status: 'working' } }));
     try {
-      if (action === 'apply') await scheduleSuggestionAPI.apply(suggestionId, editedPayload ?? null);
-      else await scheduleSuggestionAPI.dismiss(suggestionId);
+      let systemNote = null;
+      if (action === 'apply') {
+        const applied = await scheduleSuggestionAPI.apply(suggestionId, editedPayload ?? null);
+        systemNote = applied?.systemNote ?? null;
+      } else {
+        await scheduleSuggestionAPI.dismiss(suggestionId);
+      }
       setScheduleActionState((prev) => ({
-        ...prev, [suggestionId]: { status: action === 'apply' ? 'applied' : 'dismissed' },
+        ...prev, [suggestionId]: { status: action === 'apply' ? 'applied' : 'dismissed', systemNote },
       }));
       if (action === 'apply') await onScheduleApplied?.();
     } catch (err) {
@@ -663,6 +678,7 @@ export default function AiPanel({
             {visibleMessages.map((m) => (
               <div key={m.key} className={`ai-bubble ai-bubble-${m.role.toLowerCase()}`}>
                 <p>{m.content}{m.streaming && <span className="ai-cursor" aria-hidden="true" />}</p>
+                {m.systemNote && <p className="ai-system-note">{m.systemNote}</p>}
               </div>
             ))}
 

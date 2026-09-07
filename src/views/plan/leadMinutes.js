@@ -24,3 +24,12 @@ export function parseCustomMinutes(text) {
   if (!Number.isInteger(value) || value < 0 || value > LEAD_MINUTES_MAX) return null;
   return value;
 }
+
+/** 60 → "1시간", 90 → "1시간 30분", 0 → "없음" */
+export function formatLeadMinutes(minutes) {
+  if (minutes == null) return '';
+  if (minutes === 0) return '없음';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return [h > 0 ? `${h}시간` : '', m > 0 ? `${m}분` : ''].filter(Boolean).join(' ');
+}
