@@ -1925,3 +1925,54 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .ai-quick-replies { display: flex; flex-wrap: wrap; gap: 6px; }
 .ai-offer { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .plan-summary-capped { color: var(--ws-text-dim); }
+
+/* ===== 생성 시 참고한 정보 / 항목별 근거 =====
+ *
+ * 근거는 계획을 읽는 데 필요한 것이 아니라 의심이 들 때 여는 것이다. 그래서 접힌 상태의
+ * 무게를 조각 목록보다 가볍게 두고, 펼친 뒤에는 본문을 읽을 수 있는 크기로 키운다.
+ *
+ * 펼쳐도 페이지를 통째로 밀지 않는다 — 출처가 수십 줄인 회차가 정상이고, 그때 아래
+ * 조각 목록이 화면 밖으로 사라지면 "무엇을 확정하는 중이었는지"를 잃는다.
+ */
+.plan-provenance { margin: 6px 0; }
+.plan-provenance-body {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px 4px 6px 20px;
+  font-size: 14px;
+  color: var(--ws-text);
+}
+.plan-provenance-note { margin: 0 0 4px; font-size: 13px; color: var(--ws-text-dim); }
+.plan-provenance-group { margin-top: 10px; }
+.plan-provenance-group h4 { margin: 0 0 4px; font-size: 13px; color: var(--ws-text-dim); font-weight: 600; }
+.plan-provenance-group ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 6px; }
+/* 버튼이 줄 전체를 차지하면 원본 값보다 링크가 무거워 보인다. */
+.plan-provenance-source { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.plan-provenance-source-value { font-size: 14px; color: var(--ws-text); }
+.plan-provenance-source-nolink { color: var(--ws-text-faint); }
+.plan-provenance-calc { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.plan-provenance-calc-name { font-size: 13px; font-weight: 600; }
+.plan-provenance-calc-result { font-size: 14px; }
+
+.plan-evidence { margin: 4px 0 0 24px; }
+.plan-evidence-toggle { display: inline-flex; align-items: center; gap: 4px; }
+.plan-evidence-flag {
+  margin-left: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--ws-text-dim);
+}
+.plan-evidence-body {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px 4px 6px 16px;
+  font-size: 14px;
+}
+.plan-evidence-body h5 { margin: 8px 0 2px; font-size: 13px; color: var(--ws-text-dim); font-weight: 600; }
+.plan-evidence-body ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.plan-evidence-stale { margin: 0 0 4px; font-size: 13px; color: var(--ws-warn, #b45309); }
+.plan-evidence-dropped { margin: 4px 0 0; font-size: 13px; color: var(--ws-warn, #b45309); }
+.plan-evidence-reason { margin: 0; font-size: 14px; }
+.plan-evidence-loaded { padding-left: 16px; }

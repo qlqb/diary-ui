@@ -41,6 +41,56 @@ export const FAMILIARITY_CHOICE = {
 /** 선택지를 못 알아보면 저장할 것이 없는 쪽으로 보낸다 — 없는 사실을 만들지 않는다. */
 export const FALLBACK_FAMILIARITY_CHOICE = 'FIRST_TIME';
 
+/**
+ * 생성 회차에 모델로 나간 원본의 종류.
+ *
+ * ★ "검증됨"류의 말을 쓰지 않는다. 여기 있는 것은 "이 정보를 AI에게 줬다"는 사실일 뿐,
+ * AI가 그것을 제대로 반영했다는 뜻도 제약을 다 지켰다는 뜻도 아니다.
+ */
+export const PROVENANCE_SOURCE_LABEL = {
+  COURSE: '프로젝트',
+  TOPIC: '학습 항목',
+  COURSE_NOTE: '평가 안내',
+  MATERIAL_KEY_DATE: '자료에서 읽은 일정',
+  ROUTINE_OCCURRENCE: '반복 일정',
+  COMMITMENT: '약속',
+  EXECUTION_ITEM_FIXED: '시각이 정해진 일정',
+  EXECUTION_ITEM_PLANNED: '이 기간에 있던 일정',
+  USER_CONTEXT: '확인된 이야기',
+  PLAN_REVIEW: '직전 계획 돌아보기',
+  TURN_INPUT: '이번에 직접 말한 것',
+};
+
+/** 원본을 어떤 모양으로 줬는가. "원본 전체"로 오해하지 않게 하는 값이다. */
+export const PROVENANCE_REPRESENTATION_LABEL = {
+  SELECTED_FIELDS: '필요한 항목만 골라서',
+  SUMMARY_LINE: '여러 건을 한 줄로 요약해서',
+  EXCERPT: '적어 준 문장 그대로',
+};
+
+/** 서버가 실제로 계산한 것. AI의 추정과 같은 자리에 두지 않는다. */
+export const SERVER_CALCULATION_LABEL = {
+  AVAILABILITY_ESTIMATE: '남는 시간 추정',
+  STUDY_BUDGET: '학습 예산',
+};
+
+/**
+ * 이 계산의 입력이 전부 남아 있는가.
+ *
+ * 일부만 남은 것을 "그대로 다시 계산할 수 있음"으로 말하지 않는다.
+ */
+export const INPUT_LINEAGE_LABEL = {
+  COMPLETE: '이 계산에 들어간 입력이 전부 남아 있어요',
+  PARTIAL: '입력 일부만 가리킬 수 있어요',
+};
+
+/** 근거가 지금도 이 항목을 설명하는가. 그대로면 아무 말도 하지 않는다. */
+export const EVIDENCE_STATUS_LABEL = {
+  CURRENT: null,
+  EDITED_BY_USER: '수정 전 제안의 근거',
+  NEEDS_REVIEW: '다시 볼 근거',
+};
+
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 /**

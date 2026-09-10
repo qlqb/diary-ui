@@ -26,11 +26,13 @@ import {
   ACTION_TYPE_LABEL, PRIORITY_LABEL, TREATMENT_LABEL, formatDeadline, formatEstimate,
 } from '../../lib/planLabels.js';
 import PlanStrategyPanel from './PlanStrategyPanel.jsx';
+import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function PlanDraftReview({
   draft, projectTitles = {}, todayIso, onConfirmed, onDiscard, discardLabel = '다시 만들기', onOpenSchedule,
+  onOpenSource,
 }) {
   const [excluded, setExcluded] = useState(() => new Set());
   const [collapsed, setCollapsed] = useState(() => initialCollapsed(draft, projectTitles, todayIso));
@@ -47,6 +49,13 @@ export default function PlanDraftReview({
   const [regenerated, setRegenerated] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [toast, setToast] = useState(null);
+  /*
+   * 생성 시 참고한 정보. 회차마다 하나뿐이라 초안당 한 번만 부르고 항목들이 나눠 쓴다 —
+   * 항목마다 부르면 같은 스냅샷을 조각 수만큼 받아 온다.
+   */
+  const [provenance, setProvenance] = useState(null);
+  const [provenanceLoading, setProvenanceLoading] = useState(false);
+  const [provenanceError, setProvenanceError] = useState(null);
 
   const current = regenerated ?? draft;
   const strategy = current?.strategy ?? null;
@@ -73,7 +82,33 @@ export default function PlanDraftReview({
     return () => { cancelled = true; };
   }, [proposalId, noAvailableTime]);
 
+  /*
+   * 재생성하면 proposalId가 바뀌고 회차도 바뀐다. 옛 스냅샷을 들고 있으면 새 항목의
+   * refId가 어디에도 안 맞아 "근거 없음"으로 보인다.
+   */
+  useEffect(() => {
+    // 이웃한 미리보기 호출과 같은 방어다 — planAPI를 부분만 모킹한 테스트에서
+    // 이 화면 전체가 죽지 않게 한다.
+    if (!proposalId || !planAPI?.draftProvenance) return undefined;
+    let cancelled = false;
+    setProvenance(null);
+    setProvenanceError(null);
+    setProvenanceLoading(true);
+    planAPI.draftProvenance(proposalId)
+      .then((loaded) => { if (!cancelled) setProvenance(loaded); })
+      .catch((err) => { if (!cancelled) setProvenanceError(err.message || '참고한 정보를 불러오지 못했어요.'); })
+      .finally(() => { if (!cancelled) setProvenanceLoading(false); });
+    return () => { cancelled = true; };
+  }, [proposalId]);
+
   const items = useMemo(() => current?.proposal?.items ?? [], [current]);
+
+  /** 항목 하나의 근거. 서버가 제안 항목 id로 내려주므로 화면이 제목으로 짝짓지 않는다. */
+  const evidenceByItem = useMemo(() => {
+    const map = new Map();
+    (provenance?.items ?? []).forEach((one) => map.set(one.proposalItemId, one));
+    return map;
+  }, [provenance]);
 
   /** 조각의 취급은 판단에 있다. 복사하지 않고 topicId로 이어 붙인다. */
   const treatmentByTopic = useMemo(() => {
@@ -239,6 +274,17 @@ export default function PlanDraftReview({
       {/* 판단은 조각보다 먼저 온다. 무엇을 하는지보다 왜 그렇게 보는지가 먼저 읽혀야 한다. */}
       <PlanStrategyPanel strategy={strategy} projectTitles={projectTitles} />
 
+      {/*
+        판단 다음에 온다. "이렇게 봤어요"가 결론이고 이쪽은 그 결론 이전에 무엇을 봤는지다.
+        둘을 한 패널로 합치지 않는다 — 준 정보와 내린 판단은 같은 것이 아니다.
+      */}
+      <PlanProvenancePanel
+        provenance={provenance}
+        loading={provenanceLoading}
+        error={provenanceError}
+        onOpenSource={onOpenSource}
+      />
+
       {toast && (
         <p className="plan-toast" role="status">
           {toast.message}
@@ -277,6 +323,9 @@ export default function PlanDraftReview({
           classAtByCourse={classAtByCourse}
           onMarkKnown={markKnown}
           busy={regenerating}
+          provenance={provenance}
+          evidenceByItem={evidenceByItem}
+          onOpenSource={onOpenSource}
           onToggleCollapse={() => setCollapsed((prev) => {
             const next = new Set(prev);
             if (next.has(group.key)) next.delete(group.key);
@@ -382,7 +431,7 @@ function TimeGauge({ selectedMinutes, targetMinutes, intensity }) {
 
 function PlanDraftGroup({
   group, excluded, collapsed, placedById, unplacedById, previewLoaded, onToggleCollapse, onToggleItem, onToggleGroup,
-  treatmentByTopic, classAtByCourse, onMarkKnown, busy,
+  treatmentByTopic, classAtByCourse, onMarkKnown, busy, provenance, evidenceByItem, onOpenSource,
 }) {
   const groupMinutes = group.items
     .filter((item) => !excluded.has(item.proposalItemId))
@@ -474,6 +523,18 @@ function PlanDraftGroup({
                 unplaced={unplacedById.get(item.proposalItemId)}
                 previewLoaded={previewLoaded}
               />
+
+              {/*
+                근거는 접어 둔다. 조각 목록은 훑어보는 화면이고, 근거는 하나가 의심스러울
+                때 그 하나만 여는 것이다. 펼쳐 두면 목록을 훑을 수 없게 된다.
+              */}
+              {evidenceByItem?.has(item.proposalItemId) && (
+                <ItemEvidence
+                  provenance={provenance}
+                  item={evidenceByItem.get(item.proposalItemId)}
+                  onOpenSource={onOpenSource}
+                />
+              )}
             </li>
           ))}
         </ul>

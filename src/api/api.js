@@ -1293,6 +1293,17 @@ export const planAPI = {
         return (data ?? []).map(toFrontendExecutionItem);
     },
 
+    /**
+     * 이 초안을 만들 때 AI에게 준 정보와 항목별 근거.
+     *
+     * 기록이 없어도 200이고 recorded=false다 — 출처가 없는 것은 오류가 아니라 사실이고,
+     * 404로 만들면 화면이 "불러오지 못했어요"라고 잘못 말하게 된다.
+     */
+    draftProvenance: (proposalId) => request(`/plans/drafts/${proposalId}/provenance`),
+
+    /** 적용된 실행 조각의 근거. 초안 경로와 같은 응답 모양이다. */
+    itemProvenance: (executionItemId) => request(`/plans/items/${executionItemId}/provenance`),
+
     review: (planVersionId) => request(`/plans/${planVersionId}/review`),
 
     /**

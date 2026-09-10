@@ -223,6 +223,30 @@ export default function MainShell({ user, onLogout }) {
   );
   const scope = resolveScope(tab, openProject);
 
+  /**
+   * 근거 화면에서 "지금 원본 보기"를 눌렀을 때 어디로 갈 것인가.
+   *
+   * ★ 라벨이 약속한 곳으로만 보낸다. 학습 항목 단건으로 바로 가는 경로가 아직 없어서
+   * 그 항목이 있는 프로젝트를 열고, 화면도 "프로젝트에서 보기"라고 말한다. 갈 곳이 없는
+   * 종류는 여기서 아무것도 하지 않고 근거 화면이 버튼을 아예 그리지 않는다 —
+   * 눌러도 안 되는 버튼이 깨진 링크다.
+   */
+  const openSource = useCallback((target, targetId, providedValue) => {
+    if (target === 'COURSE' && targetId != null) {
+      setTab('projects');
+      setOpenProjectId(targetId);
+      return;
+    }
+    if (target === 'TOPIC' && providedValue?.courseId != null) {
+      setTab('projects');
+      setOpenProjectId(providedValue.courseId);
+      return;
+    }
+    if (target === 'ROUTINE' || target === 'COMMITMENT' || target === 'EXECUTION_ITEM') {
+      setTab('schedule');
+    }
+  }, []);
+
   const ask = useCallback((text) => {
     setAiOpen(true);
     setPrefill({ text, nonce: Date.now() });
@@ -318,6 +342,7 @@ export default function MainShell({ user, onLogout }) {
         <div className="workspace-scroll">
           {tab === 'today' && (
             <TodayView
+              onOpenSource={openSource}
               items={todayItems}
               occurrences={todayOccurrences}
               commitments={todayCommitments}
@@ -351,6 +376,7 @@ export default function MainShell({ user, onLogout }) {
 
           {tab === 'plan' && !openPlanId && (
             <PlanCreateView
+              onOpenSource={openSource}
               projectTitles={projectTitles}
               scopeCourseId={planScopeCourseId}
               onClearScope={() => setPlanScopeCourseId(null)}
@@ -368,6 +394,7 @@ export default function MainShell({ user, onLogout }) {
 
           {tab === 'plan' && openPlanId && (
             <PlanView
+              onOpenSource={openSource}
               planVersionId={openPlanId}
               projectTitles={projectTitles}
               onBack={() => setOpenPlanId(null)}

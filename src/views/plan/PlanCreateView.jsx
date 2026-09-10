@@ -21,7 +21,7 @@ const MAX_PLAN_DAYS = 31;
 
 export default function PlanCreateView({
   projectTitles = {}, scopeCourseId = null, onClearScope, onConfirmed, onCancel,
-  initialDraft = null, onInitialDraftCleared, onOpenSchedule,
+  initialDraft = null, onInitialDraftCleared, onOpenSchedule, onOpenSource,
 }) {
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const presets = useMemo(() => periodPresets(todayIso), [todayIso]);
@@ -212,6 +212,7 @@ export default function PlanCreateView({
           onDiscard={clearDraft}
           discardLabel={fromAi ? '이 초안 버리기' : '다시 만들기'}
           onOpenSchedule={onOpenSchedule}
+          onOpenSource={onOpenSource}
         />
       )}
     </section>

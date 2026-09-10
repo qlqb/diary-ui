@@ -29,7 +29,7 @@ import { executionItemAPI } from '../api/api.js';
 
 export default function TodayView({
   items, occurrences, commitments, loading, error, notice, onRefresh, projectTitles,
-  draft, onPatchCard, onToggleExclude, onOpenAi, onAsk, onItemDeleted,
+  draft, onPatchCard, onToggleExclude, onOpenAi, onAsk, onItemDeleted, onOpenSource,
 }) {
   const today = todayString();
   const [busyId, setBusyId] = useState(null);
@@ -175,6 +175,7 @@ export default function TodayView({
     onToggleExclude,
     onAction: handleAction,
     busyId,
+    onOpenSource,
   };
 
   const showOverdueCta = overdue.length > 0 && !dismissedOverdue && !rescheduling;
@@ -404,11 +405,14 @@ export default function TodayView({
 }
 
 /** 초안 겹치기와 프로젝트 이름표를 붙여 ExecutionRow를 그린다. */
-function Row({ item, projectTitles, draft, onPatchCard, onToggleExclude, onAction, busyId, highlight, compact }) {
+function Row({
+  item, projectTitles, draft, onPatchCard, onToggleExclude, onAction, busyId, highlight, compact, onOpenSource,
+}) {
   const adjustment = adjustmentFor(draft, item.executionItemId);
   return (
     <div className={highlight ? 'focus-slot' : undefined}>
       <ExecutionRow
+        onOpenSource={onOpenSource}
         item={item}
         projectTitle={item.courseId ? projectTitles?.[item.courseId] : null}
         adjustment={adjustment}

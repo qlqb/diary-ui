@@ -14,6 +14,7 @@ import { Clock, Sparkles, Check, X, RotateCcw, Trash2 } from 'lucide-react';
 import {
   ceilToStep, clampToDay, formatDateShort, formatMinutes, hhmmOf, minutesOf, nowMinutes, shiftDate, todayString,
 } from '../lib/datetime.js';
+import ExecutionItemEvidence from '../views/plan/ExecutionItemEvidence.jsx';
 
 const PRIORITY_LABEL = { MUST: '꼭', SHOULD: '하면 좋음', OPTIONAL: '여유 있으면' };
 const STATUS_LABEL = { PLANNED: '', DONE: '완료', HOLD: '보류', CANCELLED: '취소', PARTIAL: '일부' };
@@ -122,6 +123,7 @@ export default function ExecutionRow({
   onAction,
   busy,
   compact,
+  onOpenSource,
 }) {
   const [tray, setTray] = useState(null); // null | 'complete' | 'partial' | 'reduce' | 'move'
   const [reduceMinutes, setReduceMinutes] = useState(item.estimatedMinutes ?? 30);
@@ -263,6 +265,18 @@ export default function ExecutionRow({
 
         {adjustment?.reason && !adjustment.excluded && (
           <p className="exec-row-reason">{adjustment.reason}</p>
+        )}
+
+        {/*
+          계획에서 온 조각이면 "이건 왜 여기 있나"를 이 줄에서 바로 열 수 있다. 초안
+          화면으로 되돌아가지 않아도 같은 근거를 본다 — 같은 사실을 화면마다 복제하지
+          않으려고 서버의 같은 응답을 쓴다. 펼칠 때만 불러온다.
+        */}
+        {item.executionItemId != null && (
+          <ExecutionItemEvidence
+            executionItemId={item.executionItemId}
+            onOpenSource={onOpenSource}
+          />
         )}
       </div>
 

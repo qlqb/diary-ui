@@ -15,8 +15,9 @@ import {
   PLAN_INTENSITY_LABEL, PLAN_REVIEW_CATEGORY_LABEL, PLAN_REVIEW_MOVE_FLAG_LABEL,
 } from '../../types/execution.js';
 import { addDays, formatDateKo, formatMinutes, formatMinutesKo, toIsoDate } from '../../lib/planTime.js';
+import ExecutionItemEvidence from './ExecutionItemEvidence.jsx';
 
-export default function PlanView({ planVersionId, projectTitles = {}, onBack, onChanged }) {
+export default function PlanView({ planVersionId, projectTitles = {}, onBack, onChanged, onOpenSource }) {
   const [plan, setPlan] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +151,14 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
                 onClick={() => handleUnschedule(item)}>
                 날짜 떼기
               </button>
+              {/*
+                확정 이후에도 같은 근거를 본다. 확정할 때 값을 고쳤으면 그 사실이 함께
+                뜬다 — 고친 뒤에도 원래 근거만 보이면 AI가 그 값을 냈다고 오해한다.
+              */}
+              <ExecutionItemEvidence
+                executionItemId={item.executionItemId}
+                onOpenSource={onOpenSource}
+              />
             </li>
           ))}
         </ul>
@@ -166,6 +175,10 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
                 {item.estimatedMinutes != null && <>{item.estimatedMinutes}분</>}
                 {item.courseId != null && projectTitles[item.courseId] && <> · {projectTitles[item.courseId]}</>}
               </span>
+              <ExecutionItemEvidence
+                executionItemId={item.executionItemId}
+                onOpenSource={onOpenSource}
+              />
             </li>
           ))}
         </ul>
