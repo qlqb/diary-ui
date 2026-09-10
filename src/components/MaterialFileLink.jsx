@@ -12,6 +12,9 @@
  *
  * 팝업 차단 때문에 새 탭은 클릭 즉시(await 전에) 연다. 나중에 열면 사용자 조작과 끊긴
  * 것으로 보여 차단된다. 차단됐거나 창을 얻지 못하면 조용히 내려받기로 넘어간다.
+ *
+ * 새 탭으로 열므로 이 화면의 상태(초안 선택·수정값·스크롤)는 그대로다 — 원문을 보러 갔다
+ * 돌아와도 검토를 이어 간다.
  */
 
 import { useState } from 'react';
@@ -29,14 +32,19 @@ function isPdfMaterial(filename, contentType) {
   return String(filename ?? '').toLowerCase().endsWith('.pdf');
 }
 
+/**
+ * @param label   버튼 문구를 바꿀 때. 기본은 "PDF 열기" / "파일 내려받기"다. 바꿔 쓰는 쪽도
+ *                실제로 일어나는 일(열기 / 내려받기)과 어긋나지 않게 고른다
+ * @param onError 파일을 열지 못했을 때. 근거 화면이 캐시를 비우고 상태를 다시 읽는 데 쓴다
+ */
 export default function MaterialFileLink({
-  materialId, filename, contentType, disabled = false,
+  materialId, filename, contentType, disabled = false, label = null, onError = null,
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   const pdf = isPdfMaterial(filename, contentType);
-  const label = pdf ? 'PDF 열기' : '파일 내려받기';
+  const text = label ?? (pdf ? 'PDF 열기' : '파일 내려받기');
 
   const open = async () => {
     setBusy(true);
@@ -61,6 +69,7 @@ export default function MaterialFileLink({
     } catch (err) {
       tab?.close();
       setError(err.message || '파일을 열지 못했어요.');
+      onError?.(err);
     } finally {
       setBusy(false);
     }
@@ -77,13 +86,13 @@ export default function MaterialFileLink({
         type="button"
         className="btn-ghost btn-sm"
         disabled={disabled || busy}
-        aria-label={`${label} — ${filename ?? '자료'}`}
+        aria-label={`${text} — ${filename ?? '자료'}`}
         onClick={open}
       >
         {busy
           ? <Loader2 size={13} className="spin" />
           : (pdf ? <ExternalLink size={13} /> : <Download size={13} />)}
-        {label}
+        {text}
       </button>
       {error && <span className="material-file-error">{error}</span>}
     </>

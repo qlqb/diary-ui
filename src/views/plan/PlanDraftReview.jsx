@@ -86,6 +86,7 @@ export default function PlanDraftReview({
    * 재생성하면 proposalId가 바뀌고 회차도 바뀐다. 옛 스냅샷을 들고 있으면 새 항목의
    * refId가 어디에도 안 맞아 "근거 없음"으로 보인다.
    */
+  const [provenanceReload, setProvenanceReload] = useState(0);
   useEffect(() => {
     // 이웃한 미리보기 호출과 같은 방어다 — planAPI를 부분만 모킹한 테스트에서
     // 이 화면 전체가 죽지 않게 한다.
@@ -99,7 +100,12 @@ export default function PlanDraftReview({
       .catch((err) => { if (!cancelled) setProvenanceError(err.message || '참고한 정보를 불러오지 못했어요.'); })
       .finally(() => { if (!cancelled) setProvenanceLoading(false); });
     return () => { cancelled = true; };
-  }, [proposalId]);
+  }, [proposalId, provenanceReload]);
+  /*
+   * 다시 읽어야 할 때: 요청이 안 됐거나, 원본 파일을 열지 못했을 때(지워짐·변경됨을 새로
+   * 판단해야 한다). 검토 상태(제외·제목)는 건드리지 않는다.
+   */
+  const reloadProvenance = useCallback(() => setProvenanceReload((v) => v + 1), []);
 
   const items = useMemo(() => current?.proposal?.items ?? [], [current]);
 
@@ -223,7 +229,21 @@ export default function PlanDraftReview({
       });
       onConfirmed?.(plan);
     } catch (err) {
-      setError(err.message || '확정하지 못했습니다.');
+      /*
+       * 미리보기 이후 일정이 바뀌어 겹치는 항목이 있으면 서버가 전체를 거절한다(E409_016).
+       * 시각을 다시 계산해 보여주고 사용자가 다시 확정하게 한다 — 겹친 항목만 빼고 조용히
+       * 확정하지 않는다. 선택·제목·제외는 그대로 둔다.
+       */
+      if (err.code === 'E409_016' && schedulePreviewAPI?.recompute) {
+        setError('미리보기 이후 일정이 바뀌어 겹치는 항목이 있어요. 시각을 다시 계산했으니 확인하고 다시 확정해 주세요.');
+        try {
+          setPreview((await schedulePreviewAPI.recompute(proposalId, {})) ?? null);
+        } catch {
+          setPreviewNote('정확한 시각 미리보기를 다시 계산하지 못했어요.');
+        }
+      } else {
+        setError(err.message || '확정하지 못했습니다.');
+      }
       setConfirming(false);
     }
   };
@@ -283,6 +303,7 @@ export default function PlanDraftReview({
         loading={provenanceLoading}
         error={provenanceError}
         onOpenSource={onOpenSource}
+        onRetry={reloadProvenance}
       />
 
       {toast && (
@@ -324,8 +345,12 @@ export default function PlanDraftReview({
           onMarkKnown={markKnown}
           busy={regenerating}
           provenance={provenance}
+          provenanceLoading={provenanceLoading}
+          provenanceError={provenanceError}
+          onReloadProvenance={reloadProvenance}
           evidenceByItem={evidenceByItem}
           onOpenSource={onOpenSource}
+          projectTitles={projectTitles}
           onToggleCollapse={() => setCollapsed((prev) => {
             const next = new Set(prev);
             if (next.has(group.key)) next.delete(group.key);
@@ -431,7 +456,8 @@ function TimeGauge({ selectedMinutes, targetMinutes, intensity }) {
 
 function PlanDraftGroup({
   group, excluded, collapsed, placedById, unplacedById, previewLoaded, onToggleCollapse, onToggleItem, onToggleGroup,
-  treatmentByTopic, classAtByCourse, onMarkKnown, busy, provenance, evidenceByItem, onOpenSource,
+  treatmentByTopic, classAtByCourse, onMarkKnown, busy, provenance, provenanceLoading, provenanceError,
+  onReloadProvenance, evidenceByItem, onOpenSource, projectTitles,
 }) {
   const groupMinutes = group.items
     .filter((item) => !excluded.has(item.proposalItemId))
@@ -533,7 +559,23 @@ function PlanDraftGroup({
                   provenance={provenance}
                   item={evidenceByItem.get(item.proposalItemId)}
                   onOpenSource={onOpenSource}
+                  projectTitles={projectTitles}
+                  onMaterialOpenError={onReloadProvenance}
                 />
+              )}
+              {/*
+                아직 불러오는 중이거나 못 불러온 것은 "근거 없음"이 아니다. 같은 자리에서
+                상태를 말하고, 못 불러왔으면 다시 시도할 수 있게 한다.
+              */}
+              {!evidenceByItem?.has(item.proposalItemId) && provenanceLoading && (
+                <p className="plan-evidence plan-evidence-pending hint">근거를 불러오는 중…</p>
+              )}
+              {!evidenceByItem?.has(item.proposalItemId) && !provenanceLoading && provenanceError && (
+                <p className="plan-evidence plan-evidence-pending error-text">
+                  근거를 불러오지 못했어요.
+                  {' '}
+                  <button type="button" className="btn-ghost btn-sm" onClick={onReloadProvenance}>다시 시도</button>
+                </p>
               )}
             </li>
           ))}

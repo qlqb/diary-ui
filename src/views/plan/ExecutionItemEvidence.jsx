@@ -17,11 +17,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { planAPI } from '../../api/api.js';
 import { EVIDENCE_STATUS_LABEL } from '../../lib/planLabels.js';
-import { evidenceCacheKey, getCachedEvidence, rememberEvidence } from '../../lib/evidenceCache.js';
+import { evidenceCacheKey, forgetItemEvidence, getCachedEvidence, rememberEvidence } from '../../lib/evidenceCache.js';
 import PlanProvenancePanel, { EvidenceBody } from './PlanProvenance.jsx';
 
 export default function ExecutionItemEvidence({
-  executionItemId, version = null, onOpenSource, label = '근거 보기',
+  executionItemId, version = null, onOpenSource, label = '근거 보기', projectTitles = {},
 }) {
   const [open, setOpen] = useState(false);
   const [provenance, setProvenance] = useState(null);
@@ -80,6 +80,17 @@ export default function ExecutionItemEvidence({
     load(key);
   }, [key, load]);
 
+  /*
+   * 원본 파일을 열지 못했다면 들고 있던 상태(열 수 있음)가 더는 맞지 않을 수 있다. 캐시를
+   * 비우고 다시 읽어 지워짐·변경됨을 새로 판단한다.
+   */
+  const materialOpenFailed = useCallback(() => {
+    forgetItemEvidence(executionItemId);
+    setProvenance(null);
+    requestKey.current = key;
+    load(key);
+  }, [executionItemId, key, load]);
+
   // 응답의 items는 이 조각을 만든 제안 항목 하나뿐이다.
   const item = provenance?.items?.[0] ?? null;
   const statusLabel = EVIDENCE_STATUS_LABEL[item?.evidenceStatus] ?? null;
@@ -113,10 +124,16 @@ export default function ExecutionItemEvidence({
             <p className="muted">이 항목에는 생성 당시 출처 기록이 없어요.</p>
           )}
           {!loading && !error && provenance && item && (
-            <>
-              <EvidenceBody provenance={provenance} item={item} onOpenSource={onOpenSource} />
+            <EvidenceBody
+              provenance={provenance}
+              item={item}
+              onOpenSource={onOpenSource}
+              projectTitles={projectTitles}
+              onMaterialOpenError={materialOpenFailed}
+            >
+              {/* 회차 전체 정보는 긴 기록이라 상세 안에만 둔다. */}
               <PlanProvenancePanel provenance={provenance} onOpenSource={onOpenSource} />
-            </>
+            </EvidenceBody>
           )}
         </div>
       )}
