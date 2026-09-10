@@ -206,6 +206,13 @@ export function EvidenceBody({ provenance, item, onOpenSource }) {
           {item?.recorded && (item.staleReasons ?? []).map((reason) => (
             <p key={reason} className="plan-evidence-stale">{reason}</p>
           ))}
+          {/*
+            적용된 뒤 사용자가 옮기거나 줄인 것. 근거 자체는 그대로이고, 지금 보이는 배치·분량이
+            그때 제안과 다르다는 뜻이다. 숨기면 사용자는 자기가 정한 시각을 AI가 낸 것으로 읽는다.
+          */}
+          {(item?.afterApplyChanges ?? []).map((change) => (
+            <p key={change} className="plan-evidence-stale">{change}</p>
+          ))}
 
           {item?.recorded && (
             <>

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import process from 'node:process';
 import {
   ACTION_TYPE_LABEL, PRIORITY_LABEL, TREATMENT_LABEL,
 } from '../../lib/planLabels.js';

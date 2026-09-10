@@ -157,6 +157,7 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
               */}
               <ExecutionItemEvidence
                 executionItemId={item.executionItemId}
+                version={item.version}
                 onOpenSource={onOpenSource}
               />
             </li>
@@ -177,6 +178,7 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
               </span>
               <ExecutionItemEvidence
                 executionItemId={item.executionItemId}
+                version={item.version}
                 onOpenSource={onOpenSource}
               />
             </li>

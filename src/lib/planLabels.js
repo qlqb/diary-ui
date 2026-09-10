@@ -23,6 +23,19 @@ export const TREATMENT_LABEL = {
   REVIEW: '복습',
 };
 
+/**
+ * 조각 하나에 붙일 취급 문구. 판단에 없는 항목이면 아무것도 붙이지 않는다.
+ *
+ * 컴포넌트 파일이 아니라 여기 있는 이유: 컴포넌트 파일이 함수를 함께 내보내면 Fast Refresh가
+ * 그 파일 전체를 새로 그려 편집 상태를 잃고, lint(react-refresh/only-export-components)가
+ * 그것을 막는다.
+ */
+export function treatmentLabelOf(strategy, topicId) {
+  if (!strategy || topicId == null) return null;
+  const found = (strategy.topics ?? []).find((t) => t.topicId === topicId);
+  return found ? (TREATMENT_LABEL[found.treatment] ?? null) : null;
+}
+
 /** 앉아서 실제로 하는 행동. */
 export const ACTION_TYPE_LABEL = {
   READ: '읽기',

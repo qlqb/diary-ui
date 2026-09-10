@@ -275,6 +275,7 @@ export default function ExecutionRow({
         {item.executionItemId != null && (
           <ExecutionItemEvidence
             executionItemId={item.executionItemId}
+            version={item.version}
             onOpenSource={onOpenSource}
           />
         )}

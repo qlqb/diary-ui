@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PlanDraftReview from './PlanDraftReview.jsx';
 import ExecutionItemEvidence from './ExecutionItemEvidence.jsx';
+import { forgetItemEvidence } from '../../lib/evidenceCache.js';
 import { planAPI, schedulePreviewAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
@@ -185,18 +186,62 @@ describe('항목별 근거', () => {
 });
 
 describe('적용된 항목의 근거', () => {
+  beforeEach(() => forgetItemEvidence());
+
   it('펼칠 때만 불러오고, 같은 회차의 근거를 보여준다', async () => {
     const user = userEvent.setup();
-    render(<ExecutionItemEvidence executionItemId={501} />);
+    render(<ExecutionItemEvidence executionItemId={501} version={1} />);
 
     // 목록에 수십 개가 있어도 열기 전에는 요청하지 않는다.
     expect(planAPI.itemProvenance).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: /이건 왜 여기 있나요/ }));
+    await user.click(screen.getByRole('button', { name: /근거 보기/ }));
 
     await waitFor(() => expect(planAPI.itemProvenance).toHaveBeenCalledWith(501));
     expect(await screen.findByText('근거로 연결한 정보')).toBeInTheDocument();
     // 항목 근거 아래에 회차 전체 정보도 함께 열 수 있다.
     expect(screen.getByRole('button', { name: /생성 시 참고한 정보/ })).toBeInTheDocument();
+  });
+
+  /**
+   * 옮기거나 줄이면 조각의 version이 오른다. 그때 옛 응답을 계속 보여주면 "적용 후 바뀜"
+   * 표식이 뜨지 않아 사용자가 지금 배치를 AI가 낸 것으로 읽는다.
+   */
+  it('조각이 바뀌면(version) 옛 응답을 버리고 다시 불러와 적용 후 바뀜을 보여준다', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ExecutionItemEvidence executionItemId={501} version={1} />);
+    await user.click(screen.getByRole('button', { name: /근거 보기/ }));
+    await waitFor(() => expect(planAPI.itemProvenance).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('적용 후 바뀜')).not.toBeInTheDocument();
+
+    planAPI.itemProvenance.mockResolvedValue({
+      ...PROVENANCE,
+      items: [{ ...PROVENANCE.items[0], afterApplyChanges: ['적용한 뒤 분량을 줄였어요. 아래는 줄이기 전 제안의 근거예요.'] }],
+    });
+    rerender(<ExecutionItemEvidence executionItemId={501} version={2} />);
+
+    await waitFor(() => expect(planAPI.itemProvenance).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('적용 후 바뀜')).toBeInTheDocument();
+    expect(screen.getByText(/적용한 뒤 분량을 줄였어요/)).toBeInTheDocument();
+    // 근거 자체는 그대로 보인다.
+    expect(screen.getByText(/재귀 \(2주차\)/)).toBeInTheDocument();
+  });
+
+  it('같은 조각·같은 version은 다시 부르지 않고, 실패한 요청은 다시 시도할 수 있다', async () => {
+    const user = userEvent.setup();
+    planAPI.itemProvenance.mockRejectedValueOnce(new Error('네트워크가 끊겼어요'));
+    render(<ExecutionItemEvidence executionItemId={502} version={3} />);
+    await user.click(screen.getByRole('button', { name: /근거 보기/ }));
+    expect(await screen.findByText(/네트워크가 끊겼어요/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /다시 시도/ }));
+    expect(await screen.findByText('근거로 연결한 정보')).toBeInTheDocument();
+    expect(planAPI.itemProvenance).toHaveBeenCalledTimes(2);
+
+    // 닫았다 열어도, 다른 화면에서 같은 조각을 열어도 다시 부르지 않는다.
+    await user.click(screen.getByRole('button', { name: /근거 보기/ }));
+    await user.click(screen.getByRole('button', { name: /근거 보기/ }));
+    render(<ExecutionItemEvidence executionItemId={502} version={3} />);
+    expect(planAPI.itemProvenance).toHaveBeenCalledTimes(2);
   });
 });

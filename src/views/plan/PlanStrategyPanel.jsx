@@ -105,10 +105,3 @@ export default function PlanStrategyPanel({ strategy, projectTitles = {} }) {
     </section>
   );
 }
-
-/** 조각 하나에 붙일 취급 문구. 판단에 없는 항목이면 아무것도 붙이지 않는다. */
-export function treatmentLabelOf(strategy, topicId) {
-  if (!strategy || topicId == null) return null;
-  const found = (strategy.topics ?? []).find((t) => t.topicId === topicId);
-  return found ? (TREATMENT_LABEL[found.treatment] ?? null) : null;
-}
