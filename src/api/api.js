@@ -125,6 +125,40 @@ async function requestMultipart(url, formData) {
 }
 
 /**
+ * 파일 본문을 그대로 받는 요청. 자료 원본 열기가 쓴다.
+ *
+ * 파일 주소를 <a href>로 바로 걸 수 없어서 이 경로가 필요하다 — 인증이 Authorization
+ * 헤더의 Bearer 토큰이라 브라우저가 스스로 여는 요청에는 실리지 않는다. 토큰을 쿼리
+ * 문자열에 붙이는 방식은 쓰지 않는다(주소를 복사하는 순간 토큰이 같이 나간다).
+ *
+ * 실패 응답은 JSON이므로 request()와 같은 모양의 Error를 만들어 던진다.
+ */
+async function requestBlob(url) {
+    const token = getToken();
+    const headers = {};
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${url}`, { headers });
+
+    if (!response.ok) {
+        let data = null;
+        try {
+            data = await response.json();
+        } catch {
+            data = null;
+        }
+        const error = new Error(data?.message || data?.error || `요청 실패: ${response.status}`);
+        error.status = response.status;
+        error.code = data?.code ?? null;
+        throw error;
+    }
+
+    return response.blob();
+}
+
+/**
  * SSE(POST) 스트리밍 요청. AI 상담 대화 전용.
  *
  * 백엔드는 event: <name>\ndata: <json>\n\n 형식의 SSE 프레임을 내려준다
@@ -895,6 +929,11 @@ export const materialStoreAPI = {
     /** 단건 + 연결 목록 + 분석 이력 */
     get: (materialId) => {
         return request(`/materials/${materialId}`);
+    },
+
+    /** 원본 파일 본문. Blob으로 온다 — 여는 것은 openMaterialFile()이 한다. */
+    file: (materialId) => {
+        return requestBlob(`/materials/${materialId}/file`);
     },
 
     /**

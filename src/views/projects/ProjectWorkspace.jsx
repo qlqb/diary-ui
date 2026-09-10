@@ -30,6 +30,7 @@ import {
   MaterialType, MATERIAL_TYPE_HINT, EXTRACTION_STATUS_LABEL, ExtractionStatus,
 } from '../../types/learning.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
+import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import { todayString } from '../../lib/datetime.js';
 import { formatDateKo, toIsoDate } from '../../lib/planTime.js';
 
@@ -689,6 +690,13 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
                 <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</span>
               )}
               <span className="material-actions">
+                {/* 여기 이름만 보이면 "이게 무슨 파일이었지"에 답할 길이 없다. */}
+                <MaterialFileLink
+                  materialId={m.materialId}
+                  filename={m.originalFilename}
+                  contentType={m.contentType}
+                  disabled={busyId === m.materialId}
+                />
                 {m.extractionStatus === ExtractionStatus.SUCCESS && (
                   <>
                     <button type="button" className="btn-ghost btn-sm"

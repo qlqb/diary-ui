@@ -48,10 +48,14 @@ const DETAIL = {
   ],
 };
 
+/*
+ * 파일명 조회에 ^를 붙이는 이유: 같은 행의 "PDF 열기" 버튼도 이름에 파일명을 갖는다.
+ * 앵커가 없으면 두 버튼이 다 걸려 "그 자료의 행"을 특정할 수 없다.
+ */
 async function openDetail() {
   const user = userEvent.setup();
   render(<MaterialsView projects={[{ courseId: 6, title: '자료구조' }]} onProjectsChanged={vi.fn()} />);
-  await user.click(await screen.findByRole('button', { name: /자료구조\.pdf/ }));
+  await user.click(await screen.findByRole('button', { name: /^자료구조\.pdf/ }));
   return user;
 }
 
@@ -263,7 +267,7 @@ describe('자료 목록에서 바로 프로젝트 연결', () => {
     await user.click(linkButtons()[1]);
     expect(materialStoreAPI.get).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: /자료구조\.pdf/ }));
+    await user.click(screen.getByRole('button', { name: /^자료구조\.pdf/ }));
     expect(materialStoreAPI.get).toHaveBeenCalledWith(4);
   });
 });
@@ -317,7 +321,7 @@ describe('자료 목록에서 바로 삭제', () => {
     await user.click(deleteButtons()[1]);
 
     // 안내에도 파일명이 있으므로 "목록에서" 사라졌는지를 본다.
-    expect(screen.queryByRole('button', { name: /네트워크\.pdf/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^네트워크\.pdf/ })).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('네트워크.pdf');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -380,12 +384,12 @@ describe('자료 목록에서 바로 삭제', () => {
 
     await act(async () => { pressCtrlZ(); });
     // 나중에 지운 것이 먼저 돌아온다.
-    expect(await screen.findByRole('button', { name: /자료구조\.pdf/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /네트워크\.pdf/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^자료구조\.pdf/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^네트워크\.pdf/ })).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('네트워크.pdf 지웠어요');
 
     await act(async () => { pressCtrlZ(); });
-    expect(await screen.findByRole('button', { name: /네트워크\.pdf/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^네트워크\.pdf/ })).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
     await act(async () => { vi.advanceTimersByTime(PENDING_DELETE_WINDOW_MS + 100); });
@@ -417,7 +421,7 @@ describe('자료 목록에서 바로 삭제', () => {
   it('상세에는 연결·삭제 버튼이 남지 않는다', async () => {
     const user = await renderList();
 
-    await user.click(screen.getByRole('button', { name: /자료구조\.pdf/ }));
+    await user.click(screen.getByRole('button', { name: /^자료구조\.pdf/ }));
     await screen.findByRole('heading', { name: '자료구조.pdf' });
 
     expect(screen.queryByRole('button', { name: /프로젝트 연결/ })).not.toBeInTheDocument();

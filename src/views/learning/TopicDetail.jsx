@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { GraduationCap, MessageCircleQuestion } from 'lucide-react';
 import { topicAPI } from '../../api/api.js';
+import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import {
   TopicProgressStatus,
   TOPIC_PROGRESS_STATUS_LABEL,
@@ -121,7 +122,18 @@ export default function TopicDetail({ courseTitle, ancestors, topic, onProgressC
               // 원본을 지워도 확정된 학습 내용은 남는다. 그래서 출처도 계속 말해준다 —
               // 다만 지금은 열어볼 수 없다는 사실을 함께 적는다.
               ? <>원본 삭제됨 · {topic.sourceMaterialFilename}</>
-              : topic.sourceMaterialFilename)
+              : (
+                <>
+                  {topic.sourceMaterialFilename}
+                  {/* 여기서 바로 열 수 있어야 "이 내용이 자료의 어디서 나왔나"를 확인한다. */}
+                  {topic.sourceMaterialId && (
+                    <MaterialFileLink
+                      materialId={topic.sourceMaterialId}
+                      filename={topic.sourceMaterialFilename}
+                    />
+                  )}
+                </>
+              ))
             : '연결된 원본 자료가 없어요.'}
         </span>
       </div>

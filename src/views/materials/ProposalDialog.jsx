@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileText, Loader2, X, ChevronRight, AlertCircle, Scissors, Undo2 } from 'lucide-react';
 import { materialStoreAPI } from '../../api/api.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
+import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import { MaterialType, MATERIAL_TYPE_HINT } from '../../types/learning.js';
 
 const ProposalAction = Object.freeze({
@@ -498,6 +499,15 @@ export default function ProposalDialog({
                       label={`${member.originalFilename}의 자료 역할`}
                       onChange={(t) => setType(group.groupId, member.materialId, t)}
                     />
+                    {/*
+                      제안이 맞는지는 파일을 열어 봐야 아는 경우가 있다. 여기서 못 열면
+                      대화를 닫고 자료함으로 갔다가 다시 와야 하고, 그 사이 제안은 사라진다.
+                    */}
+                    <MaterialFileLink
+                      materialId={member.materialId}
+                      filename={member.originalFilename}
+                      disabled={busy}
+                    />
                   </li>
                 ))}
               </ul>
@@ -585,6 +595,11 @@ export default function ProposalDialog({
                   <span className="proposal-member-name" title={member.originalFilename}>
                     <FileText size={13} /> {member.originalFilename}
                   </span>
+                  <MaterialFileLink
+                    materialId={member.materialId}
+                    filename={member.originalFilename}
+                    disabled={busy}
+                  />
                 </li>
               ))}
             </ul>

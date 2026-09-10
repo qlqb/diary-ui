@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { materialStoreAPI } from '../../api/api.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
+import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import ProposalDialog from './ProposalDialog.jsx';
 import usePendingDelete from './usePendingDelete.js';
 import UndoToast from '../../components/UndoToast.jsx';
@@ -817,6 +818,15 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                         {m.extractionStatus !== ExtractionStatus.SUCCESS && (
                             <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</span>
                         )}
+                        {/*
+                          추출 상태와 무관하게 열 수 있다. 텍스트를 못 뽑은 자료일수록
+                          사람이 직접 열어 봐야 한다.
+                        */}
+                        <MaterialFileLink
+                            materialId={m.materialId}
+                            filename={m.originalFilename}
+                            contentType={m.contentType}
+                        />
                         <button
                             type="button"
                             className="btn-ghost btn-sm"
@@ -1087,6 +1097,13 @@ function MaterialDetail({ materialId, onBack, onChanged }) {
               </span>
                 {material?.extractionStatus !== ExtractionStatus.SUCCESS && (
                     <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[material?.extractionStatus]}</span>
+                )}
+                {material?.materialId && (
+                    <MaterialFileLink
+                        materialId={material.materialId}
+                        filename={material.originalFilename}
+                        contentType={material.contentType}
+                    />
                 )}
               </p>
             </div>

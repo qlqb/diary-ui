@@ -1878,6 +1878,11 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
   font-size: 13px; color: var(--ws-danger);
 }
 
+/* 원본 열기 실패. 버튼 옆에 그대로 붙는다 — 어느 자료가 안 열렸는지가 자리로 드러난다. */
+.material-file-error {
+  font-size: 12px; color: var(--ws-danger);
+}
+
 /* 구조 분석 검토 폼. 기본은 접힘이고, 접힌 상태에서도 항목 수와 적용/폐기는 헤더에 남는다. */
 .material-review-head {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
