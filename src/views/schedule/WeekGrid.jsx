@@ -259,6 +259,9 @@ export default function WeekGrid({
                   {occurrence.moved && <span className="grid-block-badge">보강</span>}
                 </span>
                 <span className="grid-block-title">{occurrence.title}</span>
+                {occurrence.location && (
+                  <span className="grid-block-place">{occurrence.location}</span>
+                )}
               </div>
             ))}
 
@@ -283,6 +286,9 @@ export default function WeekGrid({
                   <span className="grid-block-badge">약속</span>
                 </span>
                 <span className="grid-block-title">{commitment.title}</span>
+                {commitment.locationText && (
+                  <span className="grid-block-place">{commitment.locationText}</span>
+                )}
               </button>
             ))}
 

@@ -1256,6 +1256,15 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .grid-block-time { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; }
 .grid-block-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 
+/*
+ * 장소. 제목보다 약하게 두고, 블록이 짧으면 잘린다 — 전체 문자열은 tooltip이 계속 갖고
+ * 있다. 15분짜리 블록에 두 줄을 욱여넣느라 제목을 밀어내는 쪽이 더 나쁘다.
+ */
+.grid-block-place {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; opacity: 0.75;
+}
+
 .grid-block.status-done { background: #eef1f4; border-color: var(--ws-border-strong); color: var(--ws-text-faint); }
 .grid-block.status-hold { background: #f6f7f9; border-style: dotted; color: var(--ws-text-faint); }
 
