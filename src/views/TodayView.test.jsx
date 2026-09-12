@@ -14,6 +14,8 @@ import TodayView from './TodayView.jsx';
 import { executionItemAPI } from '../api/api.js';
 
 vi.mock('../api/api.js', () => ({
+  // 마감 있는 과제 줄. 이 테스트들의 관심사가 아니라 빈 목록을 준다.
+  assignmentAPI: { listOpen: vi.fn().mockResolvedValue([]), setCompleted: vi.fn() },
   executionItemAPI: {
     complete: vi.fn(), partial: vi.fn(), reduce: vi.fn(), move: vi.fn(), hold: vi.fn(), create: vi.fn(),
     resume: vi.fn(), delete: vi.fn(),

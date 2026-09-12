@@ -138,6 +138,28 @@ export default function TopicDetail({ courseTitle, ancestors, topic, onProgressC
         </span>
       </div>
 
+      {(topic.linkedMaterials ?? []).length > 0 && (
+        <div className="topic-detail-row topic-detail-linked">
+          <span className="topic-detail-key">연결된 구간</span>
+          <ul className="topic-detail-linked-list">
+            {topic.linkedMaterials.map((l) => (
+              <li key={l.linkId}>
+                <span className="chip chip-status">{l.roleLabel ?? '자료'}</span>
+                {' '}{l.sectionTitle}{l.locator ? ` (${l.locator})` : ''}
+                {l.taskText && <span className="view-dim"> — {l.taskText}</span>}
+                {l.materialDeleted
+                  ? <span className="view-dim"> · 원본 삭제됨 · {l.filename}</span>
+                  : l.materialId && <MaterialFileLink materialId={l.materialId} filename={l.filename ?? '원본 자료'} />}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {topic.reviewNote && (
+        <p className="topic-detail-review-note">{topic.reviewNote}</p>
+      )}
+
       <div className="topic-detail-row">
         <span className="topic-detail-key">최근 학습</span>
         <span className="topic-detail-val">{formatDateKo(topic.lastStudiedAt)}</span>

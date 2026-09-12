@@ -18,6 +18,16 @@ import {
 } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
+  // 자동 분석·변경안·과제 — 이 테스트들의 관심사가 아니라 빈 값을 준다.
+  materialAnalysisStatusAPI: {
+    overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true }),
+    retry: vi.fn(), section: vi.fn(), sections: vi.fn().mockResolvedValue([]), status: vi.fn(),
+  },
+  topicChangeProposalAPI: { listByCourse: vi.fn().mockResolvedValue([]), apply: vi.fn(), dismiss: vi.fn() },
+  assignmentAPI: {
+    listByCourse: vi.fn().mockResolvedValue([]), listOpen: vi.fn().mockResolvedValue([]),
+    answer: vi.fn(), setDue: vi.fn(), setCompleted: vi.fn(), rename: vi.fn(), create: vi.fn(),
+  },
   courseAPI: { get: vi.fn(), update: vi.fn(), archive: vi.fn() },
   courseNoteAPI: { list: vi.fn() },
   executionItemAPI: { getByCourse: vi.fn(), getByDateRange: vi.fn() },
