@@ -25,7 +25,8 @@ import { adjustmentFor } from '../ai/useProposalDraft.js';
 import { classifyToday, isTimed } from '../lib/today.js';
 import { blockingEntries, buildTodayTimeline, classifyTimeline } from '../lib/todayTimeline.js';
 import { formatDateKo, formatMinutes, minutesOf, nowMinutes, toHHmm, todayString } from '../lib/datetime.js';
-import { executionItemAPI } from '../api/api.js';
+import { assignmentAPI, executionItemAPI } from '../api/api.js';
+import { dueWithin, formatDueWithWeekday, isOverdue } from '../lib/analysisLabels.js';
 
 export default function TodayView({
   items, occurrences, commitments, loading, error, notice, onRefresh, projectTitles,
@@ -41,6 +42,32 @@ export default function TodayView({
   const [overdueOpen, setOverdueOpen] = useState(true);
   /** 지나간 항목이 있다는 것을 알고는 있지만 지금은 그대로 두기로 한 상태. 다시 잡기 CTA만 접는다. */
   const [dismissedOverdue, setDismissedOverdue] = useState(false);
+  /*
+   * 마감이 있는 과제. 원본은 프로젝트의 과제 목록과 같다(course_assignments) — 여기는 그중 오늘/지난/7일 안
+   * 마감만 고른 조회이고 사본을 만들지 않는다. 체크는 같은 원본을 바꾼다.
+   */
+  const [dueAssignments, setDueAssignments] = useState([]);
+  const [assignmentBusy, setAssignmentBusy] = useState(null);
+  useEffect(() => {
+    if (!assignmentAPI?.listOpen) return undefined;
+    let cancelled = false;
+    assignmentAPI.listOpen()
+      .then((list) => { if (!cancelled) setDueAssignments(list ?? []); })
+      .catch(() => { /* 과제를 못 읽어도 오늘 화면은 그대로 쓴다. */ });
+    return () => { cancelled = true; };
+  }, [items]);
+  const completeAssignment = async (a) => {
+    setAssignmentBusy(a.assignmentId);
+    try {
+      await assignmentAPI.setCompleted(a.assignmentId, { completed: true, version: a.version });
+      setDueAssignments((prev) => prev.filter((x) => x.assignmentId !== a.assignmentId));
+    } catch {
+      const fresh = await assignmentAPI.listOpen().catch(() => null);
+      if (fresh) setDueAssignments(fresh);
+    } finally {
+      setAssignmentBusy(null);
+    }
+  };
 
   // "지금"은 시계를 따라 움직여야 한다 — 화면을 켜둔 채로 일정이 지나가면 그 사실이 보여야 한다.
   const [now, setNow] = useState(() => nowMinutes());
@@ -322,6 +349,9 @@ export default function TodayView({
             />
           )}
 
+          <TodayAssignments assignments={dueAssignments} today={today} busyId={assignmentBusy}
+            onComplete={completeAssignment} projectTitles={projectTitles} />
+
           {!rescheduling && (
           <section className="view-section">
             <h2 className="section-title">남은 오늘</h2>
@@ -423,5 +453,45 @@ function Row({
         compact={compact}
       />
     </div>
+  );
+}
+
+
+/**
+ * 오늘 화면의 과제 줄. 마감이 오늘이거나 지났거나 7일 안인 확정·미완료 과제만.
+ * 마감은 수행 시각이 아니다 — 시간표 항목처럼 그리지 않고 "N일까지" 한 줄로만 둔다.
+ */
+function TodayAssignments({ assignments, today, busyId, onComplete, projectTitles = {} }) {
+  const weekEnd = (() => {
+    const d = new Date(`${today}T00:00:00`);
+    d.setDate(d.getDate() + 7);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const shown = (assignments ?? []).filter((a) => isOverdue(a, today) || dueWithin(a, today, weekEnd));
+  if (shown.length === 0) return null;
+  return (
+    <section className="view-section today-assignments">
+      <h2 className="section-title">마감이 있는 과제 {shown.length}</h2>
+      <ul className="assignment-list">
+        {shown.map((a) => {
+          const overdue = isOverdue(a, today);
+          const day = a.dueKind === 'DATETIME' ? (a.dueAt ?? '').slice(0, 10) : a.dueDate;
+          return (
+            <li key={a.assignmentId} className={`assignment-row${overdue ? ' is-overdue' : ''}`}>
+              <label className="assignment-row-main">
+                <input type="checkbox" checked={false} disabled={busyId === a.assignmentId}
+                  onChange={() => onComplete(a)} aria-label={`${a.title} 완료`} />
+                <span className="assignment-row-title">{a.title}</span>
+                <span className={`assignment-row-due${overdue ? ' is-overdue' : ''}`}>
+                  {projectTitles[a.courseId] ? `${projectTitles[a.courseId]} · ` : ''}
+                  {day === today ? '오늘까지' : `${formatDueWithWeekday(day)}까지`}
+                  {overdue ? ' · 마감이 지났어요' : ''}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

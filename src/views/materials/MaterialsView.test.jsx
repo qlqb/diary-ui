@@ -6,6 +6,10 @@ import { PENDING_DELETE_WINDOW_MS } from './usePendingDelete.js';
 import { materialStoreAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
+  materialAnalysisStatusAPI: {
+    overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true, queued: 0, running: 0, done: 0 }),
+    retry: vi.fn(), pause: vi.fn(), resume: vi.fn(), sections: vi.fn().mockResolvedValue([]), status: vi.fn().mockResolvedValue(null),
+  },
   materialStoreAPI: {
     list: vi.fn(),
     get: vi.fn(),

@@ -2009,3 +2009,94 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .plan-evidence-detail-body h5 { margin: 8px 0 2px; }
 .plan-evidence-pending { margin: 4px 0 0 24px; font-size: 13px; }
 .plan-evidence-loaded { padding-left: 16px; }
+
+
+/* ===== 자료 자동 분석 상태 ===== */
+.chip-accent { background: var(--ws-accent-soft); color: var(--ws-accent-text); }
+.analysis-status { display: inline-flex; align-items: center; gap: 6px; }
+.analysis-status-detail { font-size: 13px; color: var(--ws-text-faint); }
+.analysis-overview {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; margin: 0 0 12px;
+  border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface);
+  font-size: 14px;
+}
+.analysis-overview-text { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.material-section-item { align-items: flex-start; }
+.material-section-locator { font-size: 13px; color: var(--ws-text-dim); min-width: 72px; }
+.material-section-roles { display: inline-flex; gap: 4px; }
+.material-section-task { flex-basis: 100%; font-size: 13.5px; color: var(--ws-text-dim); }
+.material-section-excerpt { flex-basis: 100%; margin: 4px 0 0; padding-left: 10px; border-left: 2px solid var(--ws-border-strong);
+  font-size: 13.5px; color: var(--ws-text-dim); }
+
+/* ===== 과제 ===== */
+.assignment-section .section-title { display: flex; align-items: center; gap: 6px; }
+.assignment-questions { margin-bottom: 10px; }
+.assignment-questions-title { font-weight: 600; margin-right: 6px; }
+.assignment-question {
+  margin: 6px 0; padding: 10px 12px;
+  border: 1px dashed var(--ws-border-strong); border-radius: 9px; background: var(--ws-surface);
+  font-size: 14px;
+}
+.assignment-question-lead { margin: 0 0 2px; font-size: 13px; color: var(--ws-text-dim); }
+.assignment-question-title { margin: 0 0 4px; font-weight: 600; }
+.assignment-quote { margin: 4px 0 6px; padding-left: 10px; border-left: 2px solid var(--ws-border-strong);
+  color: var(--ws-text-dim); font-size: 13.5px; }
+.assignment-question-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.assignment-source { margin-top: 6px; padding: 6px 8px; background: var(--ws-bg); border-radius: 7px; font-size: 13.5px;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.assignment-due-block { margin-top: 8px; }
+.assignment-due-line { margin: 4px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; }
+.assignment-estimates { margin: 4px 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
+.assignment-estimates li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.assignment-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.assignment-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface); font-size: 14px;
+}
+.assignment-row.is-done .assignment-row-title { color: var(--ws-text-faint); text-decoration: line-through; }
+.assignment-row.is-overdue { border-color: #f0d9b5; }
+.assignment-row-main { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.assignment-row-main input[type="checkbox"] { width: 16px; height: 16px; }
+.assignment-row-title { font-weight: 600; }
+.assignment-row-due { font-size: 13.5px; color: var(--ws-text-dim); }
+.assignment-row-due.is-overdue { color: var(--ws-warn); }
+.assignment-row-actions { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.assignment-later { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+.assignment-done { margin-top: 8px; }
+
+/* ===== 자료 정리 변경안 ===== */
+.change-proposal {
+  margin: 6px 0; padding: 8px 12px;
+  border: 1px dashed var(--ws-draft); border-radius: 9px; background: var(--ws-draft-soft); font-size: 14px;
+}
+.change-proposal-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.change-proposal-head .collapse-head { flex: 1 1 auto; min-width: 0; }
+.change-proposal-title { font-weight: 600; margin-right: 6px; overflow-wrap: anywhere; }
+.change-proposal-summary { color: var(--ws-text-dim); }
+.change-proposal-actions { display: inline-flex; gap: 6px; margin-left: auto; }
+.change-proposal-stale { margin: 6px 0 0; color: var(--ws-warn); font-size: 13.5px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.change-proposal-structural { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.change-proposal-ops { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px;
+  max-height: 360px; overflow-y: auto; }
+.change-proposal-op label { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
+.change-proposal-op.is-structural { padding: 4px 6px; border-left: 2px solid var(--ws-warn); }
+.change-proposal-op-text { overflow-wrap: anywhere; }
+.change-proposal-title-input { margin: 4px 0 0 22px; width: min(420px, 100%); font-size: 14px; }
+
+/* ===== 계획 항목 「자세히」 ===== */
+.plan-detail-level { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 13.5px; }
+.plan-pending-materials { margin: 4px 0 0; }
+.plan-item-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0 24px; }
+.plan-item-detail { margin: 6px 0 0 24px; font-size: 14px; }
+.plan-item-detail-stale { margin: 0 0 4px; font-size: 13px; color: var(--ws-warn); }
+.plan-item-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.plan-item-step-refs { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; }
+.plan-item-step-ref { font-size: 12.5px; color: var(--ws-text-faint); border: 1px solid var(--ws-border); border-radius: 6px; padding: 0 5px; }
+.plan-item-detail-user { margin: 6px 0 0; }
+.plan-item-detail-sources { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ===== 토픽 상세: 연결된 구간 ===== */
+.topic-detail-linked-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.topic-detail-review-note { margin: 4px 0; padding: 6px 8px; border-radius: 7px; background: var(--ws-warn-soft); color: var(--ws-warn); font-size: 13.5px; }
+.today-assignments .assignment-row { padding: 6px 10px; }

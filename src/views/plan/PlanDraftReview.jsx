@@ -27,14 +27,21 @@ import {
 } from '../../lib/planLabels.js';
 import PlanStrategyPanel from './PlanStrategyPanel.jsx';
 import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
+import PlanItemDetail from './PlanItemDetail.jsx';
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function PlanDraftReview({
   draft, projectTitles = {}, todayIso, onConfirmed, onDiscard, discardLabel = '다시 만들기', onOpenSchedule,
-  onOpenSource,
+  onOpenSource, onExcludeThisTime = null,
 }) {
   const [excluded, setExcluded] = useState(() => new Set());
+  /*
+   * 안내 상세도. 기본은 간단히. 전체 전환과 항목 하나만 펼치기가 있고, 어느 쪽도 항목·선택·시간·마감·
+   * 배치를 바꾸지 않는다 — 설명을 펼치는 동작일 뿐이다. 영구 선호로 저장하지 않는다.
+   */
+  const [detailAll, setDetailAll] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(() => new Set());
   const [collapsed, setCollapsed] = useState(() => initialCollapsed(draft, projectTitles, todayIso));
   const [title, setTitle] = useState(() => draft?.suggestedTitle || '');
   const [confirming, setConfirming] = useState(false);
@@ -302,6 +309,26 @@ export default function PlanDraftReview({
         <TimeGauge selectedMinutes={selectedMinutes} targetMinutes={target} intensity={current.intensity} />
         {/* 예전 서버가 이유를 보내면 그대로 보여준다. 새 서버는 예산을 직접 계산하므로 비어 있다. */}
         {current.targetMinutesReason && <p className="plan-draft-reason">{current.targetMinutesReason}</p>}
+        {/*
+          아직 분석이 끝나지 않은 자료. 이 초안은 그 내용을 보지 못했다 — 계획을 막지 않고 짧게 말한다.
+          분석이 끝나도 이 초안을 자동으로 다시 쓰지 않는다. 다시 만들기는 사용자의 선택이다.
+        */}
+        {(current.pendingMaterials ?? []).length > 0 && (
+          <p className="plan-pending-materials hint">
+            아직 반영되지 않은 자료 {current.pendingMaterials.length}개
+            {' · '}
+            {current.pendingMaterials.slice(0, 3).map((m) => m.filename).join(', ')}
+            {current.pendingMaterials.length > 3 ? ' 외' : ''}
+            {' — 분석이 끝난 뒤 다시 만들면 반영돼요.'}
+          </p>
+        )}
+        <p className="plan-detail-level" role="group" aria-label="안내 상세도">
+          <span className="view-dim">안내</span>
+          <button type="button" className={`chip-toggle${!detailAll ? ' is-on' : ''}`} aria-pressed={!detailAll}
+            onClick={() => { setDetailAll(false); setDetailOpen(new Set()); }}>간단히</button>
+          <button type="button" className={`chip-toggle${detailAll ? ' is-on' : ''}`} aria-pressed={detailAll}
+            onClick={() => setDetailAll(true)}>자세히</button>
+        </p>
       </div>
 
       {/* 판단은 조각보다 먼저 온다. 무엇을 하는지보다 왜 그렇게 보는지가 먼저 읽혀야 한다. */}
@@ -356,6 +383,15 @@ export default function PlanDraftReview({
           treatmentByTopic={treatmentByTopic}
           classAtByCourse={classAtByCourse}
           onMarkKnown={markKnown}
+          onExcludeThisTime={onExcludeThisTime}
+          detailAll={detailAll}
+          detailOpen={detailOpen}
+          onToggleDetail={(proposalItemId) => setDetailOpen((prev) => {
+            const next = new Set(prev);
+            if (next.has(proposalItemId)) next.delete(proposalItemId);
+            else next.add(proposalItemId);
+            return next;
+          })}
           busy={regenerating}
           provenance={provenance}
           provenanceLoading={provenanceLoading}
@@ -471,6 +507,7 @@ function PlanDraftGroup({
   group, excluded, collapsed, placedById, unplacedById, previewLoaded, onToggleCollapse, onToggleItem, onToggleGroup,
   treatmentByTopic, classAtByCourse, onMarkKnown, busy, provenance, provenanceLoading, provenanceError,
   onReloadProvenance, evidenceByItem, onOpenSource, projectTitles,
+  onExcludeThisTime = null, detailAll = false, detailOpen = new Set(), onToggleDetail = null,
 }) {
   const groupMinutes = group.items
     .filter((item) => !excluded.has(item.proposalItemId))
@@ -545,16 +582,40 @@ function PlanDraftGroup({
                 <p className="plan-item-reason">{item.description}</p>
               )}
 
-              {item.topicId != null && onMarkKnown && (
-                <button
-                  type="button"
-                  className="btn-ghost btn-sm plan-item-known"
-                  disabled={busy}
-                  onClick={() => onMarkKnown(item.topicId)}
-                >
-                  이미 알아요
-                </button>
-              )}
+              <span className="plan-item-actions">
+                {item.topicId != null && onMarkKnown && (
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm plan-item-known"
+                    disabled={busy}
+                    onClick={() => onMarkKnown(item.topicId)}
+                  >
+                    이미 알아요
+                  </button>
+                )}
+                {/*
+                  「이번만 빼기」는 이 요청에서만 후보에서 뺀다. 표식을 저장하지 않으므로 다음 계획에는
+                  다시 후보로 돌아온다 — 「이미 알아요」와 무게가 다르다.
+                */}
+                {item.topicId != null && onExcludeThisTime && (
+                  <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                    onClick={() => onExcludeThisTime(item.topicId)}>
+                    이번만 빼기
+                  </button>
+                )}
+                {/* 항목 하나만 자세히. 전체 전환과 독립이고, 선택·시간·마감은 그대로다. */}
+                {onToggleDetail && !detailAll && (
+                  <button type="button" className="btn-ghost btn-sm" aria-expanded={detailOpen.has(item.proposalItemId)}
+                    onClick={() => onToggleDetail(item.proposalItemId)}>
+                    {detailOpen.has(item.proposalItemId) ? '간단히' : '자세히'}
+                  </button>
+                )}
+              </span>
+              <PlanItemDetail
+                mode="draft"
+                id={item.proposalItemId}
+                expanded={detailAll || detailOpen.has(item.proposalItemId)}
+              />
 
               <PlacementLine
                 item={item}

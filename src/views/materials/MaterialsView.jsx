@@ -16,7 +16,11 @@ import {
   FileText, Upload, Loader2, ArrowLeft, Link2, Trash2, X,
   Plus, Check, AlertCircle, UploadCloud, Sparkles,
 } from 'lucide-react';
-import { materialStoreAPI } from '../../api/api.js';
+import { materialAnalysisStatusAPI, materialStoreAPI } from '../../api/api.js';
+import AnalysisStatusChip from '../../components/AnalysisStatusChip.jsx';
+import AnalysisOverviewBar from './AnalysisOverviewBar.jsx';
+import useAnalysisOverview from './useAnalysisOverview.js';
+import { sectionRoleLabel } from '../../lib/analysisLabels.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import ProposalDialog from './ProposalDialog.jsx';
@@ -527,6 +531,22 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
   });
 
   const uploader = useUploadQueue({ onBatchDone: handleBatchDone });
+  /*
+   * 자동 분석 상태. 목록의 자료 수가 바뀌면(업로드·삭제) 다시 읽는다. 진행 중이면 hook이 알아서 폴링한다.
+   * openId(상세) 화면에서는 목록이 없으므로 끈다.
+   */
+  const analysis = useAnalysisOverview({ enabled: openId == null, refreshKey: allMaterials.length });
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const toggleAnalysis = async () => {
+    setAnalysisBusy(true);
+    try {
+      if (analysis.overview?.paused) await analysis.resume(); else await analysis.pause();
+    } catch (err) {
+      setError(err.message || '자동 분석 상태를 바꾸지 못했어요.');
+    } finally {
+      setAnalysisBusy(false);
+    }
+  };
   const { addFiles } = uploader;
 
   // 삭제를 예약한 자료는 화면에서 먼저 사라진다. 서버는 아직 모르므로 목록을 다시 읽어도
@@ -625,6 +645,9 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
             <Plus size={13} /> 파일 추가
           </button>
         </header>
+
+        <AnalysisOverviewBar overview={analysis.overview} error={analysis.error} busy={analysisBusy}
+            onPause={toggleAnalysis} onResume={toggleAnalysis} />
 
         <UploadTray
             items={uploader.items}
@@ -817,6 +840,10 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                         )}
                         {m.extractionStatus !== ExtractionStatus.SUCCESS && (
                             <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</span>
+                        )}
+                        {m.extractionStatus === ExtractionStatus.SUCCESS && analysis.byMaterialId.get(m.materialId) && (
+                            <AnalysisStatusChip status={analysis.byMaterialId.get(m.materialId)}
+                                onRetry={() => analysis.retry(m.materialId)} />
                         )}
                         {/*
                           추출 상태와 무관하게 열 수 있다. 텍스트를 못 뽑은 자료일수록
@@ -1140,9 +1167,68 @@ function MaterialDetail({ materialId, onBack, onChanged }) {
           {links.length > 0 && <p className="section-desc">{MATERIAL_TYPE_HINT}</p>}
         </section>
 
+        <MaterialSections materialId={materialId} />
+
         <AnalysisHistory analyses={detail?.analyses ?? []} />
 
       </div>
+  );
+}
+
+/**
+ * 자동 분석이 읽은 구간. "자료 종류"가 아니라 구간마다의 역할(설명·예제·문제·제출 요구)이다.
+ * 위치는 파일의 물리 페이지/슬라이드이고, 인쇄 쪽수가 확인된 구간만 따로 표시한다.
+ */
+function MaterialSections({ materialId }) {
+  const [state, setState] = useState({ sections: null, status: null, error: null });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [sections, status] = await Promise.all([
+          materialAnalysisStatusAPI.sections(materialId),
+          materialAnalysisStatusAPI.status(materialId),
+        ]);
+        if (!cancelled) setState({ sections: sections ?? [], status, error: null });
+      } catch (err) {
+        if (!cancelled) setState({ sections: [], status: null, error: err.message || '분석 구간을 불러오지 못했어요.' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [materialId]);
+
+  if (state.sections == null) return null;
+  return (
+      <section className="view-section">
+        <h2 className="section-title">
+          분석한 구간 {state.sections.length > 0 ? state.sections.length : ''}
+          {state.status && <> <AnalysisStatusChip status={state.status} /></>}
+        </h2>
+        {state.status?.pageCount != null && (
+            <p className="section-desc">파일 {state.status.pageCount}쪽 · 위치는 파일 기준이고 인쇄된 쪽수와 다를 수 있어요.</p>
+        )}
+        {state.error && <p className="view-error">{state.error}</p>}
+        {state.sections.length === 0 ? (
+            <p className="view-dim">
+              {state.status?.state === 'DONE' ? '이 자료에서는 나눌 구간을 찾지 못했어요.' : '분석이 끝나면 여기에 구간이 나타나요.'}
+            </p>
+        ) : (
+            <ul className="material-list">
+              {state.sections.map((sec) => (
+                  <li key={sec.sectionId} className="material-item material-section-item">
+                    <span className="material-section-locator">{sec.locator}</span>
+                    <span className="material-section-roles">
+                      {(sec.roles ?? []).map((r) => <span key={r} className="chip chip-status">{sectionRoleLabel(r)}</span>)}
+                    </span>
+                    <span className="material-name">{sec.title}</span>
+                    {sec.taskText && <span className="material-section-task">수행: {sec.taskText}</span>}
+                    {sec.assignmentCue && <span className="chip chip-warn">제출 단서</span>}
+                    {sec.excerpt && <blockquote className="material-section-excerpt">“{sec.excerpt}”</blockquote>}
+                  </li>
+              ))}
+            </ul>
+        )}
+      </section>
   );
 }
 

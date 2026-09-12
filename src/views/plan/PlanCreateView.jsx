@@ -33,6 +33,8 @@ export default function PlanCreateView({
   const [instruction, setInstruction] = useState('');
 
   const [draft, setDraft] = useState(initialDraft);
+  /** 「이번만 빼기」로 모은 학습 항목. 이 화면에서 다시 만들 때만 실린다. 저장하지 않는다. */
+  const [excludeTopicIds, setExcludeTopicIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   /** 확정 이력이 없으면(=첫 계획) 강도를 펼친 상태로 시작한다. */
@@ -77,11 +79,12 @@ export default function PlanCreateView({
    *
    * @param answer 되묻기 답. { familiarityAnswer, familiarityTopicIds } 또는 null
    */
-  const handleDraft = async (answer = null) => {
+  const handleDraft = async (answer = null, excludeOverride = null) => {
     if (!periodValid || loading) return;
     setLoading(true);
     setError(null);
     try {
+      const exclude = excludeOverride ?? excludeTopicIds;
       const result = await planAPI.createDraft({
         startDate, endDate, intensity,
         instruction: instruction.trim() || null,
@@ -90,6 +93,7 @@ export default function PlanCreateView({
         courseIds: scopeCourseId != null ? [scopeCourseId] : null,
         familiarityAnswer: answer?.familiarityAnswer ?? null,
         familiarityTopicIds: answer?.familiarityTopicIds ?? null,
+        excludeTopicIds: exclude.length > 0 ? exclude : null,
       });
       setDraft(result);
     } catch (err) {
@@ -100,6 +104,14 @@ export default function PlanCreateView({
   };
 
   const fromAi = draft != null && initialDraft != null && draft === initialDraft;
+
+  /** 「이번만 빼기」: 그 항목을 이번 요청에서만 빼고 초안을 다시 만든다. 표식은 남지 않는다. */
+  const excludeThisTime = async (topicId) => {
+    if (topicId == null || fromAi) return;
+    const next = excludeTopicIds.includes(topicId) ? excludeTopicIds : [...excludeTopicIds, topicId];
+    setExcludeTopicIds(next);
+    await handleDraft(null, next);
+  };
 
   return (
     <section className="plan-create">
@@ -213,7 +225,14 @@ export default function PlanCreateView({
           discardLabel={fromAi ? '이 초안 버리기' : '다시 만들기'}
           onOpenSchedule={onOpenSchedule}
           onOpenSource={onOpenSource}
+          onExcludeThisTime={fromAi ? null : excludeThisTime}
         />
+      )}
+      {excludeTopicIds.length > 0 && !loading && (
+        <p className="hint">
+          이번 계획에서만 뺀 항목 {excludeTopicIds.length}개 — 다음 계획에는 다시 후보로 돌아와요.
+          <button type="button" className="btn-ghost btn-sm" onClick={() => setExcludeTopicIds([])}>되돌리기</button>
+        </p>
       )}
     </section>
   );

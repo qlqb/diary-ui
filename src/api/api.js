@@ -1240,7 +1240,7 @@ export const planAPI = {
     /** 초안 생성. intensity를 생략하면 서버가 직전 계획에서 승계한다. */
     createDraft: ({
         startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null,
-        familiarityAnswer = null, familiarityTopicIds = null,
+        familiarityAnswer = null, familiarityTopicIds = null, excludeTopicIds = null,
     }) => {
         return request('/plans/draft', {
             method: 'POST',
@@ -1249,9 +1249,24 @@ export const planAPI = {
                 // 되묻기에 답한 뒤의 재요청. 이 값이 없으면 서버가 같은 질문을 다시 던진다 —
                 // "처음이에요"는 저장할 상태가 없어서 요청에 실어야만 사슬이 끝난다.
                 familiarityAnswer, familiarityTopicIds,
+                // 「이번 계획에서만 제외」. 저장되지 않는다 — 영구 표식(이미 알아요)과 다르다.
+                excludeTopicIds,
             }),
         });
     },
+
+    /**
+     * 항목의 「자세히」. GET은 있으면 돌려주고 없으면 available=false. POST는 없을 때 만든다(모델 1회).
+     * 어느 쪽도 항목·시간·마감·선택을 바꾸지 않는다.
+     */
+    draftItemDetail: (proposalItemId) => request(`/plans/drafts/items/${proposalItemId}/detail`),
+    createDraftItemDetail: (proposalItemId) =>
+        request(`/plans/drafts/items/${proposalItemId}/detail`, { method: 'POST' }),
+    itemDetail: (executionItemId) => request(`/plans/items/${executionItemId}/detail`),
+    createItemDetail: (executionItemId) =>
+        request(`/plans/items/${executionItemId}/detail`, { method: 'POST' }),
+    updateItemDetailText: (detailId, userText) =>
+        request(`/plans/item-details/${detailId}`, { method: 'PATCH', body: JSON.stringify({ userText }) }),
 
     /**
      * 판단은 그대로 두고 조각만 다시 만든다.
@@ -1326,4 +1341,76 @@ export const planAPI = {
             body: JSON.stringify({ windowStart }),
         });
     },
+};
+
+
+/**
+ * 자료 자동 분석 상태. 서버 작업 표가 원본이라 화면을 떠났다 돌아와도 같은 값이다.
+ * overview는 자료함 상단 요약 + 자료별 상태를 한 번에 준다.
+ */
+export const materialAnalysisStatusAPI = {
+    overview: () => request('/materials/analysis/overview'),
+    pause: () => request('/materials/analysis/pause', { method: 'POST' }),
+    resume: () => request('/materials/analysis/resume', { method: 'POST' }),
+    status: (materialId) => request(`/materials/${materialId}/analysis-status`),
+    /** 다시 시도. 그 자료의 작업을 앞으로 당긴다. */
+    retry: (materialId) => request(`/materials/${materialId}/analysis-status/retry`, { method: 'POST' }),
+    /** 분석된 구간(역할·위치·발췌). "원문 보기"가 쓴다. */
+    sections: (materialId) => request(`/materials/${materialId}/sections`),
+    section: (sectionId) => request(`/material-sections/${sectionId}`),
+};
+
+/**
+ * 과제. 원본은 하나(course_assignments)다 — 프로젝트·오늘·계획이 전부 이걸 읽는다.
+ * 모든 변경 요청은 version을 실어 보내고, 어긋나면 409(다른 곳에서 먼저 바뀜)다.
+ */
+export const assignmentAPI = {
+    listByCourse: (courseId) => request(`/courses/${courseId}/assignments`),
+    /** 확정·미완료 과제 전부(마감 순). 오늘 화면용. */
+    listOpen: () => request('/assignments'),
+    create: ({ courseId = null, title, dueKind = null, dueDate = null, dueAt = null }) =>
+        request('/assignments', {
+            method: 'POST',
+            body: JSON.stringify({ courseId, title, dueKind, dueDate, dueAt }),
+        }),
+    /** answer: CONFIRMED | NOT_ASSIGNMENT | LATER | DUPLICATE(+duplicateOfAssignmentId) */
+    answer: (assignmentId, { answer, duplicateOfAssignmentId = null, version }) =>
+        request(`/assignments/${assignmentId}/answer`, {
+            method: 'PATCH',
+            body: JSON.stringify({ answer, duplicateOfAssignmentId, version }),
+        }),
+    /** dueKind: UNKNOWN | NONE | DATE(+dueDate) | DATETIME(+dueAt). "이 날짜 맞아요"도 이 요청이다. */
+    setDue: (assignmentId, { dueKind, dueDate = null, dueAt = null, version }) =>
+        request(`/assignments/${assignmentId}/due`, {
+            method: 'PATCH',
+            body: JSON.stringify({ dueKind, dueDate, dueAt, version }),
+        }),
+    rename: (assignmentId, { title, version }) =>
+        request(`/assignments/${assignmentId}/title`, {
+            method: 'PATCH',
+            body: JSON.stringify({ title, version }),
+        }),
+    /** 완료 체크/해제. 그 과제를 끝냈다는 사용자 확인 하나다. */
+    setCompleted: (assignmentId, { completed, version }) =>
+        request(`/assignments/${assignmentId}/completed`, {
+            method: 'PATCH',
+            body: JSON.stringify({ completed, version }),
+        }),
+};
+
+/**
+ * 자료 정리 변경안. 분석이 만들고 사용자가 적용한다. 적용은 전부 아니면 전무이고,
+ * 변경안을 만든 뒤 학습 구조가 바뀌었으면 409(TOPIC_TREE_CONFLICT)다.
+ */
+export const topicChangeProposalAPI = {
+    listByCourse: (courseId, includeResolved = false) =>
+        request(`/courses/${courseId}/topic-change-proposals?includeResolved=${includeResolved ? 'true' : 'false'}`),
+    get: (proposalId) => request(`/topic-change-proposals/${proposalId}`),
+    /** body: { selectedOpIndexes?: number[], titleOverrides?: {[index]: string} } */
+    apply: (proposalId, body = null) =>
+        request(`/topic-change-proposals/${proposalId}/apply`, {
+            method: 'POST',
+            body: JSON.stringify(body ?? {}),
+        }),
+    dismiss: (proposalId) => request(`/topic-change-proposals/${proposalId}/dismiss`, { method: 'POST' }),
 };

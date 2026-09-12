@@ -21,9 +21,14 @@ import DraftRow from '../../components/DraftRow.jsx';
 import LearningMap from '../learning/LearningMap.jsx';
 import TopicDetail from '../learning/TopicDetail.jsx';
 import MaterialReview from '../learning/MaterialReview.jsx';
+import AssignmentSection from './AssignmentSection.jsx';
+import TopicChangeProposalCard from './TopicChangeProposalCard.jsx';
+import AnalysisStatusChip from '../../components/AnalysisStatusChip.jsx';
+import { isAnalysisInProgress } from '../../lib/analysisLabels.js';
 import { adjustmentFor } from '../../ai/useProposalDraft.js';
 import {
-  courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI, materialStoreAPI,
+  courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI,
+  materialAnalysisStatusAPI, topicChangeProposalAPI, materialStoreAPI,
   planAPI, topicAPI,
 } from '../../api/api.js';
 import {
@@ -105,6 +110,8 @@ export default function ProjectWorkspace({
 
   const [structureOpen, setStructureOpen] = useState(false);
   const [selectedTopicId, setSelectedTopicId] = useState(null);
+  /** 자료 분석이 끝나 변경안·과제 후보가 새로 생겼을 때 그 두 구역만 다시 읽게 하는 카운터. */
+  const [proposalRefresh, setProposalRefresh] = useState(0);
   const [renaming, setRenaming] = useState(false);
 
 
@@ -380,7 +387,13 @@ export default function ProjectWorkspace({
         materialsCourseId={materialsCourseId}
         onChanged={load}
         onAsk={onAsk}
+        onProposalsChanged={() => setProposalRefresh((v) => v + 1)}
       />
+
+      <TopicChangeProposalsSection courseId={courseId} refreshToken={proposalRefresh + refreshToken}
+        onApplied={load} />
+
+      <AssignmentSection courseId={courseId} todayIso={todayString()} refreshToken={refreshToken + proposalRefresh} />
 
       <section className="view-section">
         <button type="button" className="collapse-head" onClick={() => setStructureOpen((v) => !v)}>
@@ -515,8 +528,59 @@ function latestDraft(history) {
   return (history ?? []).find((a) => a.status === 'DRAFT') ?? null;
 }
 
-function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, onAsk }) {
+function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, onAsk, onProposalsChanged = null }) {
   const [error, setError] = useState(null);
+  /*
+   * 자동 분석 상태(자료별). 서버 작업 표가 원본이고 화면은 읽기만 한다. 진행 중인 자료가 있을 때만
+   * 8초 간격으로 다시 읽고, 진행 중이던 것이 끝나면 변경안·과제 구역을 다시 읽게 알린다.
+   */
+  const [analysisStatus, setAnalysisStatus] = useState({});
+  const statusTicket = useRef(0);
+  const materialIdKey = materials.map((m) => m.materialId).join(',');
+  useEffect(() => {
+    if (materialsCourseId !== courseId || materials.length === 0 || !materialAnalysisStatusAPI?.overview) {
+      setAnalysisStatus({});
+      return undefined;
+    }
+    let timer = null;
+    let stopped = false;
+    const ids = new Set(materials.map((m) => m.materialId));
+    const tick = async () => {
+      const mine = statusTicket.current + 1;
+      statusTicket.current = mine;
+      try {
+        const overview = await materialAnalysisStatusAPI.overview();
+        if (stopped || statusTicket.current !== mine) return;
+        const next = {};
+        (overview?.materials ?? []).forEach((st) => { if (ids.has(st.materialId)) next[st.materialId] = st; });
+        setAnalysisStatus((prev) => {
+          const finishedNow = Object.values(next).some((st) => !isAnalysisInProgress(st.state)
+            && prev[st.materialId] && isAnalysisInProgress(prev[st.materialId].state));
+          if (finishedNow) onProposalsChanged?.();
+          return next;
+        });
+        const inProgress = Object.values(next).some((st) => isAnalysisInProgress(st.state)) && !overview?.paused;
+        if (inProgress && !stopped) timer = setTimeout(tick, 8000);
+      } catch {
+        // 상태를 못 읽어도 자료 목록은 그대로 쓴다. 다음 진입에서 다시 읽는다.
+      }
+    };
+    tick();
+    return () => { stopped = true; statusTicket.current += 1; if (timer) clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, materialsCourseId, materialIdKey]);
+
+  const retryAnalysis = async (materialId) => {
+    setBusyId(materialId);
+    try {
+      const st = await materialAnalysisStatusAPI.retry(materialId);
+      setAnalysisStatus((prev) => ({ ...prev, [materialId]: st }));
+    } catch (err) {
+      setError(err.message || '다시 시도하지 못했어요.');
+    } finally {
+      setBusyId(null);
+    }
+  };
   const [analyses, setAnalyses] = useState({});
   /** materialId -> 'loading' | 'ready' | 'error'. 초안 조회가 끝났는지 자료마다 따로 안다. */
   const [draftStatus, setDraftStatus] = useState({});
@@ -685,7 +749,10 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
                 onChange={(t) => handleRoleChange(m.materialId, t)}
               />
               {m.extractionStatus === ExtractionStatus.SUCCESS ? (
-                <span className="chip chip-ok">AI가 사용할 수 있어요</span>
+                analysisStatus[m.materialId]
+                  ? <AnalysisStatusChip status={analysisStatus[m.materialId]} busy={busyId === m.materialId}
+                      onRetry={() => retryAnalysis(m.materialId)} />
+                  : <span className="chip chip-status">분석 상태 확인 중</span>
               ) : (
                 <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</span>
               )}
@@ -717,7 +784,12 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
                           onClick={() => retryDraft(m.materialId)}>다시 시도</button>
                       </span>
                     )}
-                    {draftStatus[m.materialId] === 'ready' && !analyses[m.materialId] && (
+                    {/*
+                      자동 분석이 기본이다. 수동 버튼은 자동 분석 결과가 아직 없고(대기·없음) 검토 중인 예전
+                      초안도 없을 때만, "지금 앞당겨 분석" 의미로 남긴다 — 예전의 전체 트리 초안 경로다.
+                    */}
+                    {draftStatus[m.materialId] === 'ready' && !analyses[m.materialId]
+                      && ['NONE', 'FAILED', 'UNAVAILABLE'].includes(analysisStatus[m.materialId]?.state ?? 'NONE') && (
                       <button type="button" className="btn-ghost btn-sm" disabled={analyzingId === m.materialId}
                         onClick={() => handleAnalyze(m.materialId)}>
                         {analyzingId === m.materialId ? '분석 중...' : '구조 분석'}
@@ -886,5 +958,45 @@ function MaterialPicker({ courseId, linkedIds, onCancel, onLinked }) {
       <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}>취소</button>
       <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
     </form>
+  );
+}
+
+
+/**
+ * 자료 정리 변경안 목록. 분석이 끝난 자료마다 열린 변경안이 하나씩 있을 수 있다.
+ * 비어 있으면 아무것도 그리지 않는다 — 없는 것을 "없어요"라고 매번 말하면 화면이 시끄럽다.
+ */
+function TopicChangeProposalsSection({ courseId, refreshToken = 0, onApplied = null }) {
+  const [proposals, setProposals] = useState([]);
+  const [error, setError] = useState(null);
+  const ticket = useRef(0);
+
+  const load = useCallback(async () => {
+    if (courseId == null || !topicChangeProposalAPI?.listByCourse) return;
+    const mine = ticket.current + 1;
+    ticket.current = mine;
+    try {
+      const next = await topicChangeProposalAPI.listByCourse(courseId, false);
+      if (ticket.current === mine) { setProposals(next ?? []); setError(null); }
+    } catch (err) {
+      if (ticket.current === mine) setError(err.message || '변경안을 불러오지 못했어요.');
+    }
+  }, [courseId]);
+
+  useEffect(() => {
+    (async () => { await load(); })();
+  }, [load, refreshToken]);
+
+  if (proposals.length === 0 && !error) return null;
+  return (
+    <section className="view-section change-proposals">
+      <h2 className="section-title">자료 정리 변경안 {proposals.length}</h2>
+      <p className="section-desc">새 자료를 기존 학습 구조에 어떻게 이을지 제안이에요. 적용하기 전에는 아무것도 바뀌지 않아요.</p>
+      {error && <p className="view-error">{error}</p>}
+      {proposals.map((p) => (
+        <TopicChangeProposalCard key={p.proposalId} proposal={p}
+          onResolved={async () => { await load(); await onApplied?.(); }} />
+      ))}
+    </section>
   );
 }
