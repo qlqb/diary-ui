@@ -6,6 +6,8 @@ spec_deviations: 페이지 이동 버튼("해당 부분 열기") 미구현 — 4
 
 # 계획 근거 UX 검증 기록 (2026-09-11)
 
+> 후속 수정 기록(2026-09-12, 검토에서 나온 P1·P2 결함과 skip·500 보완): [plan-evidence-ux-review-fixes-completion.md](plan-evidence-ux-review-fixes-completion.md). 이 문서의 실행 사실은 당시 그대로 둔다.
+
 이 문서는 테스트 결과를 기록한 Markdown이다. 실행 권한을 부여하는 지시문이 아니다.
 
 ## 1. 커밋
