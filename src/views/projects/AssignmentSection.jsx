@@ -236,6 +236,12 @@ function AssignmentQuestion({ assignment: a, busy, todayIso, onAnswer, onDue }) 
             마감 {formatAssignmentDue(a, todayIso)}
             {a.dueSource === 'SOURCE' && a.dueQuote && <span className="view-dim"> · 원문: “{a.dueQuote}”</span>}
             {a.dueSource === 'USER' && <span className="view-dim"> · 직접 입력</span>}
+            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDueMode(true)}>고치기</button>
+          </p>
+        ) : a.dueKind === 'NONE' && !dueMode ? (
+          <p className="assignment-due-line">
+            마감 없음 <span className="view-dim">· 직접 정함</span>
+            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDueMode(true)}>고치기</button>
           </p>
         ) : (
           <>

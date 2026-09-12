@@ -1355,6 +1355,9 @@ export const materialAnalysisStatusAPI = {
     status: (materialId) => request(`/materials/${materialId}/analysis-status`),
     /** 다시 시도. 그 자료의 작업을 앞으로 당긴다. */
     retry: (materialId) => request(`/materials/${materialId}/analysis-status/retry`, { method: 'POST' }),
+    /** 이 프로젝트와의 연결 변경안을 다시 만든다(변경안이 옛 구조 기준일 때). */
+    retryLink: (materialId, courseId) =>
+        request(`/materials/${materialId}/analysis-status/retry-link?courseId=${courseId}`, { method: 'POST' }),
     /** 분석된 구간(역할·위치·발췌). "원문 보기"가 쓴다. */
     sections: (materialId) => request(`/materials/${materialId}/sections`),
     section: (sectionId) => request(`/material-sections/${sectionId}`),

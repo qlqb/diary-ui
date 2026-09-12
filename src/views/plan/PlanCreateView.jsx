@@ -226,6 +226,7 @@ export default function PlanCreateView({
           onOpenSchedule={onOpenSchedule}
           onOpenSource={onOpenSource}
           onExcludeThisTime={fromAi ? null : excludeThisTime}
+          onRedraft={fromAi ? null : () => handleDraft(null)}
         />
       )}
       {excludeTopicIds.length > 0 && !loading && (

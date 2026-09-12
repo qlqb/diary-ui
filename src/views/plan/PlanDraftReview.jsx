@@ -33,7 +33,7 @@ const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function PlanDraftReview({
   draft, projectTitles = {}, todayIso, onConfirmed, onDiscard, discardLabel = '다시 만들기', onOpenSchedule,
-  onOpenSource, onExcludeThisTime = null,
+  onOpenSource, onExcludeThisTime = null, onRedraft = null,
 }) {
   const [excluded, setExcluded] = useState(() => new Set());
   /*
@@ -133,6 +133,19 @@ export default function PlanDraftReview({
     return map;
   }, [provenance]);
 
+  /*
+   * 기본 AI 경로의 항목에는 topicId가 없다(판단 경로만 조각에 topic_id를 남긴다). 그 항목이 인용한 학습 항목
+   * 줄(TOPIC 인용)이 있으면 그 id를 쓴다 — 회차에 실제로 준 것 중 모델이 고른 근거이지, 제목으로 짝지은 것이 아니다.
+   */
+  const topicIdOf = useCallback((item) => {
+    if (item?.topicId != null) return item.topicId;
+    const evidence = evidenceByItem.get(item?.proposalItemId);
+    if (!evidence?.refIds?.length || !provenance?.providedSources) return null;
+    const refs = new Set(evidence.refIds);
+    const hit = provenance.providedSources.find((s) => refs.has(s.refId) && s.sourceType === 'TOPIC' && s.sourceId != null);
+    return hit ? hit.sourceId : null;
+  }, [evidenceByItem, provenance]);
+
   /** 조각의 취급은 판단에 있다. 복사하지 않고 topicId로 이어 붙인다. */
   const treatmentByTopic = useMemo(() => {
     const map = new Map();
@@ -222,6 +235,18 @@ export default function PlanDraftReview({
       setError(err.message || '표시를 저장하지 못했습니다.');
       return;
     }
+    if (!strategy) {
+      /*
+       * 판단 없이 만든 초안(기본 AI 경로)은 조각만 다시 만들 수 없다 — 표식을 저장했으니 초안을 다시 요청한다.
+       * 표식은 다음 계획에도 남는다(「이번만 빼기」와 다르다).
+       */
+      setToast({
+        message: '다음 계획부터도 이 내용은 건너뛸게요',
+        undo: async () => { await topicAPI.updateUserMark(topicId, null); await onRedraft?.(); },
+      });
+      await onRedraft?.();
+      return;
+    }
     await regenerate({
       message: '다음 계획부터도 이 내용은 건너뛸게요',
       undo: async () => {
@@ -229,7 +254,7 @@ export default function PlanDraftReview({
         await regenerate(null);
       },
     });
-  }, [regenerate, regenerating]);
+  }, [regenerate, regenerating, strategy, onRedraft]);
 
   const handleConfirm = async () => {
     if (!draft || confirming || allExcluded) return;
@@ -383,6 +408,7 @@ export default function PlanDraftReview({
           treatmentByTopic={treatmentByTopic}
           classAtByCourse={classAtByCourse}
           onMarkKnown={markKnown}
+          topicIdOf={topicIdOf}
           onExcludeThisTime={onExcludeThisTime}
           detailAll={detailAll}
           detailOpen={detailOpen}
@@ -507,7 +533,7 @@ function PlanDraftGroup({
   group, excluded, collapsed, placedById, unplacedById, previewLoaded, onToggleCollapse, onToggleItem, onToggleGroup,
   treatmentByTopic, classAtByCourse, onMarkKnown, busy, provenance, provenanceLoading, provenanceError,
   onReloadProvenance, evidenceByItem, onOpenSource, projectTitles,
-  onExcludeThisTime = null, detailAll = false, detailOpen = new Set(), onToggleDetail = null,
+  onExcludeThisTime = null, detailAll = false, detailOpen = new Set(), onToggleDetail = null, topicIdOf = null,
 }) {
   const groupMinutes = group.items
     .filter((item) => !excluded.has(item.proposalItemId))
@@ -530,7 +556,9 @@ function PlanDraftGroup({
 
       {!collapsed && (
         <ul className="plan-group-items">
-          {group.items.map((item) => (
+          {group.items.map((item) => {
+            const topicId = topicIdOf ? topicIdOf(item) : item.topicId;
+            return (
             <li key={item.proposalItemId} className="plan-item">
               <label>
                 <input
@@ -583,12 +611,12 @@ function PlanDraftGroup({
               )}
 
               <span className="plan-item-actions">
-                {item.topicId != null && onMarkKnown && (
+                {topicId != null && onMarkKnown && (
                   <button
                     type="button"
                     className="btn-ghost btn-sm plan-item-known"
                     disabled={busy}
-                    onClick={() => onMarkKnown(item.topicId)}
+                    onClick={() => onMarkKnown(topicId)}
                   >
                     이미 알아요
                   </button>
@@ -597,9 +625,9 @@ function PlanDraftGroup({
                   「이번만 빼기」는 이 요청에서만 후보에서 뺀다. 표식을 저장하지 않으므로 다음 계획에는
                   다시 후보로 돌아온다 — 「이미 알아요」와 무게가 다르다.
                 */}
-                {item.topicId != null && onExcludeThisTime && (
+                {topicId != null && onExcludeThisTime && (
                   <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                    onClick={() => onExcludeThisTime(item.topicId)}>
+                    onClick={() => onExcludeThisTime(topicId)}>
                     이번만 빼기
                   </button>
                 )}
@@ -652,7 +680,8 @@ function PlanDraftGroup({
                 </p>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>

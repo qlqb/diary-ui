@@ -969,6 +969,7 @@ function MaterialPicker({ courseId, linkedIds, onCancel, onLinked }) {
 function TopicChangeProposalsSection({ courseId, refreshToken = 0, onApplied = null }) {
   const [proposals, setProposals] = useState([]);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
   const ticket = useRef(0);
 
   const load = useCallback(async () => {
@@ -995,8 +996,19 @@ function TopicChangeProposalsSection({ courseId, refreshToken = 0, onApplied = n
       {error && <p className="view-error">{error}</p>}
       {proposals.map((p) => (
         <TopicChangeProposalCard key={p.proposalId} proposal={p}
-          onResolved={async () => { await load(); await onApplied?.(); }} />
+          onResolved={async () => { await load(); await onApplied?.(); }}
+          onReanalyze={async () => {
+            try {
+              await materialAnalysisStatusAPI.retryLink(p.materialId, courseId);
+              setError(null);
+              setNotice('다시 분석을 시작했어요. 잠시 뒤 새 변경안이 나타나요.');
+              await load();
+            } catch (err) {
+              setError(err.message || '다시 분석을 시작하지 못했어요.');
+            }
+          }} />
       ))}
+      {notice && <p className="hint">{notice}</p>}
     </section>
   );
 }
