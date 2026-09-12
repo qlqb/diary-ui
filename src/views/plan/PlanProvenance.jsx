@@ -272,10 +272,14 @@ export function EvidenceBody({
               <li key={group.refId}>
                 <span>{group.title}</span>
                 {group.locator && <span className="hint"> · {group.locator}</span>}
+                {/*
+                  하위 항목은 깊이와 상관없이 전부 한 줄에 쓴다. 손자는 자식 뒤 괄호 안에 —
+                  "자식 (손자, 손자)". 들여쓰기로 폭을 쓰지 않고, 몇 단계든 인용된 항목은 빠지지 않는다.
+                */}
                 {group.children.length > 0 && (
                   <span className="plan-evidence-children">
                     {' — '}
-                    {group.children.map((child) => child.title + (child.locator ? ` (${child.locator})` : '')).join(', ')}
+                    {describeChildren(group.children)}
                   </span>
                 )}
               </li>
@@ -423,8 +427,16 @@ function MaterialLine({ material, onOpenError, fallback, onOpenSource }) {
       <span className="plan-evidence-material-name">
         {material.origin === 'CURRENT_LINK' && <span className="hint">현재 연결된 자료 · </span>}
         {material.filename ?? '이름을 알 수 없는 자료'}
-        {hint && <span className="hint"> · {hint}</span>}
+        {/* 위치는 생성 당시 자료 안의 위치다. 파일이 바뀌었거나 다른 파일이 연결됐으면 그 사실을 함께 적는다. */}
+        {hint && <span className="hint"> · {hint}{currentDiffers ? ' (생성 당시 파일 기준)' : ''}</span>}
       </span>
+      {/*
+        같은 당시 자료가 지금은 주제마다 다른 파일·상태로 갈라졌으면, 이 행이 어느 주제의 것인지
+        말한다. 합쳐 버리면 "어느 주제가 어떤 현재 자료로 갔는지"가 사라진다.
+      */}
+      {material.split && material.topicTitles.length > 0 && (
+        <span className="hint plan-evidence-material-topics">해당 항목: {material.topicTitles.join(', ')}</span>
+      )}
       {material.note && (
         <span className="plan-evidence-material-note">
           {material.note}
@@ -451,6 +463,14 @@ function MaterialLine({ material, onOpenError, fallback, onOpenSource }) {
       )}
     </li>
   );
+}
+
+/** 하위 항목을 깊이와 상관없이 한 줄로. "자식 (손자, 손자 (증손))" — 인용된 항목은 전부 나온다. */
+function describeChildren(children) {
+  return children.map((child) => {
+    const own = child.title + (child.locator ? ` (${child.locator})` : '');
+    return child.children.length > 0 ? `${own} (${describeChildren(child.children)})` : own;
+  }).join(', ');
 }
 
 /** 원문을 열 수 없을 때의 보조 경로: 이 항목이 인용한 학습 항목·프로젝트 중 열 수 있는 첫 것. */

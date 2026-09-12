@@ -10,6 +10,11 @@
  * 하나로 통일하지 않는다.
  *
  * ★ 이 항목에 실제로 연결된 ref만 본다. 회차에 제공된 나머지 정보는 이 항목의 근거가 아니다.
+ * 같은 ref가 두 번 인용돼도 한 번만 센다.
+ *
+ * ★ 계층은 깊이에 제한이 없다. 인용된 항목은 몇 단계 아래에 있어도 기본 화면에 나온다 — 직계
+ * 자식만 보여주면 3단계 항목이 소리 없이 사라진다. 순환·고아 관계에서도 인용된 항목을 잃지
+ * 않는다.
  */
 
 /** 학습 범위로 읽는 종류. 나머지는 "참고한 일정·조건"이다. */
@@ -26,7 +31,7 @@ export const MATERIALS_SHOWN_BY_DEFAULT = 2;
 export function buildEvidenceSummary(provenance, item, projectTitles = {}) {
   const sources = provenance?.providedSources ?? [];
   const byRef = new Map(sources.map((s) => [s.refId, s]));
-  const linked = (item?.refIds ?? []).map((refId) => byRef.get(refId)).filter(Boolean);
+  const linked = uniqueBy((item?.refIds ?? []).map((refId) => byRef.get(refId)).filter(Boolean), (s) => s.refId);
 
   const topics = linked.filter((s) => STUDY_TYPES.has(s.sourceType));
   const conditions = linked.filter((s) => !STUDY_TYPES.has(s.sourceType) && s.sourceType !== 'COURSE');
@@ -86,35 +91,62 @@ function buildScope(topics, conditions, courseSources, allSources, projectTitles
  * 부모·자식 묶기. 부모가 이 항목에 함께 연결돼 있을 때만 그 아래로 들어간다. 부모가 연결되지
  * 않은 자식은 그 자체로 한 묶음이다 — 연결되지 않은 부모를 화면에 끌어오면 "AI가 그 부모
  * 전체를 근거로 삼았다"가 된다.
+ *
+ * 깊이 제한이 없다. A → B → C처럼 몇 단계든 인용된 항목은 전부 트리에 들어간다. 같은 항목
+ * (sourceId)이 여러 ref로 인용돼도 한 번만 넣는다. 부모가 자기 자신이거나 서로를 가리키는
+ * 순환은 스냅샷 오류지만, 그때도 항목을 잃지 않는다 — 걷지 못한 항목은 뿌리로 올린다.
  */
 function groupTopics(topics, weekLabel) {
-  const linkedIds = new Set(topics.map((t) => t.sourceId));
-  const groups = [];
-  const childrenOf = new Map();
+  const nodes = new Map();
   topics.forEach((topic) => {
-    const parentId = topic.parentSourceId ?? null;
-    if (parentId != null && linkedIds.has(parentId)) {
-      if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
-      childrenOf.get(parentId).push(topic);
+    if (topic.sourceId == null || !nodes.has(topic.sourceId)) {
+      nodes.set(topic.sourceId ?? `ref:${topic.refId}`, {
+        refId: topic.refId,
+        sourceId: topic.sourceId ?? null,
+        title: textOf(topic.providedValue?.title) ?? stripRef(topic.promptLine),
+        locator: locatorFor(topic, weekLabel),
+        parentId: topic.parentSourceId ?? null,
+        children: [],
+      });
     }
   });
-  topics.forEach((topic) => {
-    const parentId = topic.parentSourceId ?? null;
-    if (parentId != null && linkedIds.has(parentId)) return; // 부모 아래에서 그려진다.
-    groups.push({
-      refId: topic.refId,
-      sourceId: topic.sourceId,
-      title: textOf(topic.providedValue?.title) ?? stripRef(topic.promptLine),
-      locator: locatorFor(topic, weekLabel),
-      children: (childrenOf.get(topic.sourceId) ?? []).map((child) => ({
-        refId: child.refId,
-        sourceId: child.sourceId,
-        title: textOf(child.providedValue?.title) ?? stripRef(child.promptLine),
-        locator: locatorFor(child, weekLabel),
-      })),
-    });
+
+  const childrenOf = new Map();
+  nodes.forEach((node, id) => {
+    const parentId = node.parentId;
+    if (parentId != null && parentId !== id && nodes.has(parentId)) {
+      if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
+      childrenOf.get(parentId).push(node);
+    }
+  });
+
+  const visited = new Set();
+  const build = (node) => {
+    visited.add(node.sourceId ?? `ref:${node.refId}`);
+    const children = (childrenOf.get(node.sourceId) ?? [])
+      .filter((child) => !visited.has(child.sourceId ?? `ref:${child.refId}`))
+      .map(build);
+    return {
+      refId: node.refId, sourceId: node.sourceId, title: node.title, locator: node.locator, children,
+    };
+  };
+
+  const groups = [];
+  nodes.forEach((node, id) => {
+    const parentId = node.parentId;
+    const hasLinkedParent = parentId != null && parentId !== id && nodes.has(parentId);
+    if (!hasLinkedParent && !visited.has(id)) groups.push(build(node));
+  });
+  // 순환 때문에 뿌리가 없는 항목. 잃지 않고 뿌리로 올린다.
+  nodes.forEach((node, id) => {
+    if (!visited.has(id)) groups.push(build(node));
   });
   return groups;
+}
+
+/** 묶음 하나가 품은 항목 수(자기 자신 포함). 화면이 "몇 개를 묶었는지" 말할 때 쓴다. */
+export function countScopeNodes(group) {
+  return 1 + (group.children ?? []).reduce((sum, child) => sum + countScopeNodes(child), 0);
 }
 
 /** 공통 주차로 이미 올라간 위치는 항목 옆에 반복하지 않는다. */
@@ -146,24 +178,35 @@ function conditionOf(source) {
 }
 
 /**
- * 자료 묶음. 같은 자료(id)의 줄은 하나로 모으고 위치는 목록으로 둔다.
+ * 자료 묶음. 같은 자료의 줄은 하나로 모으고 위치는 목록으로 둔다.
  *
- * 묶는 키는 (출처 종류, 자료 id)다. 당시 기록(RECORDED)은 당시 자료 id로, 현재 연결로만
- * 찾은 것(CURRENT_LINK)은 지금 자료 id로 묶는다. id가 없는(찾을 수 없는) 자료는 줄마다
- * 따로 둔다 — 이름이 같다고 합치면 서로 다른 파일이 하나로 보일 수 있다.
+ * 묶는 키는 (출처 종류, 당시 자료 id, 지금 열리는 자료 id, 상태)다. 당시 자료가 같아도 지금
+ * 연결된 파일이나 상태(변경·재연결·삭제)가 다르면 다른 행이다 — 하나로 합치면 첫 줄의 링크와
+ * 안내만 남아 "어느 주제가 어떤 현재 자료로 갔는지"가 사라진다. 접근할 수 없는 자료가 다른
+ * 줄의 정상 링크를 물려받지도 않는다.
+ *
+ * id가 없는(찾을 수 없는) 자료는 줄마다 따로 둔다. 파일명으로는 묶지 않는다 — 이름이 같은
+ * 다른 파일이 하나로 보일 수 있다.
+ *
+ * 순서는 인용 순서가 아니라 (당시 자료 id, 파일명, 지금 자료 id, 상태)다. 어느 순서로 인용됐든
+ * 같은 집합이 같은 순서로 보인다.
  */
 function buildMaterials(linked) {
   const groups = new Map();
   linked.forEach((source) => {
     const material = source.material;
     if (!material) return;
-    const id = material.recordedMaterialId ?? material.materialId ?? null;
-    const key = id != null ? `${material.origin}:${id}` : `none:${source.refId}`;
+    const recordedId = material.recordedMaterialId ?? null;
+    const currentId = material.materialId ?? null;
+    const anchor = recordedId ?? currentId;
+    const key = anchor != null
+      ? `${material.origin}:${recordedId ?? '-'}:${currentId ?? '-'}:${material.state ?? '-'}`
+      : `none:${source.refId}`;
     if (!groups.has(key)) {
       groups.set(key, {
         key,
-        materialId: material.materialId ?? null,
-        recordedMaterialId: material.recordedMaterialId ?? null,
+        materialId: currentId,
+        recordedMaterialId: recordedId,
         filename: material.filename ?? null,
         currentFilename: material.currentFilename ?? null,
         contentType: material.contentType ?? null,
@@ -173,14 +216,47 @@ function buildMaterials(linked) {
         note: material.note ?? null,
         locators: [],
         refIds: [],
+        topicTitles: [],
       });
     }
     const group = groups.get(key);
     const locator = textOf(material.locator);
     if (locator && !group.locators.includes(locator)) group.locators.push(locator);
-    group.refIds.push(source.refId);
+    if (!group.refIds.includes(source.refId)) group.refIds.push(source.refId);
+    const title = textOf(source.providedValue?.title);
+    if (title && !group.topicTitles.includes(title)) group.topicTitles.push(title);
   });
-  return [...groups.values()];
+
+  const list = [...groups.values()];
+  // 같은 당시 자료가 여러 행으로 갈라졌으면 각 행이 어느 주제인지 말해야 한다.
+  const rowsPerRecorded = new Map();
+  list.forEach((group) => {
+    const anchor = group.recordedMaterialId ?? group.materialId;
+    if (anchor == null) return;
+    rowsPerRecorded.set(anchor, (rowsPerRecorded.get(anchor) ?? 0) + 1);
+  });
+  list.forEach((group) => {
+    const anchor = group.recordedMaterialId ?? group.materialId;
+    group.split = anchor != null && (rowsPerRecorded.get(anchor) ?? 0) > 1;
+  });
+
+  const rank = (group) => [
+    group.recordedMaterialId ?? group.materialId ?? Number.MAX_SAFE_INTEGER,
+    group.filename ?? '',
+    group.materialId ?? Number.MAX_SAFE_INTEGER,
+    group.state ?? '',
+    group.refIds[0] ?? '',
+  ];
+  list.sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    for (let i = 0; i < ra.length; i += 1) {
+      if (ra[i] < rb[i]) return -1;
+      if (ra[i] > rb[i]) return 1;
+    }
+    return 0;
+  });
+  return list;
 }
 
 /**
@@ -217,6 +293,16 @@ export function locatorHint(locators) {
 export function stripRef(promptLine) {
   if (!promptLine) return '';
   return promptLine.replace(/\s*\[s\d+]\s*$/, '').replace(/^\s*-\s*/, '').trim();
+}
+
+function uniqueBy(values, keyOf) {
+  const seen = new Set();
+  return values.filter((value) => {
+    const key = keyOf(value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function textOf(value) {

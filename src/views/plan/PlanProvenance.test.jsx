@@ -405,6 +405,94 @@ describe('항목별 근거 — 짧게 확인하고 원문을 연다', () => {
   });
 });
 
+describe('항목별 근거 — 여러 단계 범위와 일부 재연결', () => {
+  it('3단계 범위(A > B > C)에서 마지막 단계 제목이 기본 화면에 보인다', async () => {
+    planAPI.draftProvenance.mockResolvedValue({
+      ...PROVENANCE,
+      providedSources: [
+        PROVENANCE.providedSources[0],
+        topicSource('s2', 101, '네트워크와 소켓 프로그래밍'),
+        topicSource('s3', 102, '소켓의 개념', 101),
+        topicSource('s4', 103, '소켓 함수의 동작 순서', 102),
+      ],
+      items: [{ ...PROVENANCE.items[0], refIds: ['s2', 's3', 's4'] }],
+    });
+    const user = userEvent.setup();
+    await openEvidence(user);
+
+    const body = screen.getByText('학습 범위').closest('.plan-evidence-body');
+    expect(within(body).getByText('네트워크와 소켓 프로그래밍')).toBeInTheDocument();
+    expect(within(body).getByText(/소켓의 개념 \(소켓 함수의 동작 순서\)/)).toBeInTheDocument();
+    // 범위 묶음은 하나, 열기 액션도 하나. 내부 스크롤 없음.
+    expect(body.querySelectorAll('.plan-evidence-scope > li')).toHaveLength(1);
+    expect(within(body).getAllByRole('button', { name: /원본 자료 열기/ })).toHaveLength(1);
+    expect(body.querySelector('.plan-evidence-detail')).toBeNull();
+  });
+
+  const RELINKED = {
+    ...PDF, materialId: 900, currentFilename: '네트워크 2주차(개정).pdf', state: 'RELINKED',
+    note: '생성 당시와 다른 자료가 연결돼 있어요 · 현재 파일을 열어요',
+  };
+
+  async function openWithRelink(user, order) {
+    const sources = {
+      s2: topicSource('s2', 101, '네트워크와 소켓 프로그래밍'),
+      s3: topicSource('s3', 102, '소켓의 개념', 101, RELINKED),
+    };
+    planAPI.draftProvenance.mockResolvedValue({
+      ...PROVENANCE,
+      providedSources: [PROVENANCE.providedSources[0], ...order.map((ref) => sources[ref])],
+      items: [{ ...PROVENANCE.items[0], refIds: order }],
+    });
+    await openEvidence(user);
+    return screen.getByText('참고 자료').closest('.plan-evidence-body');
+  }
+
+  it.each([
+    ['정순', ['s2', 's3']],
+    ['역순', ['s3', 's2']],
+  ])('일부 주제만 다른 자료로 재연결됐으면(%s) 두 행으로 나뉘고 각 행이 자기 파일을 연다', async (_label, order) => {
+    const user = userEvent.setup();
+    const body = await openWithRelink(user, order);
+
+    const rows = body.querySelectorAll('.plan-evidence-material');
+    expect(rows).toHaveLength(2);
+    // 첫 행: 당시 파일 그대로(657), 둘째 행: 재연결된 새 파일(900). 순서는 인용 순서와 무관하다.
+    expect(within(rows[0]).getByText(/해당 항목: 네트워크와 소켓 프로그래밍/)).toBeInTheDocument();
+    expect(within(rows[0]).queryByText(/다른 자료가 연결/)).not.toBeInTheDocument();
+    expect(within(rows[1]).getByText(/해당 항목: 소켓의 개념/)).toBeInTheDocument();
+    expect(within(rows[1]).getByText(/다른 자료가 연결돼 있어요/)).toBeInTheDocument();
+    expect(within(rows[1]).getByText(/지금 파일: 네트워크 2주차\(개정\)\.pdf/)).toBeInTheDocument();
+    // 당시 위치는 당시 파일 기준이라고 말한다.
+    expect(within(rows[1]).getByText(/2주차 확인 \(생성 당시 파일 기준\)/)).toBeInTheDocument();
+
+    // 실제로 여는 자료 id가 행마다 다르다.
+    await user.click(within(rows[1]).getByRole('button', { name: /원본 자료 열기/ }));
+    await waitFor(() => expect(materialStoreAPI.file).toHaveBeenLastCalledWith(900));
+    await user.click(within(rows[0]).getByRole('button', { name: /원본 자료 열기/ }));
+    await waitFor(() => expect(materialStoreAPI.file).toHaveBeenLastCalledWith(657));
+  });
+
+  it('둘 다 같은 새 파일로 재연결됐으면 한 행이고 어느 항목인지 따로 적지 않는다', async () => {
+    planAPI.draftProvenance.mockResolvedValue({
+      ...PROVENANCE,
+      providedSources: [
+        PROVENANCE.providedSources[0],
+        topicSource('s2', 101, '네트워크와 소켓 프로그래밍', null, RELINKED),
+        topicSource('s3', 102, '소켓의 개념', 101, RELINKED),
+      ],
+      items: [{ ...PROVENANCE.items[0], refIds: ['s2', 's3'] }],
+    });
+    const user = userEvent.setup();
+    await openEvidence(user);
+
+    const body = screen.getByText('참고 자료').closest('.plan-evidence-body');
+    expect(body.querySelectorAll('.plan-evidence-material')).toHaveLength(1);
+    expect(within(body).queryByText(/해당 항목:/)).not.toBeInTheDocument();
+    expect(within(body).getAllByRole('button', { name: /원본 자료 열기/ })).toHaveLength(1);
+  });
+});
+
 describe('적용된 항목의 근거', () => {
   it('펼칠 때만 불러오고, 같은 회차의 근거를 짧은 화면으로 보여준다', async () => {
     const user = userEvent.setup();
