@@ -16,7 +16,7 @@
  * (제외·접힘·제목)는 초안마다 처음부터 시작한다.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Clock3 } from 'lucide-react';
 import { planAPI, schedulePreviewAPI, topicAPI } from '../../api/api.js';
 import { PLAN_INTENSITY_LABEL } from '../../types/execution.js';
@@ -41,6 +41,12 @@ export default function PlanDraftReview({
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
   const [previewNote, setPreviewNote] = useState(null);
+  /*
+   * 미리보기 요청 순번. 화면이 뜰 때의 요청과 확정 거절 뒤의 재계산이 겹칠 수 있는데, 늦게
+   * 도착한 옛 응답이 새 응답을 덮으면 사용자는 방금 계산한 시각이 아니라 옛 시각을 확정한다.
+   * 마지막으로 보낸 요청의 응답만 쓴다.
+   */
+  const previewRequest = useRef(0);
   /*
    * 재생성은 새 제안을 만들고 원본을 폐기하므로 proposalId가 바뀐다. 호출부의 초안을
    * 갈아끼우는 대신 여기서 들고 있는다 — 부모가 다시 그리면 key가 바뀌어 검토 상태
@@ -69,14 +75,18 @@ export default function PlanDraftReview({
   useEffect(() => {
     if (!proposalId || noAvailableTime) return undefined;
     let cancelled = false;
+    const ticket = previewRequest.current + 1;
+    previewRequest.current = ticket;
     (async () => {
       try {
         if (!schedulePreviewAPI?.get) return;
         const stored = await schedulePreviewAPI.get(proposalId);
         const result = stored ?? (await schedulePreviewAPI.recompute(proposalId, {}));
-        if (!cancelled) setPreview(result ?? null);
+        if (!cancelled && previewRequest.current === ticket) setPreview(result ?? null);
       } catch {
-        if (!cancelled) setPreviewNote('정확한 시각 미리보기를 불러오지 못했어요. 확정하면 배치 때 시각이 정해져요.');
+        if (!cancelled && previewRequest.current === ticket) {
+          setPreviewNote('정확한 시각 미리보기를 불러오지 못했어요. 확정하면 배치 때 시각이 정해져요.');
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -236,10 +246,13 @@ export default function PlanDraftReview({
        */
       if (err.code === 'E409_016' && schedulePreviewAPI?.recompute) {
         setError('미리보기 이후 일정이 바뀌어 겹치는 항목이 있어요. 시각을 다시 계산했으니 확인하고 다시 확정해 주세요.');
+        const ticket = previewRequest.current + 1;
+        previewRequest.current = ticket;
         try {
-          setPreview((await schedulePreviewAPI.recompute(proposalId, {})) ?? null);
+          const recomputed = await schedulePreviewAPI.recompute(proposalId, {});
+          if (previewRequest.current === ticket) setPreview(recomputed ?? null);
         } catch {
-          setPreviewNote('정확한 시각 미리보기를 다시 계산하지 못했어요.');
+          if (previewRequest.current === ticket) setPreviewNote('정확한 시각 미리보기를 다시 계산하지 못했어요.');
         }
       } else {
         setError(err.message || '확정하지 못했습니다.');
