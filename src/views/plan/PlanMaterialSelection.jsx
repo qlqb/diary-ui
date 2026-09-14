@@ -34,6 +34,9 @@ export default function PlanMaterialSelection({ selection, onChooseRequestedMate
   const unreviewed = selection.unreviewed ?? [];
   const ambiguities = selection.ambiguities ?? [];
   const requested = selection.requestedMaterials ?? [];
+  // 여러 프로젝트면 같은 주차 이름이 겹친다 — 그때만 프로젝트 이름을 붙인다.
+  const manyCourses = new Set(unreviewed.map((u) => u.courseTitle)).size > 1;
+  const summarizedOnly = unreviewed.length > 0 && unreviewed.every((u) => u.summarized);
 
   return (
     <section className="plan-material-selection" aria-label="AI가 고른 자료">
@@ -106,10 +109,12 @@ export default function PlanMaterialSelection({ selection, onChooseRequestedMate
           )}
           {unreviewed.length > 0 && (
             <p className="hint">
-              이번에 목록으로도 보지 못한 범위: {unreviewed.slice(0, 6)
-                .map((u) => `${u.title}(구간 ${u.sections})`).join(', ')}
+              {summarizedOnly ? '묶음 요약만 보고 안의 항목은 하나씩 보지 않은 범위: ' : '이번에 목록으로도 보지 못한 범위: '}
+              {unreviewed.slice(0, 6)
+                .map((u) => `${manyCourses && u.courseTitle ? `${u.courseTitle} · ` : ''}${u.title}(구간 ${u.sections})`)
+                .join(', ')}
               {unreviewed.length > 6 ? ` 외 ${unreviewed.length - 6}묶음` : ''}
-              {' — 이 범위는 검토하지 않았어요.'}
+              {summarizedOnly ? ' — 이 안의 구간은 하나씩 검토하지 않았어요.' : ' — 이 범위는 검토하지 않았어요.'}
             </p>
           )}
           <p className="hint">

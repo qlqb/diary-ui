@@ -273,6 +273,9 @@ export default function MainShell({ user, onLogout }) {
    */
   const handlePeriodPlan = useCallback((periodDraft) => {
     if (!periodDraft) return;
+    // 상담 초안은 자기 요청 맥락(기간·범위·지정 자료)을 들고 온다. 계획 화면에 남아 있던 범위·지정 자료를 섞지 않는다.
+    setPlanScopeCourseId(null);
+    setPlanRequestedMaterials([]);
     setAiPeriodDraft(periodDraft);
     setOpenPlanId(null);
     setTab('plan');

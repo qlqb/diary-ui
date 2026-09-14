@@ -135,6 +135,15 @@ describe('T13·T14 제외 목록의 범위', () => {
 describe('T15 상담 초안', () => {
   const CONVERSATION = draft(90, [ADT, LIST], { source: 'CONVERSATION' });
 
+  it('화면에 남아 있던 다른 프로젝트 범위가 아니라 상담 초안의 범위로 제목을 보인다', async () => {
+    render(<PlanCreateView projectTitles={{ ...PROJECT_TITLES, 7: '네트워크' }} scopeCourseId={7}
+      initialDraft={CONVERSATION} />);
+    await screen.findByText('자료구조 · 연결 리스트');
+
+    expect(screen.getByRole('heading', { name: /자료구조 계획 만들기/ })).toBeInTheDocument();
+    expect(screen.queryByText(/네트워크 항목만 제안받아요/)).not.toBeInTheDocument();
+  });
+
   it('빼기·이미 알아요·되돌리기가 상담 초안에서도 같은 의미로 동작하고, 화면이 기간·지시를 다시 조립하지 않는다', async () => {
     topicAPI.updateUserMark.mockResolvedValue({});
     planAPI.redraft

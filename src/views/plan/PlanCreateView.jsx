@@ -261,13 +261,19 @@ export default function PlanCreateView({
     await redraft({ requestedMaterialIds: [...new Set([...explicit, materialId])] });
   };
 
+  // 상담 초안은 대화에서 정한 범위가 기준이다 — 이 화면에 남아 있던 이전 범위를 제목에 쓰지 않는다.
+  const conversationCourseIds = draft?.requestContext?.courseIds ?? [];
+  const headerCourseId = fromConversation
+    ? (conversationCourseIds.length === 1 ? conversationCourseIds[0] : null)
+    : scopeCourseId;
+
   return (
     <section className="plan-create">
       <header className="view-head">
         <h1>
           <CalendarRange size={20} />
-          {scopeCourseId != null && projectTitles[scopeCourseId]
-            ? `${projectTitles[scopeCourseId]} 계획 만들기`
+          {headerCourseId != null && projectTitles[headerCourseId]
+            ? `${projectTitles[headerCourseId]} 계획 만들기`
             : ' 계획 만들기'}
         </h1>
         {onCancel && (
