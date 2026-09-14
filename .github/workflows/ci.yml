@@ -1,0 +1,28 @@
+# diary-ui 기본 검증. 브랜치를 제한하지 않는다 — 어느 브랜치에 올리든 같은 확인을 받는다.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 개발 환경과 같은 메이저를 쓴다. vite 7은 20.19+/22.12+/24+를 요구한다.
+          node-version: '24'
+          cache: npm
+
+      # package-lock.json이 커밋되어 있으므로 install이 아니라 ci로 잠긴 버전을 그대로 쓴다.
+      - run: npm ci
+
+      # 아래 셋 모두 package.json에 실제로 있는 스크립트다
+      # (test="vitest run", build="vite build", lint="eslint .").
+      - run: npm test
+      - run: npm run build
+      - run: npm run lint
