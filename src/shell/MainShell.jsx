@@ -107,6 +107,10 @@ export default function MainShell({ user, onLogout }) {
    */
   const [planScopeCourseId, setPlanScopeCourseId] = useState(null);
   /**
+   * 이번 계획에서 중심으로 볼 자료(자료함의 [이 자료로 계획]). 이번 요청의 지정일 뿐 영구 연결이 아니다.
+   */
+  const [planRequestedMaterials, setPlanRequestedMaterials] = useState([]);
+  /**
    * AI 패널에서 만든 기간 계획 초안(PlanDraftResponse). 어느 탭에서 만들었든 계획 탭의 같은
    * 검토·확정 화면으로 데려간다 — 일반 제안의 ghost·적용 바가 아니라 PlanVersion 확정이다.
    */
@@ -361,7 +365,16 @@ export default function MainShell({ user, onLogout }) {
           )}
 
           {tab === 'materials' && (
-            <MaterialsView projects={projects} onProjectsChanged={loadProjects} />
+            <MaterialsView projects={projects} onProjectsChanged={loadProjects}
+              onPlanWithMaterial={(material) => {
+                // 연결된 프로젝트가 하나면 그 프로젝트로 좁힌다. 여럿이거나 없으면 전체 — 서버가 지정 자료를 범위와 대조한다.
+                const links = material.links ?? [];
+                setPlanScopeCourseId(links.length === 1 ? links[0].courseId : null);
+                setPlanRequestedMaterials([{ materialId: material.materialId, filename: material.originalFilename }]);
+                setAiPeriodDraft(null);
+                setOpenPlanId(null);
+                setTab('plan');
+              }} />
           )}
 
           {tab === 'projects' && !openProjectId && (
@@ -380,6 +393,9 @@ export default function MainShell({ user, onLogout }) {
               projectTitles={projectTitles}
               scopeCourseId={planScopeCourseId}
               onClearScope={() => setPlanScopeCourseId(null)}
+              requestedMaterials={planRequestedMaterials}
+              onClearRequestedMaterial={(materialId) =>
+                setPlanRequestedMaterials((prev) => prev.filter((m) => m.materialId !== materialId))}
               initialDraft={aiPeriodDraft}
               onInitialDraftCleared={() => setAiPeriodDraft(null)}
               onOpenSchedule={() => setTab('schedule')}
@@ -408,6 +424,7 @@ export default function MainShell({ user, onLogout }) {
               onCreatePlan={(courseId) => {
                 setTab('plan');
                 setOpenPlanId(null);
+                setPlanRequestedMaterials([]);
                 setPlanScopeCourseId(courseId ?? null);
               }}
               onOpenPlan={(planVersionId) => { setTab('plan'); setOpenPlanId(planVersionId); }}

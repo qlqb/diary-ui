@@ -2087,6 +2087,21 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 /* 초안 위 한 줄 안내 + 되돌리기(「이미 알아요」·「이번만 빼기」). 검토 컴포넌트 밖에서도 같은 모양. */
 .plan-toast { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 0; padding: 6px 10px;
   border: 1px solid var(--ws-border); border-radius: 8px; background: var(--ws-surface); font-size: 13.5px; }
+.plan-toast-warn { border-color: var(--ws-warn); background: var(--ws-warn-soft); }
+.plan-requested-materials { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.plan-requested-materials .chip { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ===== AI가 고른 자료 ===== */
+.plan-material-selection { margin: 8px 0 0; font-size: 13.5px; }
+.plan-material-selection-head { display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; background: none;
+  border: 0; color: inherit; font: inherit; cursor: pointer; }
+.plan-material-selection-warn { margin: 4px 0 0; color: var(--ws-warn); }
+.plan-material-selection-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 0; }
+.plan-material-selection-list { list-style: none; margin: 6px 0 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 6px; }
+.plan-material-selection-list li { display: flex; flex-direction: column; gap: 1px; overflow-wrap: anywhere; }
+.plan-material-selection-list.is-dim { color: var(--ws-text-faint); }
+.plan-material-selection-title { font-weight: 600; }
+.plan-material-selection-meta, .plan-material-selection-reason { font-size: 12.5px; color: var(--ws-text-faint); }
 
 /* ===== 계획 항목 「자세히」 ===== */
 .plan-detail-level { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 13.5px; }

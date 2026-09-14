@@ -7,10 +7,15 @@
  *
  * 초안 검토(PlanDraftReview)는 AI 패널에서 만든 기간 계획과 같은 컴포넌트다. 어느 탭에서
  * 시작했든 검토·확정 화면과 API는 같다 — initialDraft로 그 초안을 받아 바로 검토로 시작한다.
+ *
+ * 「이번만 빼기」·되돌리기·「이미 알아요」 뒤 재생성은 계획 화면이든 상담 초안이든 서버의
+ * [같은 조건으로 다시 만들기](planAPI.redraft)를 쓴다. 기간·강도·범위·지시·지정 자료는 초안을 만든 요청을
+ * 서버가 들고 있고, 화면은 바뀐 제외 목록만 보낸다 — 상담 초안을 이 화면의 기본 날짜와 빈 지시로 다시
+ * 조립하지 않기 위해서다. 제외 목록도 화면이 따로 들지 않고 초안 응답(requestContext)에서 읽는다.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, Sparkles } from 'lucide-react';
+import { CalendarRange, Sparkles, X } from 'lucide-react';
 import { planAPI } from '../../api/api.js';
 import PlanAskCard from './PlanAskCard.jsx';
 import { PLAN_INTENSITY_HINT, PLAN_INTENSITY_LABEL, PlanIntensity } from '../../types/execution.js';
@@ -19,9 +24,15 @@ import PlanDraftReview from './PlanDraftReview.jsx';
 
 const MAX_PLAN_DAYS = 31;
 
+/** 같은 작성 흐름인가를 가르는 열쇠. 기간·범위·지정 자료가 같으면 같은 흐름이다. */
+function flowKeyOf(startDate, endDate, scopeCourseId, requestedIds) {
+  return [startDate, endDate, scopeCourseId ?? 'all', [...requestedIds].sort((a, b) => a - b).join(',')].join('|');
+}
+
 export default function PlanCreateView({
   projectTitles = {}, scopeCourseId = null, onClearScope, onConfirmed, onCancel,
   initialDraft = null, onInitialDraftCleared, onOpenSchedule, onOpenSource,
+  requestedMaterials = [], onClearRequestedMaterial,
 }) {
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const presets = useMemo(() => periodPresets(todayIso), [todayIso]);
@@ -34,25 +45,56 @@ export default function PlanCreateView({
 
   const [draft, setDraft] = useState(initialDraft);
   /**
-   * 「이번만 빼기」로 모은 학습 항목 [{ topicId, title }]. 이 화면에서 다시 만들 때만 실린다. 저장하지 않는다.
-   * ref를 함께 두는 이유: 토스트의 되돌리기처럼 예전 렌더에서 만든 콜백이 초안을 다시 요청할 때도
-   * 그 사이 늘어난 제외 목록을 그대로 실어야 한다.
+   * 지금 보고 있는 초안. 되돌리기처럼 예전 렌더에서 만든 콜백도 "지금 초안"을 기준으로 다시 만들어야 한다 —
+   * 옛 초안 id로 보내면 서버가 이미 폐기한 초안이라며 거절한다.
    */
-  const [excluded, setExcluded] = useState([]);
-  const excludeRef = useRef([]);
+  const draftRef = useRef(initialDraft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
   /**
    * 초안 위에 띄우는 한 줄 안내와 되돌리기. 검토 컴포넌트는 초안이 바뀔 때마다 새로 만들어지므로(key=proposalId)
    * 그 안에 두면 되돌리기가 초안이 도착하는 순간 사라진다 — 여기서 들고 있어야 되돌릴 수 있다.
    */
   const [notice, setNotice] = useState(null);
+  /**
+   * 「이미 알아요」 표시는 저장했는데 초안을 다시 만들지 못한 상태. 이때 옛 초안을 그대로 확정하면 방금 표시한 내용이
+   * 계획에 남는다 — 확정을 막고 다시 만들기·표시 되돌리기를 준다.
+   */
+  const [blocked, setBlocked] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   /** 확정 이력이 없으면(=첫 계획) 강도를 펼친 상태로 시작한다. */
   const [hasHistory, setHasHistory] = useState(true);
+  /**
+   * 요청 순번. 기간을 바꾸거나 새 요청을 보내면 올린다 — 이전 요청의 늦은 응답이 지금 화면을 덮지 않게 한다.
+   * 진행 중 여부(inFlight)도 ref로 둔다: 되돌리기처럼 예전 렌더에서 만든 콜백이 중복 요청을 보내지 않게.
+   */
+  const ticket = useRef(0);
+  const inFlight = useRef(false);
+  /** [다시 만들기]로 초안을 비웠을 때, 같은 흐름이면 이어 받을 제외 목록. */
+  const carry = useRef(null);
+
+  const requestedIds = useMemo(() => requestedMaterials.map((m) => m.materialId), [requestedMaterials]);
+  const flowKey = flowKeyOf(startDate, endDate, scopeCourseId, requestedIds);
+  const flowRef = useRef(flowKey);
+  useEffect(() => {
+    if (flowRef.current !== flowKey) {
+      flowRef.current = flowKey;
+      ticket.current += 1; // 흐름이 바뀌면 진행 중이던 요청의 응답은 버린다.
+      carry.current = null;
+      inFlight.current = false;
+    }
+  }, [flowKey]);
 
   // AI 패널에서 만든 기간 계획이 넘어오면 그 초안으로 검토를 시작한다. 같은 초안이 다시 오면 무시한다.
   useEffect(() => {
-    if (initialDraft) setDraft(initialDraft);
+    if (initialDraft) {
+      ticket.current += 1;
+      setDraft(initialDraft);
+      setNotice(null);
+      setBlocked(null);
+    }
   }, [initialDraft]);
 
   useEffect(() => {
@@ -73,8 +115,24 @@ export default function PlanCreateView({
   const days = daysBetween(startDate, endDate);
   const periodValid = days >= 1 && days <= MAX_PLAN_DAYS;
 
-  const clearDraft = () => {
+  /** 상담에서 만든 초안인가. 객체 동일성이 아니라 서버가 남긴 요청의 출처로 본다 — 다시 만든 뒤에도 같다. */
+  const fromConversation = draft?.requestContext?.source === 'CONVERSATION'
+    || (draft != null && initialDraft != null && draft === initialDraft && !draft.requestContext);
+  const excludedTopics = draft?.requestContext?.excludedTopics ?? [];
+  const redraftable = !!draft?.requestContext?.redraftable && draft?.proposalId != null;
+
+  const clearDraft = ({ keepFlow = false } = {}) => {
+    if (keepFlow && draft?.requestContext && !fromConversation) {
+      carry.current = { key: flowKey, excludedTopics: draft.requestContext.excludedTopics ?? [] };
+    } else {
+      carry.current = null;
+    }
+    ticket.current += 1; // 진행 중이던 요청의 응답은 버린다.
+    inFlight.current = false;
+    setLoading(false);
     setDraft(null);
+    setNotice(null);
+    setBlocked(null);
     if (initialDraft) onInitialDraftCleared?.();
   };
 
@@ -85,16 +143,18 @@ export default function PlanCreateView({
   };
 
   /**
-   * 초안 요청. 되묻기에 답한 뒤의 재요청도 같은 경로를 지난다 — 답만 함께 실어 보낸다.
-   *
-   * @param answer 되묻기 답. { familiarityAnswer, familiarityTopicIds } 또는 null
+   * 새 초안 요청. 되묻기에 답한 뒤의 재요청도 같은 경로를 지난다 — 답만 함께 실어 보낸다.
+   * 제외 목록은 [다시 만들기]로 비운 같은 흐름에서만 이어 받는다 — 기간·범위·지정 자료가 바뀌었으면 새 계획이다.
    */
-  const handleDraft = async (answer = null, excludeOverride = null) => {
-    if (!periodValid || loading) return false;
+  const handleDraft = async (answer = null) => {
+    if (!periodValid || inFlight.current) return false;
+    const mine = ticket.current + 1;
+    ticket.current = mine;
+    inFlight.current = true;
     setLoading(true);
     setError(null);
+    const carried = carry.current && carry.current.key === flowKey ? carry.current.excludedTopics : [];
     try {
-      const exclude = (excludeOverride ?? excludeRef.current).map((e) => e.topicId);
       const result = await planAPI.createDraft({
         startDate, endDate, intensity,
         instruction: instruction.trim() || null,
@@ -103,49 +163,102 @@ export default function PlanCreateView({
         courseIds: scopeCourseId != null ? [scopeCourseId] : null,
         familiarityAnswer: answer?.familiarityAnswer ?? null,
         familiarityTopicIds: answer?.familiarityTopicIds ?? null,
-        excludeTopicIds: exclude.length > 0 ? exclude : null,
+        excludeTopicIds: carried.length > 0 ? carried.map((e) => e.topicId) : null,
+        requestedMaterialIds: requestedIds.length > 0 ? requestedIds : null,
       });
+      if (ticket.current !== mine) return false;
+      carry.current = null;
       setDraft(result);
       return true;
     } catch (err) {
-      setError(err.message || '초안을 만들지 못했습니다.');
+      if (ticket.current === mine) setError(err.message || '초안을 만들지 못했습니다.');
       return false;
     } finally {
-      setLoading(false);
+      if (ticket.current === mine) {
+        inFlight.current = false;
+        setLoading(false);
+      }
     }
   };
 
-  const fromAi = draft != null && initialDraft != null && draft === initialDraft;
-
-  const setExcludedList = (next) => {
-    excludeRef.current = next;
-    setExcluded(next);
+  /**
+   * 같은 조건으로 다시 만들기. 실패하면 지금 초안과 그 제외 목록을 그대로 둔다(서버도 옛 초안을 폐기하지 않는다).
+   * 늦게 온 응답은 지금 보고 있는 초안이 그 요청의 원본일 때만 반영한다.
+   *
+   * @param changes { excludeTopicIds?, requestedMaterialIds? } — 없는 필드는 서버에 남은 값을 유지
+   */
+  const redraft = async (changes = {}) => {
+    const source = draftRef.current;
+    if (!source?.proposalId || inFlight.current) return false;
+    const mine = ticket.current + 1;
+    ticket.current = mine;
+    inFlight.current = true;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await planAPI.redraft(source.proposalId, changes);
+      if (ticket.current !== mine) return false;
+      setDraft(result);
+      return true;
+    } catch (err) {
+      if (ticket.current === mine) setError(err.message || '초안을 다시 만들지 못했어요. 지금 초안은 그대로예요.');
+      return false;
+    } finally {
+      if (ticket.current === mine) {
+        inFlight.current = false;
+        setLoading(false);
+      }
+    }
   };
 
   /**
    * 「이번만 빼기」: 그 항목을 이번 요청에서만 빼고 초안을 다시 만든다. 표식은 남지 않는다.
-   * 되돌리기는 그 항목 하나를 목록에서 빼고 다시 요청한다 — 목록만 지우고 초안을 그대로 두면
-   * 화면의 초안에는 여전히 그 항목이 없어서 "되돌렸다"는 말이 거짓이 된다.
+   * 되돌리기는 그 항목 하나를 목록에서 빼고 다시 만든다 — 목록만 지우면 화면의 초안에는 여전히 그 항목이 없어서
+   * "되돌렸다"는 말이 거짓이 된다. 되돌리기는 후보 자격을 돌려주는 것이지 모델이 다시 고른다는 보장은 아니다.
    */
   const excludeThisTime = async (topicId, title) => {
-    if (topicId == null || fromAi || loading) return;
-    const current = excludeRef.current;
-    const next = current.some((e) => e.topicId === topicId) ? current : [...current, { topicId, title }];
-    setExcludedList(next);
+    if (topicId == null) return;
+    const ids = excludedTopics.map((e) => e.topicId);
+    const next = ids.includes(topicId) ? ids : [...ids, topicId];
     setNotice(null);
-    if (!(await handleDraft(null, next))) return;
+    if (!(await redraft({ excludeTopicIds: next }))) return;
     setNotice({
       message: `「${title}」은(는) 이번 계획에서만 뺐어요. 다음 계획에는 다시 후보로 돌아와요.`,
       undo: () => restoreExcluded(topicId),
     });
   };
 
-  /** 「이번만 빼기」 되돌리기. topicId가 null이면 전부. 목록을 고친 뒤 반드시 초안을 다시 만든다. */
+  /** 「이번만 빼기」 되돌리기. topicId가 null이면 전부. 목록은 지금 초안의 것을 기준으로 고친다. */
   const restoreExcluded = async (topicId = null) => {
-    const next = topicId == null ? [] : excludeRef.current.filter((e) => e.topicId !== topicId);
-    setExcludedList(next);
     setNotice(null);
-    await handleDraft(null, next);
+    const currentIds = (draftRef.current?.requestContext?.excludedTopics ?? []).map((e) => e.topicId);
+    const next = topicId == null ? [] : currentIds.filter((id) => id !== topicId);
+    const ok = await redraft({ excludeTopicIds: next });
+    if (ok && topicId != null) {
+      setNotice({ message: '다시 후보로 돌려놓았어요. 계획에 들어갈지는 AI가 다시 판단해요.' });
+    }
+  };
+
+  /** 「이미 알아요」 뒤 다시 만들기(검토 화면이 부른다). 실패하면 확정을 막는다. */
+  const redraftAfterMark = async (mark) => {
+    const ok = await redraft({});
+    if (!ok && mark) {
+      setBlocked({
+        message: '「이미 알아요」 표시는 저장했지만 초안에 아직 반영하지 못했어요. 이 초안을 그대로 확정하면 표시한 내용이 남아요.',
+        retry: async () => { if (await redraft({})) setBlocked(null); },
+        undo: mark.undo,
+      });
+    } else if (ok) {
+      setBlocked(null);
+    }
+    return ok;
+  };
+
+  /** 이름이 같은 자료가 여럿이라 지정하지 못했을 때 사용자가 고른 자료로 다시 만든다. */
+  const chooseRequestedMaterial = async (materialId) => {
+    const explicit = (draft?.requestContext?.requestedMaterials ?? [])
+      .filter((m) => m.source === 'EXPLICIT').map((m) => m.materialId);
+    await redraft({ requestedMaterialIds: [...new Set([...explicit, materialId])] });
   };
 
   return (
@@ -166,7 +279,7 @@ export default function PlanCreateView({
         범위가 좁혀져 있으면 그 사실과 해제 수단을 함께 보여준다. 범위를 조용히 적용하면
         "왜 다른 프로젝트 항목이 안 나오지"를 사용자가 알 방법이 없다.
       */}
-      {scopeCourseId != null && !fromAi && (
+      {scopeCourseId != null && !fromConversation && (
         <p className="plan-scope">
           {projectTitles[scopeCourseId] ?? '이 프로젝트'} 항목만 제안받아요.
           {onClearScope && (
@@ -178,11 +291,28 @@ export default function PlanCreateView({
         </p>
       )}
 
-      {fromAi && (
+      {!fromConversation && requestedMaterials.length > 0 && (
+        <p className="plan-scope plan-requested-materials">
+          이번 계획은 이 자료 중심으로 봐요:
+          {requestedMaterials.map((m) => (
+            <span key={m.materialId} className="chip">
+              {m.filename}
+              {onClearRequestedMaterial && (
+                <button type="button" className="icon-btn" aria-label={`${m.filename} 지정 해제`}
+                  onClick={() => { onClearRequestedMaterial(m.materialId); clearDraft(); }}>
+                  <X size={12} />
+                </button>
+              )}
+            </span>
+          ))}
+        </p>
+      )}
+
+      {fromConversation && (
         <p className="plan-scope">AI 대화에서 만든 기간 계획이에요. 여기서 검토하고 확정해요.</p>
       )}
 
-      {!fromAi && (
+      {!fromConversation && (
         <>
           <div className="plan-period">
             <span className="plan-period-label">기간</span>
@@ -225,7 +355,7 @@ export default function PlanCreateView({
             <input
               type="text"
               value={instruction}
-              placeholder="예: 시험 전까지 자료구조 위주로"
+              placeholder="예: 시험 전까지 자료구조 위주로, 개념부터"
               onChange={(e) => setInstruction(e.target.value)}
             />
           </label>
@@ -233,13 +363,13 @@ export default function PlanCreateView({
           {!draft && (
             <button type="button" className="btn-primary" disabled={!periodValid || loading}
               onClick={() => handleDraft()}>
-              <Sparkles size={16} /> {loading ? '초안을 만들고 있어요…' : '초안 만들기'}
+              <Sparkles size={16} /> {loading ? '자료를 고르고 초안을 만들고 있어요…' : '초안 만들기'}
             </button>
           )}
         </>
       )}
 
-      {error && <p className="error-text">{error}</p>}
+      {error && <p className="error-text" role="alert">{error}</p>}
 
       {/*
         되묻는 중이면 초안이 없다. 만들어 놓고 묻지 않는 이유는, 만들어진 계획이 그 자체로
@@ -249,22 +379,6 @@ export default function PlanCreateView({
         <PlanAskCard ask={draft.ask} answering={loading} onAnswer={(answer) => handleDraft(answer)} />
       )}
 
-      {draft && !draft.ask && (
-        <PlanDraftReview
-          key={draft.proposalId ?? 'no-time'}
-          draft={draft}
-          projectTitles={projectTitles}
-          todayIso={todayIso}
-          onConfirmed={(plan) => { if (initialDraft) onInitialDraftCleared?.(); onConfirmed?.(plan); }}
-          onDiscard={clearDraft}
-          discardLabel={fromAi ? '이 초안 버리기' : '다시 만들기'}
-          onOpenSchedule={onOpenSchedule}
-          onOpenSource={onOpenSource}
-          onExcludeThisTime={fromAi ? null : excludeThisTime}
-          onRedraft={fromAi ? null : () => handleDraft(null)}
-          onNotify={fromAi ? null : setNotice}
-        />
-      )}
       {notice && (
         <p className="plan-toast" role="status">
           {notice.message}
@@ -276,13 +390,51 @@ export default function PlanCreateView({
           )}
         </p>
       )}
-      {excluded.length > 0 && (
-        <p className="hint">
-          이번 계획에서만 뺀 항목: {excluded.map((e) => e.title).join(', ')} — 다음 계획에는 다시 후보로 돌아와요.
-          <button type="button" className="btn-ghost btn-sm" disabled={loading} onClick={() => restoreExcluded(null)}>
-            모두 되돌리기
-          </button>
+      {blocked && (
+        <p className="plan-toast plan-toast-warn" role="alert">
+          {blocked.message}
+          <button type="button" className="btn-ghost btn-sm" disabled={loading} onClick={blocked.retry}>초안 다시 만들기</button>
+          {blocked.undo && (
+            <button type="button" className="btn-ghost btn-sm" disabled={loading}
+              onClick={async () => { const undo = blocked.undo; setBlocked(null); await undo(); }}>
+              표시 되돌리기
+            </button>
+          )}
         </p>
+      )}
+      {excludedTopics.length > 0 && (
+        <p className="hint">
+          이번 계획에서만 뺀 항목: {excludedTopics.map((e) => e.title ?? `항목 ${e.topicId}`).join(', ')}
+          {' — 다음 계획에는 다시 후보로 돌아와요.'}
+          {redraftable && (
+            <button type="button" className="btn-ghost btn-sm" disabled={loading}
+              onClick={() => restoreExcluded(null)}>
+              모두 되돌리기
+            </button>
+          )}
+        </p>
+      )}
+      {loading && draft && <p className="hint" role="status">같은 조건으로 초안을 다시 만들고 있어요…</p>}
+
+      {draft && !draft.ask && (
+        <PlanDraftReview
+          key={draft.proposalId ?? 'no-time'}
+          draft={draft}
+          projectTitles={projectTitles}
+          todayIso={todayIso}
+          onConfirmed={(plan) => { if (initialDraft) onInitialDraftCleared?.(); onConfirmed?.(plan); }}
+          onDiscard={() => clearDraft({ keepFlow: true })}
+          discardLabel={fromConversation ? '이 초안 버리기' : '다시 만들기'}
+          onOpenSchedule={onOpenSchedule}
+          onOpenSource={onOpenSource}
+          onExcludeThisTime={redraftable ? excludeThisTime : null}
+          onRedraft={redraftable ? redraftAfterMark : null}
+          onNotify={setNotice}
+          busy={loading}
+          confirmBlockedReason={blocked ? '방금 표시한 내용이 초안에 반영될 때까지 확정할 수 없어요'
+            : (loading ? '초안을 다시 만드는 중이에요' : null)}
+          onChooseRequestedMaterial={redraftable ? chooseRequestedMaterial : null}
+        />
       )}
     </section>
   );
