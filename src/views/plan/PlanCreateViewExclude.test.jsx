@@ -60,6 +60,29 @@ beforeEach(() => {
   schedulePreviewAPI.recompute.mockResolvedValue({ placedItems: [], unplacedItems: [] });
 });
 
+describe('구간만 인용한 항목의 학습 항목 찾기', () => {
+  it('TOPIC 인용이 없어도 구간의 parentSourceId로 학습 항목을 찾아 「이번만 빼기」를 붙인다', async () => {
+    const noTopic = draft(90, [item(5, null, 6, '자료구조 · 연결 리스트 삭제 실습')]);
+    planAPI.createDraft.mockResolvedValueOnce(noTopic).mockResolvedValueOnce(draft(91, []));
+    planAPI.draftProvenance.mockResolvedValue({
+      items: [{ proposalItemId: 5, refIds: ['s7'] }],
+      providedSources: [
+        { refId: 's2', sourceType: 'TOPIC', sourceId: 102, promptLine: '- 연결 리스트 [s2]' },
+        { refId: 's7', sourceType: 'MATERIAL_SECTION', sourceId: 40, parentSourceId: 102, promptLine: '· [문제] 삭제 실습 (p.36) [s7]' },
+      ],
+    });
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
+    await screen.findByText('자료구조 · 연결 리스트 삭제 실습');
+
+    await userEvent.click(await within(screen.getByText('자료구조 · 연결 리스트 삭제 실습').closest('li'))
+      .findByRole('button', { name: '이번만 빼기' }));
+
+    await waitFor(() => expect(planAPI.createDraft).toHaveBeenCalledTimes(2));
+    expect(planAPI.createDraft.mock.calls[1][0].excludeTopicIds).toEqual([102]);
+  });
+});
+
 describe('이번만 빼기와 되돌리기 (기본 AI 경로)', () => {
   it('빼면 그 항목만 excludeTopicIds에 실어 다시 요청하고, 되돌리기는 그 항목을 빼고 다시 요청한다', async () => {
     await openDraft();

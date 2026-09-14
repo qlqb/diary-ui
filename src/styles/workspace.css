@@ -2097,7 +2097,10 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .plan-item-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .plan-item-step-refs { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; }
 .plan-item-step-ref { font-size: 12.5px; color: var(--ws-text-faint); border: 1px solid var(--ws-border); border-radius: 6px; padding: 0 5px; }
-.plan-item-detail-user { margin: 6px 0 0; }
+.plan-item-detail-user { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.plan-item-detail-user label { display: flex; flex-direction: column; gap: 4px; width: min(520px, 100%); }
+.plan-item-detail-user textarea { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--ws-border); border-radius: 6px; resize: vertical; }
+.plan-item-detail-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .plan-item-detail-sources { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ===== 토픽 상세: 연결된 구간 ===== */

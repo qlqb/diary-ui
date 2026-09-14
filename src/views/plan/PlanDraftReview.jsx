@@ -142,8 +142,12 @@ export default function PlanDraftReview({
     const evidence = evidenceByItem.get(item?.proposalItemId);
     if (!evidence?.refIds?.length || !provenance?.providedSources) return null;
     const refs = new Set(evidence.refIds);
-    const hit = provenance.providedSources.find((s) => refs.has(s.refId) && s.sourceType === 'TOPIC' && s.sourceId != null);
-    return hit ? hit.sourceId : null;
+    const cited = provenance.providedSources.filter((s) => refs.has(s.refId));
+    const topic = cited.find((s) => s.sourceType === 'TOPIC' && s.sourceId != null);
+    if (topic) return topic.sourceId;
+    // 구간만 인용한 항목: 그 구간이 어느 학습 항목 아래 실렸는지는 스냅샷(parentSourceId)이 안다.
+    const section = cited.find((s) => s.sourceType === 'MATERIAL_SECTION' && s.parentSourceId != null);
+    return section ? section.parentSourceId : null;
   }, [evidenceByItem, provenance]);
 
   /** 조각의 취급은 판단에 있다. 복사하지 않고 topicId로 이어 붙인다. */
