@@ -28,12 +28,14 @@ import {
 import PlanStrategyPanel from './PlanStrategyPanel.jsx';
 import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
 import PlanItemDetail from './PlanItemDetail.jsx';
+import PlanMaterialSelection from './PlanMaterialSelection.jsx';
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function PlanDraftReview({
   draft, projectTitles = {}, todayIso, onConfirmed, onDiscard, discardLabel = '다시 만들기', onOpenSchedule,
   onOpenSource, onExcludeThisTime = null, onRedraft = null, onNotify = null,
+  busy = false, confirmBlockedReason = null, onChooseRequestedMaterial = null,
 }) {
   const [excluded, setExcluded] = useState(() => new Set());
   /*
@@ -241,19 +243,30 @@ export default function PlanDraftReview({
     }
     if (!strategy) {
       /*
-       * 판단 없이 만든 초안(기본 AI 경로)은 조각만 다시 만들 수 없다 — 표식을 저장했으니 초안을 다시 요청한다.
-       * 표식은 다음 계획에도 남는다(「이번만 빼기」와 다르다).
+       * 판단 없이 만든 초안(기본 AI 경로)은 조각만 다시 만들 수 없다 — 표식을 저장했으니 같은 조건으로 초안을 다시
+       * 만든다(계획 화면·상담 초안 공통, 서버가 원래 요청을 쓴다). 표식은 다음 계획에도 남는다(「이번만 빼기」와 다르다).
        *
        * 안내와 되돌리기는 호출부(onNotify)에 맡긴다. 새 초안이 오면 이 컴포넌트는 key가 바뀌어 다시
        * 만들어지므로, 여기 둔 토스트는 초안이 도착하는 순간 사라져 되돌릴 수 없게 된다.
+       * 다시 만들기가 실패하면 호출부가 확정을 막고 다시 만들기·표시 되돌리기를 준다 — 옛 초안이 방금 표시한 내용을
+       * 담은 채 확정되지 않게.
        */
       const note = {
         message: '다음 계획부터도 이 내용은 건너뛸게요',
-        undo: async () => { await topicAPI.updateUserMark(topicId, null); await onRedraft?.(); },
+        undo: async () => {
+          await topicAPI.updateUserMark(topicId, null);
+          if (onRedraft) {
+            const ok = await onRedraft(null);
+            if (ok) onNotify?.({ message: '「이미 알아요」 표시를 지우고 다시 만들었어요' });
+          }
+        },
       };
-      if (onNotify) onNotify(note);
-      else setToast(note);
-      await onRedraft?.();
+      if (!onRedraft) {
+        (onNotify ?? setToast)({ message: '표시는 저장했어요. 이 초안에는 반영되지 않았으니 새로 만들어 주세요.' });
+        return;
+      }
+      const ok = await onRedraft(note);
+      if (ok) (onNotify ?? setToast)(note);
       return;
     }
     await regenerate({
@@ -266,7 +279,7 @@ export default function PlanDraftReview({
   }, [regenerate, regenerating, strategy, onRedraft, onNotify]);
 
   const handleConfirm = async () => {
-    if (!draft || confirming || allExcluded) return;
+    if (!draft || confirming || allExcluded || confirmBlockedReason) return;
     setConfirming(true);
     setError(null);
     try {
@@ -356,6 +369,8 @@ export default function PlanDraftReview({
             {' — 분석이 끝난 뒤 다시 만들면 반영돼요.'}
           </p>
         )}
+        <PlanMaterialSelection selection={current.materialSelection}
+          onChooseRequestedMaterial={onChooseRequestedMaterial} busy={busy || regenerating} />
         <p className="plan-detail-level" role="group" aria-label="안내 상세도">
           <span className="view-dim">안내</span>
           <button type="button" className={`chip-toggle${!detailAll ? ' is-on' : ''}`} aria-pressed={!detailAll}
@@ -427,7 +442,7 @@ export default function PlanDraftReview({
             else next.add(proposalItemId);
             return next;
           })}
-          busy={regenerating}
+          busy={regenerating || busy}
           provenance={provenance}
           provenanceLoading={provenanceLoading}
           provenanceError={provenanceError}
@@ -464,11 +479,13 @@ export default function PlanDraftReview({
             {regenerating ? '다시 만드는 중…' : '실행 방법 다시 제안'}
           </button>
         )}
-        <button type="button" className="btn-primary" disabled={confirming || allExcluded} onClick={handleConfirm}>
+        <button type="button" className="btn-primary" disabled={confirming || allExcluded || !!confirmBlockedReason}
+          title={confirmBlockedReason ?? undefined} onClick={handleConfirm}>
           {confirming ? '확정하는 중…' : '계획 확정'}
         </button>
       </div>
       {allExcluded && <p className="hint">항목을 하나도 안 고르면 확정할 게 없어요.</p>}
+      {confirmBlockedReason && !allExcluded && <p className="hint">{confirmBlockedReason}</p>}
     </div>
   );
 }
