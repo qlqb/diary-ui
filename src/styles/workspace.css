@@ -2084,6 +2084,10 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .change-proposal-op-text { overflow-wrap: anywhere; }
 .change-proposal-title-input { margin: 4px 0 0 22px; width: min(420px, 100%); font-size: 14px; }
 
+/* 초안 위 한 줄 안내 + 되돌리기(「이미 알아요」·「이번만 빼기」). 검토 컴포넌트 밖에서도 같은 모양. */
+.plan-toast { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 0; padding: 6px 10px;
+  border: 1px solid var(--ws-border); border-radius: 8px; background: var(--ws-surface); font-size: 13.5px; }
+
 /* ===== 계획 항목 「자세히」 ===== */
 .plan-detail-level { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 13.5px; }
 .plan-pending-materials { margin: 4px 0 0; }

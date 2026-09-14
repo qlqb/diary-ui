@@ -33,7 +33,7 @@ const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function PlanDraftReview({
   draft, projectTitles = {}, todayIso, onConfirmed, onDiscard, discardLabel = '다시 만들기', onOpenSchedule,
-  onOpenSource, onExcludeThisTime = null, onRedraft = null,
+  onOpenSource, onExcludeThisTime = null, onRedraft = null, onNotify = null,
 }) {
   const [excluded, setExcluded] = useState(() => new Set());
   /*
@@ -239,11 +239,16 @@ export default function PlanDraftReview({
       /*
        * 판단 없이 만든 초안(기본 AI 경로)은 조각만 다시 만들 수 없다 — 표식을 저장했으니 초안을 다시 요청한다.
        * 표식은 다음 계획에도 남는다(「이번만 빼기」와 다르다).
+       *
+       * 안내와 되돌리기는 호출부(onNotify)에 맡긴다. 새 초안이 오면 이 컴포넌트는 key가 바뀌어 다시
+       * 만들어지므로, 여기 둔 토스트는 초안이 도착하는 순간 사라져 되돌릴 수 없게 된다.
        */
-      setToast({
+      const note = {
         message: '다음 계획부터도 이 내용은 건너뛸게요',
         undo: async () => { await topicAPI.updateUserMark(topicId, null); await onRedraft?.(); },
-      });
+      };
+      if (onNotify) onNotify(note);
+      else setToast(note);
       await onRedraft?.();
       return;
     }
@@ -254,7 +259,7 @@ export default function PlanDraftReview({
         await regenerate(null);
       },
     });
-  }, [regenerate, regenerating, strategy, onRedraft]);
+  }, [regenerate, regenerating, strategy, onRedraft, onNotify]);
 
   const handleConfirm = async () => {
     if (!draft || confirming || allExcluded) return;
@@ -627,7 +632,7 @@ function PlanDraftGroup({
                 */}
                 {topicId != null && onExcludeThisTime && (
                   <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                    onClick={() => onExcludeThisTime(topicId)}>
+                    onClick={() => onExcludeThisTime(topicId, item.title)}>
                     이번만 빼기
                   </button>
                 )}

@@ -9,7 +9,7 @@
  * 시작했든 검토·확정 화면과 API는 같다 — initialDraft로 그 초안을 받아 바로 검토로 시작한다.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarRange, Sparkles } from 'lucide-react';
 import { planAPI } from '../../api/api.js';
 import PlanAskCard from './PlanAskCard.jsx';
@@ -33,8 +33,18 @@ export default function PlanCreateView({
   const [instruction, setInstruction] = useState('');
 
   const [draft, setDraft] = useState(initialDraft);
-  /** 「이번만 빼기」로 모은 학습 항목. 이 화면에서 다시 만들 때만 실린다. 저장하지 않는다. */
-  const [excludeTopicIds, setExcludeTopicIds] = useState([]);
+  /**
+   * 「이번만 빼기」로 모은 학습 항목 [{ topicId, title }]. 이 화면에서 다시 만들 때만 실린다. 저장하지 않는다.
+   * ref를 함께 두는 이유: 토스트의 되돌리기처럼 예전 렌더에서 만든 콜백이 초안을 다시 요청할 때도
+   * 그 사이 늘어난 제외 목록을 그대로 실어야 한다.
+   */
+  const [excluded, setExcluded] = useState([]);
+  const excludeRef = useRef([]);
+  /**
+   * 초안 위에 띄우는 한 줄 안내와 되돌리기. 검토 컴포넌트는 초안이 바뀔 때마다 새로 만들어지므로(key=proposalId)
+   * 그 안에 두면 되돌리기가 초안이 도착하는 순간 사라진다 — 여기서 들고 있어야 되돌릴 수 있다.
+   */
+  const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   /** 확정 이력이 없으면(=첫 계획) 강도를 펼친 상태로 시작한다. */
@@ -80,11 +90,11 @@ export default function PlanCreateView({
    * @param answer 되묻기 답. { familiarityAnswer, familiarityTopicIds } 또는 null
    */
   const handleDraft = async (answer = null, excludeOverride = null) => {
-    if (!periodValid || loading) return;
+    if (!periodValid || loading) return false;
     setLoading(true);
     setError(null);
     try {
-      const exclude = excludeOverride ?? excludeTopicIds;
+      const exclude = (excludeOverride ?? excludeRef.current).map((e) => e.topicId);
       const result = await planAPI.createDraft({
         startDate, endDate, intensity,
         instruction: instruction.trim() || null,
@@ -96,8 +106,10 @@ export default function PlanCreateView({
         excludeTopicIds: exclude.length > 0 ? exclude : null,
       });
       setDraft(result);
+      return true;
     } catch (err) {
       setError(err.message || '초안을 만들지 못했습니다.');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -105,11 +117,34 @@ export default function PlanCreateView({
 
   const fromAi = draft != null && initialDraft != null && draft === initialDraft;
 
-  /** 「이번만 빼기」: 그 항목을 이번 요청에서만 빼고 초안을 다시 만든다. 표식은 남지 않는다. */
-  const excludeThisTime = async (topicId) => {
-    if (topicId == null || fromAi) return;
-    const next = excludeTopicIds.includes(topicId) ? excludeTopicIds : [...excludeTopicIds, topicId];
-    setExcludeTopicIds(next);
+  const setExcludedList = (next) => {
+    excludeRef.current = next;
+    setExcluded(next);
+  };
+
+  /**
+   * 「이번만 빼기」: 그 항목을 이번 요청에서만 빼고 초안을 다시 만든다. 표식은 남지 않는다.
+   * 되돌리기는 그 항목 하나를 목록에서 빼고 다시 요청한다 — 목록만 지우고 초안을 그대로 두면
+   * 화면의 초안에는 여전히 그 항목이 없어서 "되돌렸다"는 말이 거짓이 된다.
+   */
+  const excludeThisTime = async (topicId, title) => {
+    if (topicId == null || fromAi || loading) return;
+    const current = excludeRef.current;
+    const next = current.some((e) => e.topicId === topicId) ? current : [...current, { topicId, title }];
+    setExcludedList(next);
+    setNotice(null);
+    if (!(await handleDraft(null, next))) return;
+    setNotice({
+      message: `「${title}」은(는) 이번 계획에서만 뺐어요. 다음 계획에는 다시 후보로 돌아와요.`,
+      undo: () => restoreExcluded(topicId),
+    });
+  };
+
+  /** 「이번만 빼기」 되돌리기. topicId가 null이면 전부. 목록을 고친 뒤 반드시 초안을 다시 만든다. */
+  const restoreExcluded = async (topicId = null) => {
+    const next = topicId == null ? [] : excludeRef.current.filter((e) => e.topicId !== topicId);
+    setExcludedList(next);
+    setNotice(null);
     await handleDraft(null, next);
   };
 
@@ -227,12 +262,26 @@ export default function PlanCreateView({
           onOpenSource={onOpenSource}
           onExcludeThisTime={fromAi ? null : excludeThisTime}
           onRedraft={fromAi ? null : () => handleDraft(null)}
+          onNotify={fromAi ? null : setNotice}
         />
       )}
-      {excludeTopicIds.length > 0 && !loading && (
+      {notice && (
+        <p className="plan-toast" role="status">
+          {notice.message}
+          {notice.undo && (
+            <button type="button" className="btn-ghost btn-sm" disabled={loading}
+              onClick={() => { const undo = notice.undo; setNotice(null); undo(); }}>
+              되돌리기
+            </button>
+          )}
+        </p>
+      )}
+      {excluded.length > 0 && (
         <p className="hint">
-          이번 계획에서만 뺀 항목 {excludeTopicIds.length}개 — 다음 계획에는 다시 후보로 돌아와요.
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setExcludeTopicIds([])}>되돌리기</button>
+          이번 계획에서만 뺀 항목: {excluded.map((e) => e.title).join(', ')} — 다음 계획에는 다시 후보로 돌아와요.
+          <button type="button" className="btn-ghost btn-sm" disabled={loading} onClick={() => restoreExcluded(null)}>
+            모두 되돌리기
+          </button>
         </p>
       )}
     </section>
