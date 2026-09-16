@@ -7536,6 +7536,87 @@ body {
 
 /* ---------- 고른 파일 목록 ---------- */
 
+/* ---------- 압축 가져오기 ---------- */
+
+/*
+  목록이 길어도 [N개 가져오기]가 화면 밖으로 밀려나면 안 된다(1536×760에서도). 그래서 목록만
+  안쪽에서 스크롤하고 머리글·바닥글은 제자리에 둔다.
+*/
+.zip-import {
+  margin-bottom: 14px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 11px;
+  background: var(--ws-surface);
+}
+
+.zip-import-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ws-border);
+}
+
+.zip-import-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+}
+
+.zip-import-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.zip-import-title strong { font-size: 13.5px; }
+.zip-import-sub { font-size: 12.5px; color: var(--ws-text-dim); }
+.zip-import-note { margin: 8px 12px 0; font-size: 12.5px; color: var(--ws-text-dim); }
+
+.zip-import-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zip-import-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.zip-import-item.is-unsupported { color: var(--ws-text-faint); }
+.zip-import-check { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; cursor: pointer; }
+.zip-import-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zip-import-meta { color: var(--ws-text-faint); white-space: nowrap; }
+
+.zip-import-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  color: var(--ws-text-dim);
+}
+
+.zip-import-status.is-done { color: var(--ws-success-text, #15803d); }
+.zip-import-status.is-failed { color: var(--ws-danger-text, #b91c1c); }
+
+.zip-import-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--ws-border);
+}
+
+.zip-import-hint { flex: 1; font-size: 12.5px; color: var(--ws-text-dim); }
+
 .upload-tray {
   margin-bottom: 14px;
   padding: 12px;

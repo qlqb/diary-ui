@@ -29,14 +29,14 @@ import { adjustmentFor } from '../../ai/useProposalDraft.js';
 import {
   courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI,
   materialAnalysisStatusAPI, topicChangeProposalAPI, materialStoreAPI,
-  planAPI, topicAPI,
-} from '../../api/api.js';
+  planAPI, topicAPI, zipImportAPI } from '../../api/api.js';
 import {
   MaterialType, MATERIAL_TYPE_HINT, EXTRACTION_STATUS_LABEL, ExtractionStatus,
 } from '../../types/learning.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
-import { MATERIAL_ACCEPT } from '../../lib/materialFormats.js';
+import { MATERIAL_ACCEPT, isArchiveFile } from '../../lib/materialFormats.js';
+import ZipImportPanel from '../../components/ZipImportPanel.jsx';
 import { todayString } from '../../lib/datetime.js';
 import { formatDateKo, toIsoDate } from '../../lib/planTime.js';
 
@@ -863,6 +863,12 @@ function UploadForm({ courseId, onCancel, onUploaded }) {
   const [materialType, setMaterialType] = useState(MaterialType.OTHER);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  /**
+   * 압축은 업로드가 아니라 가져오기다. 여기서 고르면 자료 하나가 되는 대신 안의 파일 목록이 뜨고,
+   * 고른 것만 각각 이 프로젝트에 연결된 자료가 된다. 자료함에서 고를 때와 다른 점은 courseId뿐이다.
+   */
+  const [zipImport, setZipImport] = useState(null);
+  const importedRef = useRef(0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -870,11 +876,27 @@ function UploadForm({ courseId, onCancel, onUploaded }) {
     setUploading(true);
     setError(null);
     try {
+      if (isArchiveFile(file.name)) {
+        const created = await zipImportAPI.create(file, courseId, materialType);
+        importedRef.current = created.doneCount ?? 0;
+        setZipImport(created);
+        setFile(null);
+        setUploading(false);
+        return;
+      }
       await materialAPI.upload(courseId, materialType, file);
       await onUploaded();
     } catch (err) {
       setError(err.message || '업로드하지 못했습니다.');
       setUploading(false);
+    }
+  };
+
+  const handleZipChanged = async (next) => {
+    setZipImport(next);
+    if ((next?.doneCount ?? 0) > importedRef.current) {
+      importedRef.current = next.doneCount;
+      await onUploaded();
     }
   };
 
@@ -889,6 +911,10 @@ function UploadForm({ courseId, onCancel, onUploaded }) {
       <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={uploading}>취소</button>
       <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
       {error && <p className="view-error">{error}</p>}
+      {zipImport && (
+        <ZipImportPanel zipImport={zipImport} onChanged={handleZipChanged}
+          onClose={() => setZipImport(null)} />
+      )}
     </form>
   );
 }

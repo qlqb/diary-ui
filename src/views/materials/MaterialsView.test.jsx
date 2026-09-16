@@ -3,15 +3,24 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import MaterialsView from './MaterialsView.jsx';
 import { PENDING_DELETE_WINDOW_MS } from './usePendingDelete.js';
-import { materialAnalysisStatusAPI, materialStoreAPI } from '../../api/api.js';
+import { materialAnalysisStatusAPI, materialStoreAPI, zipImportAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
   materialAnalysisStatusAPI: {
     overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true, queued: 0, running: 0, done: 0 }),
     retry: vi.fn(), pause: vi.fn(), resume: vi.fn(), sections: vi.fn().mockResolvedValue([]), status: vi.fn().mockResolvedValue(null),
   },
+  zipImportAPI: {
+    create: vi.fn(),
+    listRecent: vi.fn().mockResolvedValue([]),
+    get: vi.fn(),
+    confirm: vi.fn(),
+    retryEntry: vi.fn(),
+    cancel: vi.fn(),
+  },
   materialStoreAPI: {
     list: vi.fn(),
+    retryExtraction: vi.fn(),
     get: vi.fn(),
     upload: vi.fn(),
     delete: vi.fn(),
@@ -590,24 +599,25 @@ describe('올릴 수 있는 형식', () => {
     materialStoreAPI.list.mockResolvedValue([]);
   });
 
-  it('HWP·IPYNB·ZIP은 담기고, HWPX는 이유와 함께 걸러진다', async () => {
+  it('HWP·HWPX·IPYNB는 담기고, 지원하지 않는 형식은 이유와 함께 걸러진다', async () => {
+    materialStoreAPI.list.mockResolvedValue([]);
     const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
     const input = container.querySelector('input[type="file"]');
-    expect(input).toHaveAttribute('accept', '.pdf,.pptx,.hwp,.ipynb,.zip');
+    expect(input).toHaveAttribute('accept', '.pdf,.pptx,.hwp,.hwpx,.ipynb,.zip');
 
     // 브라우저는 hwp·ipynb의 type을 비워 보내기도 한다. 화면은 확장자로만 거른다.
     const files = [
       new File(['x'], '강의계획서.hwp', { type: '' }),
       new File(['{}'], '실습3.ipynb', { type: '' }),
-      new File(['PK'], '3주차.zip', { type: 'application/x-zip-compressed' }),
       new File(['PK'], '계획서.hwpx', { type: '' }),
+      new File(['x'], '보고서.docx', { type: '' }),
     ];
     await act(async () => {
       fireEvent.change(input, { target: { files } });
     });
 
     expect(screen.getByRole('button', { name: /3개 올리기/ })).toBeInTheDocument();
-    expect(screen.getByText('PDF·PPTX·HWP·IPYNB·ZIP만 올릴 수 있어요')).toBeInTheDocument();
+    expect(screen.getByText('PDF·PPTX·HWP·HWPX·IPYNB·ZIP만 올릴 수 있어요')).toBeInTheDocument();
   });
 });
 
@@ -631,7 +641,7 @@ describe('드롭 영역', () => {
     expect(drop).toBeInTheDocument();
     // 목록을 밀어내지 않도록 줄인 모양이지만, 무엇을 올릴 수 있는지는 그대로 적는다.
     expect(drop.className).toContain('is-compact');
-    expect(within(drop).getByText(/PDF·PPTX·HWP·IPYNB·ZIP/)).toBeInTheDocument();
+    expect(within(drop).getByText(/PDF·PPTX·HWP·HWPX·IPYNB/)).toBeInTheDocument();
   });
 
   it('자료가 없으면 설명이 붙은 큰 드롭 영역이다', async () => {
@@ -642,5 +652,85 @@ describe('드롭 영역', () => {
     const drop = await screen.findByRole('button', { name: /파일을 끌어다 놓거나 클릭해서 추가하세요/ });
     expect(drop.className).not.toContain('is-compact');
     expect(await screen.findByText('아직 올린 자료가 없어요.')).toBeInTheDocument();
+  });
+});
+
+describe('압축 파일과 본문 재추출', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    zipImportAPI.listRecent.mockResolvedValue([]);
+  });
+
+  const zipListing = {
+    importId: 5, originalFilename: '3주차.zip', status: 'READY',
+    entryCount: 2, selectableCount: 1, doneCount: 0, failedCount: 0, remainingCount: 0,
+    archiveAvailable: true,
+    entries: [
+      { entryId: 11, entryPath: '3주차/강의.pdf', displayName: '강의.pdf', extension: 'pdf', sizeBytes: 10, supported: true, status: 'PENDING' },
+      { entryId: 12, entryPath: '3주차/데이터.csv', displayName: '데이터.csv', extension: 'csv', sizeBytes: 10, supported: false, skipReason: '지원하지 않는 형식이에요', status: 'UNSUPPORTED' },
+    ],
+  };
+
+  it('압축은 업로드 대기열이 아니라 가져오기 화면으로 간다', async () => {
+    materialStoreAPI.list.mockResolvedValue([]);
+    zipImportAPI.create.mockResolvedValue(zipListing);
+
+    const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+    const input = container.querySelector('input[type="file"]');
+
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [
+        new File(['PK'], '3주차.zip', { type: 'application/x-zip-compressed' }),
+        new File(['%PDF-1.4'], '단독.pdf', { type: 'application/pdf' }),
+      ] } });
+    });
+
+    // 압축은 가져오기로, 나머지는 기존 업로드 대기열로 갈라진다.
+    await waitFor(() => expect(zipImportAPI.create).toHaveBeenCalled());
+    expect(zipImportAPI.create.mock.calls[0][0].name).toBe('3주차.zip');
+    expect(await screen.findByText('3주차/강의.pdf')).toBeInTheDocument();
+    expect(screen.getByText('지원하지 않는 형식이에요')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /1개 올리기/ })).toBeInTheDocument(); // pdf만 대기열에
+  });
+
+  it('다시 들어오면 진행 중이던 가져오기를 되살린다', async () => {
+    materialStoreAPI.list.mockResolvedValue([]);
+    zipImportAPI.listRecent.mockResolvedValue([{ ...zipListing, status: 'IMPORTING', remainingCount: 1 }]);
+    zipImportAPI.get.mockResolvedValue({ ...zipListing, status: 'IMPORTING', remainingCount: 1 });
+
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    expect(await screen.findByText('3주차/강의.pdf')).toBeInTheDocument();
+  });
+
+  it('본문을 못 읽은 자료는 재업로드 대신 다시 읽기를 준다', async () => {
+    const user = userEvent.setup();
+    const failed = {
+      materialId: 9, originalFilename: '계획서.hwp', contentType: 'application/x-hwp',
+      extractionStatus: 'FAILED', extractionError: '암호가 걸린 문서예요',
+      createdAt: '2026-09-16T10:00:00', links: [],
+    };
+    materialStoreAPI.list.mockResolvedValue([failed]);
+    materialStoreAPI.retryExtraction.mockResolvedValue({ ...failed, extractionStatus: 'SUCCESS' });
+
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: /본문 다시 읽기/ }));
+
+    expect(materialStoreAPI.retryExtraction).toHaveBeenCalledWith(9);
+    // 목록을 다시 읽어 상태가 갱신된다.
+    await waitFor(() => expect(materialStoreAPI.list).toHaveBeenCalledTimes(2));
+  });
+
+  it('일부만 읽은 자료는 그 사실을 표시한다', async () => {
+    materialStoreAPI.list.mockResolvedValue([{
+      materialId: 10, originalFilename: 'lab.ipynb', contentType: 'application/x-ipynb+json',
+      extractionStatus: 'SUCCESS', extractionWarning: '실행 결과가 길어 일부만 읽었어요',
+      createdAt: '2026-09-16T10:00:00', links: [],
+    }]);
+
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    expect(await screen.findByText('일부만 읽음')).toBeInTheDocument();
   });
 });

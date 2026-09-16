@@ -884,6 +884,51 @@ export const courseNoteAPI = {
 };
 
 /**
+ * 압축 파일(ZIP) 가져오기 API.
+ *
+ * 압축은 자료가 되지 않는다. 올리면 서버가 안을 훑어 목록을 주고, 사용자가 고른 파일만 각각
+ * 독립된 자료가 된다. 확정 뒤의 실제 생성은 서버가 뒤에서 하므로 화면을 닫아도 계속되고,
+ * 다시 들어오면 list/get으로 상태를 되찾는다.
+ */
+export const zipImportAPI = {
+    /** zip 올리기 → 내부 목록. courseId를 주면 만들어질 자료가 그 프로젝트에 연결된다. */
+    create: (file, courseId, materialType) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (courseId != null) formData.append('courseId', String(courseId));
+        if (materialType) formData.append('materialType', materialType);
+        return requestMultipart('/materials/zip-imports', formData);
+    },
+
+    /** 최근 가져오기(새로고침·재접속 복구용) */
+    listRecent: () => {
+        return request('/materials/zip-imports');
+    },
+
+    get: (importId) => {
+        return request(`/materials/zip-imports/${importId}`);
+    },
+
+    /** 고른 항목을 확정. 여러 번 눌러도 같은 결과다(서버가 이미 대기열·완료인 항목을 건너뛴다). */
+    confirm: (importId, entryIds) => {
+        return request(`/materials/zip-imports/${importId}/confirm`, {
+            method: 'POST',
+            body: JSON.stringify({ entryIds }),
+        });
+    },
+
+    /** 실패한 항목 하나만 다시 */
+    retryEntry: (importId, entryId) => {
+        return request(`/materials/zip-imports/${importId}/entries/${entryId}/retry`, { method: 'POST' });
+    },
+
+    /** 아직 시작하지 않은 것만 취소. 이미 만들어진 자료는 남는다 */
+    cancel: (importId) => {
+        return request(`/materials/zip-imports/${importId}`, { method: 'DELETE' });
+    },
+};
+
+/**
  * 학습 자료 업로드/조회 API. 업로드 직후 텍스트 추출까지 동기로 끝나고 extractionStatus로
  * 결과(SUCCESS/FAILED_NO_TEXT/FAILED)를 알려준다 — 별도 폴링이 필요 없다.
  */
@@ -929,6 +974,14 @@ export const materialStoreAPI = {
     /** 단건 + 연결 목록 + 분석 이력 */
     get: (materialId) => {
         return request(`/materials/${materialId}`);
+    },
+
+    /**
+     * 저장된 원본으로 본문만 다시 읽는다. 분석 재시도와 다른 일이다 — 저쪽은 이미 읽은 원문을
+     * 모델에게 다시 보내고, 이쪽은 아직 못 읽은 원문을 다시 읽는다. 이미 읽은 자료면 409다.
+     */
+    retryExtraction: (materialId) => {
+        return request(`/materials/${materialId}/extraction/retry`, { method: 'POST' });
     },
 
     /** 원본 파일 본문. Blob으로 온다 — 여는 것은 openMaterialFile()이 한다. */

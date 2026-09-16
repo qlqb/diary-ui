@@ -14,9 +14,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText, Upload, Loader2, ArrowLeft, Link2, Trash2, X,
-  Plus, Check, AlertCircle, UploadCloud, Sparkles,
+  Plus, Check, AlertCircle, UploadCloud, Sparkles, RotateCcw,
 } from 'lucide-react';
-import { materialAnalysisStatusAPI, materialStoreAPI } from '../../api/api.js';
+import { materialAnalysisStatusAPI, materialStoreAPI, zipImportAPI } from '../../api/api.js';
 import AnalysisStatusChip from '../../components/AnalysisStatusChip.jsx';
 import AnalysisOverviewBar from './AnalysisOverviewBar.jsx';
 import useAnalysisOverview from './useAnalysisOverview.js';
@@ -30,8 +30,10 @@ import {
   MaterialType, MATERIAL_TYPE_HINT, ExtractionStatus, EXTRACTION_STATUS_LABEL, MaterialAnalysisStatus,
 } from '../../types/learning.js';
 import {
-  MATERIAL_ACCEPT, MATERIAL_FORMATS_LABEL, isAllowedMaterialFile, materialFileKind,
+  MATERIAL_ACCEPT, UPLOAD_FORMATS_LABEL, MATERIAL_FORMATS_LABEL,
+  isAcceptedFile, isArchiveFile, materialFileKind,
 } from '../../lib/materialFormats.js';
+import ZipImportPanel from '../../components/ZipImportPanel.jsx';
 
 /**
  * 필터는 이 셋만.
@@ -91,7 +93,7 @@ const ProposalStatus = Object.freeze({
  */
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const MAX_FILE_SIZE_LABEL = '20MB';
-const UPLOAD_HINT = `${MATERIAL_FORMATS_LABEL} · 여러 파일 선택 가능 · 파일당 ${MAX_FILE_SIZE_LABEL}까지`;
+const UPLOAD_HINT = `${UPLOAD_FORMATS_LABEL} · 여러 파일 선택 가능 · 파일당 ${MAX_FILE_SIZE_LABEL}까지`;
 
 function formatDate(value) {
   if (!value) return '';
@@ -108,7 +110,7 @@ function formatSize(bytes) {
 
 /** 올릴 수 없는 파일이면 그 이유를, 올릴 수 있으면 null을 돌려준다. */
 function rejectReason(file) {
-  if (!isAllowedMaterialFile(file?.name)) return `${MATERIAL_FORMATS_LABEL}만 올릴 수 있어요`;
+  if (!isAcceptedFile(file?.name)) return `${MATERIAL_FORMATS_LABEL}·ZIP만 올릴 수 있어요`;
   if (!file.size) return '내용이 비어 있는 파일이에요';
   if (file.size > MAX_FILE_SIZE_BYTES) return `${MAX_FILE_SIZE_LABEL}까지 올릴 수 있어요`;
   return null;
@@ -541,7 +543,83 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
       setAnalysisBusy(false);
     }
   };
-  const { addFiles } = uploader;
+  const { addFiles: addUploadFiles } = uploader;
+
+  /**
+   * 압축 가져오기. 압축은 업로드 대기열에 담지 않고 이쪽으로 보낸다 — 자료가 되는 것은 압축이
+   * 아니라 그 안에서 고른 파일이고, 고르는 단계가 먼저 있어야 하기 때문이다.
+   *
+   * 화면에 다시 들어왔을 때 진행 중이던 가져오기를 되살린다. 서버가 계속 일하고 있었으므로
+   * 여기서 할 일은 그 상태를 다시 보여주는 것뿐이다.
+   */
+  const [zipImport, setZipImport] = useState(null);
+  const [zipError, setZipError] = useState(null);
+  /** 본문 재추출 중인 자료. 버튼 하나만 도는 동안 나머지는 그대로 눌릴 수 있어야 한다. */
+  const [reExtractingId, setReExtractingId] = useState(null);
+  const zipDoneRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const recent = await zipImportAPI.listRecent();
+        const open = recent.find((i) => i.status === 'PREPARING' || i.status === 'IMPORTING'
+            || i.status === 'READY');
+        if (!cancelled && open) {
+          zipDoneRef.current = open.doneCount ?? 0;
+          setZipImport(open);
+        }
+      } catch {
+        // 복구는 편의 기능이다 — 실패해도 화면을 막지 않는다.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const startZipImport = useCallback(async (file) => {
+    setZipError(null);
+    try {
+      const created = await zipImportAPI.create(file, null, null);
+      zipDoneRef.current = created.doneCount ?? 0;
+      setZipImport(created);
+    } catch (err) {
+      setZipError(err.message || '압축 파일을 읽지 못했습니다.');
+    }
+  }, []);
+
+  /** 자료가 하나라도 늘었으면 목록을 다시 읽는다 — 가져오기 패널과 자료 목록이 어긋나지 않게. */
+  const handleZipChanged = useCallback((next) => {
+    setZipImport(next);
+    if ((next?.doneCount ?? 0) > zipDoneRef.current) {
+      zipDoneRef.current = next.doneCount;
+      load();
+    }
+  }, [load]);
+
+  const retryExtraction = useCallback(async (materialId) => {
+    setReExtractingId(materialId);
+    try {
+      await materialStoreAPI.retryExtraction(materialId);
+      await load();
+    } catch (err) {
+      setError(err.message || '본문을 다시 읽지 못했습니다.');
+    } finally {
+      setReExtractingId(null);
+    }
+  }, [load]);
+
+  /** 고른 파일을 갈라 보낸다: 압축은 가져오기로, 나머지는 업로드 대기열로. */
+  const addFiles = useCallback((fileList) => {
+    const incoming = Array.from(fileList ?? []);
+    const archives = incoming.filter((file) => isArchiveFile(file.name));
+    const rest = incoming.filter((file) => !isArchiveFile(file.name));
+    if (rest.length > 0) addUploadFiles(rest);
+    if (archives.length > 0) {
+      // 한 번에 하나만 다룬다. 압축 여러 개를 동시에 고르는 일은 드물고, 고르는 화면이 둘이면
+      // 어느 목록을 보고 있는지 알 수 없다.
+      startZipImport(archives[0]);
+    }
+  }, [addUploadFiles, startZipImport]);
 
   // 삭제를 예약한 자료는 화면에서 먼저 사라진다. 서버는 아직 모르므로 목록을 다시 읽어도
   // 돌아오는데, 그걸 여기서 걸러 "지운 것처럼" 보이게 유지한다.
@@ -647,6 +725,15 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
           자료가 있으면 한 줄로 줄여 목록 자리를 뺏지 않는다.
         */}
         <DropArea compact={loading || materials.length > 0} onPick={uploader.openPicker} />
+
+        {zipError && <p className="view-error">{zipError}</p>}
+        {zipImport && (
+            <ZipImportPanel
+                zipImport={zipImport}
+                onChanged={handleZipChanged}
+                onClose={() => setZipImport(null)}
+            />
+        )}
 
         <AnalysisOverviewBar overview={analysis.overview} error={analysis.error} busy={analysisBusy}
             onPause={toggleAnalysis} onResume={toggleAnalysis} />
@@ -841,7 +928,25 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                             </span>
                         )}
                         {m.extractionStatus !== ExtractionStatus.SUCCESS && (
-                            <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</span>
+                            <>
+                              <span className="chip chip-warn" title={m.extractionError ?? undefined}>
+                                {EXTRACTION_STATUS_LABEL[m.extractionStatus]}
+                              </span>
+                              {/*
+                                같은 파일을 다시 올리게 하지 않는다 — 원본은 서버에 있으므로 다시 읽기만
+                                하면 된다. 분석 재시도와 다른 버튼이다(저쪽은 이미 읽은 원문을 모델에 다시 보낸다).
+                              */}
+                              <button type="button" className="btn-ghost btn-sm"
+                                      disabled={reExtractingId === m.materialId}
+                                      onClick={() => retryExtraction(m.materialId)}>
+                                {reExtractingId === m.materialId
+                                    ? <><Loader2 size={13} className="spin" /> 다시 읽는 중</>
+                                    : <><RotateCcw size={13} /> 본문 다시 읽기</>}
+                              </button>
+                            </>
+                        )}
+                        {m.extractionStatus === ExtractionStatus.SUCCESS && m.extractionWarning && (
+                            <span className="chip chip-warn" title={m.extractionWarning}>일부만 읽음</span>
                         )}
                         {m.extractionStatus === ExtractionStatus.SUCCESS && analysis.byMaterialId.get(m.materialId) && (
                             <AnalysisStatusChip status={analysis.byMaterialId.get(m.materialId)}
