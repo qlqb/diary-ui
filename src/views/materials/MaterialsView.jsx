@@ -267,7 +267,7 @@ function useUploadQueue({ onBatchDone }) {
   return { items, running, skipped, stagedCount, inputRef, addFiles, remove, clearSettled, start, retry, openPicker };
 }
 
-export default function MaterialsView({ projects, onProjectsChanged }) {
+export default function MaterialsView({ projects, onProjectsChanged, onPlanWithMaterial = null }) {
   /** 서버가 준 그대로. 화면에 보이는 목록(materials)은 삭제 예약분을 뺀 것이다. */
   const [allMaterials, setAllMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -856,6 +856,15 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                             filename={m.originalFilename}
                             contentType={m.contentType}
                         />
+                        {/*
+                          이 자료 중심으로 계획 만들기. 이번 계획 요청의 지정일 뿐이다 — 토픽 연결을 새로 만들지 않고,
+                          다른 자료를 검토 대상에서 없애지도 않는다. 분석이 끝나지 않았으면 서버가 그렇게 알려준다.
+                        */}
+                        {onPlanWithMaterial && m.extractionStatus === ExtractionStatus.SUCCESS && (
+                            <button type="button" className="btn-ghost btn-sm" onClick={() => onPlanWithMaterial(m)}>
+                              이 자료로 계획
+                            </button>
+                        )}
                         <button
                             type="button"
                             className="btn-ghost btn-sm"

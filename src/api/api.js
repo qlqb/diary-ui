@@ -1240,7 +1240,7 @@ export const planAPI = {
     /** 초안 생성. intensity를 생략하면 서버가 직전 계획에서 승계한다. */
     createDraft: ({
         startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null,
-        familiarityAnswer = null, familiarityTopicIds = null, excludeTopicIds = null,
+        familiarityAnswer = null, familiarityTopicIds = null, excludeTopicIds = null, requestedMaterialIds = null,
     }) => {
         return request('/plans/draft', {
             method: 'POST',
@@ -1251,9 +1251,25 @@ export const planAPI = {
                 familiarityAnswer, familiarityTopicIds,
                 // 「이번 계획에서만 제외」. 저장되지 않는다 — 영구 표식(이미 알아요)과 다르다.
                 excludeTopicIds,
+                // 이번 요청에서 사용자가 지정한 자료(자료함의 [이 자료로 계획]). 연결 출처와 다른 것이다.
+                requestedMaterialIds,
             }),
         });
     },
+
+    /**
+     * 같은 조건으로 초안 다시 만들기(「이번만 빼기」·되돌리기·「이미 알아요」 뒤). 계획 화면·상담 초안 공통.
+     * 기간·강도·범위·지시·지정 자료는 서버가 초안을 만든 요청을 쓴다. 바뀐 것만 보낸다 — 없는 필드는 유지된다.
+     * 성공하면 새 초안이 오고 기존 초안은 서버에서 폐기된다. 실패하면 기존 초안은 그대로다.
+     */
+    redraft: (proposalId, { excludeTopicIds, requestedMaterialIds } = {}) =>
+        request(`/plans/proposals/${proposalId}/redraft`, {
+            method: 'POST',
+            body: JSON.stringify({
+                ...(excludeTopicIds !== undefined ? { excludeTopicIds } : {}),
+                ...(requestedMaterialIds !== undefined ? { requestedMaterialIds } : {}),
+            }),
+        }),
 
     /**
      * 항목의 「자세히」. GET은 있으면 돌려주고 없으면 available=false. POST는 없을 때 만든다(모델 1회).
