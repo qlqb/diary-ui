@@ -34,6 +34,9 @@ function flowKeyOf(startDate, endDate, scopeCourseId, requestedIds) {
   return [startDate, endDate, scopeCourseId ?? 'all', [...requestedIds].sort((a, b) => a - b).join(',')].join('|');
 }
 
+/** 세션에 남기는 "열린 초안" id의 키. 탭마다 따로다. */
+const RECOVER_KEY = 'plan.create.openProposalId';
+
 export default function PlanCreateView({
   projectTitles = {}, scopeCourseId = null, onClearScope, onConfirmed, onCancel,
   initialDraft = null, onInitialDraftCleared, onOpenSchedule, onOpenSource,
@@ -49,6 +52,16 @@ export default function PlanCreateView({
   const [instruction, setInstruction] = useState('');
 
   const [draft, setDraft] = useState(initialDraft);
+  /**
+   * 새로고침·탭 이동 뒤 복구. 열린 초안의 id만 세션에 남기고, 돌아오면 저장된 초안을 서버에서 다시 읽는다(모델 호출
+   * 없음). 초안을 버리거나 확정하면 지운다. 브라우저가 들고 있던 초안 내용은 믿지 않는다 — 저장된 것이 원본이다.
+   */
+  const rememberDraft = (next) => {
+    try {
+      if (next?.proposalId != null) sessionStorage.setItem(RECOVER_KEY, String(next.proposalId));
+      else sessionStorage.removeItem(RECOVER_KEY);
+    } catch { /* 세션 저장은 보조 수단이다 */ }
+  };
   /**
    * 지금 보고 있는 초안. 되돌리기처럼 예전 렌더에서 만든 콜백도 "지금 초안"을 기준으로 다시 만들어야 한다 —
    * 옛 초안 id로 보내면 서버가 이미 폐기한 초안이라며 거절한다.
@@ -123,6 +136,30 @@ export default function PlanCreateView({
   }, [initialDraft]);
 
   useEffect(() => {
+    if (initialDraft || !planAPI?.loadDraft) return undefined;
+    let saved = null;
+    try { saved = sessionStorage.getItem(RECOVER_KEY); } catch { saved = null; }
+    if (!saved) return undefined;
+    let cancelled = false;
+    const mine = ticket.current + 1;
+    ticket.current = mine;
+    Promise.resolve(planAPI.loadDraft(saved))
+      .then((stored) => {
+        if (cancelled || ticket.current !== mine) return;
+        const status = stored?.proposal?.status;
+        if (stored?.proposalId != null && (!status || status === 'PROPOSED')) {
+          setDraft(stored);
+          setNotice({ message: '새로고침 전에 만들던 초안을 다시 불러왔어요.' });
+        } else {
+          rememberDraft(null);
+        }
+      })
+      .catch(() => { if (!cancelled) rememberDraft(null); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     planAPI.findCoveringDate(todayIso)
       .then((plans) => {
@@ -156,6 +193,7 @@ export default function PlanCreateView({
     inFlight.current = false;
     setLoading(false);
     setDraft(null);
+    rememberDraft(null);
     setNotice(null);
     setBlocked(null);
     if (initialDraft) onInitialDraftCleared?.();
@@ -198,6 +236,7 @@ export default function PlanCreateView({
       if (ticket.current !== mine) return false;
       carry.current = null;
       setDraft(result);
+      rememberDraft(result);
       return true;
     } catch (err) {
       if (ticket.current === mine) setError(err.message || '초안을 만들지 못했습니다.');
@@ -232,6 +271,7 @@ export default function PlanCreateView({
       const result = await planAPI.redraft(source.proposalId, { ...changes, requestKey });
       if (ticket.current !== mine) return false;
       setDraft(result);
+      rememberDraft(result);
       return true;
     } catch (err) {
       if (ticket.current === mine) setError(err.message || '초안을 다시 만들지 못했어요. 지금 초안은 그대로예요.');
@@ -466,7 +506,7 @@ export default function PlanCreateView({
           draft={draft}
           projectTitles={projectTitles}
           todayIso={todayIso}
-          onConfirmed={(plan) => { if (initialDraft) onInitialDraftCleared?.(); onConfirmed?.(plan); }}
+          onConfirmed={(plan) => { rememberDraft(null); if (initialDraft) onInitialDraftCleared?.(); onConfirmed?.(plan); }}
           onDiscard={() => clearDraft({ keepFlow: true })}
           discardLabel={fromConversation ? '이 초안 버리기' : '다시 만들기'}
           onOpenSchedule={onOpenSchedule}

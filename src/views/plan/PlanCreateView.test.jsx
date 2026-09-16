@@ -5,7 +5,7 @@ import PlanCreateView from './PlanCreateView.jsx';
 import { planAPI, schedulePreviewAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
-  planAPI: { createDraft: vi.fn(), confirm: vi.fn(), findCoveringDate: vi.fn() },
+  planAPI: { createDraft: vi.fn(), confirm: vi.fn(), findCoveringDate: vi.fn(), loadDraft: vi.fn() },
   schedulePreviewAPI: { get: vi.fn(), recompute: vi.fn() },
 }));
 
@@ -45,6 +45,7 @@ const PROJECT_TITLES = { 6: '자료구조', 7: '빅데이터분석' };
 describe('계획 초안 검토', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     planAPI.findCoveringDate.mockResolvedValue([{ planVersionId: 1 }]);
     planAPI.createDraft.mockResolvedValue(DRAFT);
     // 배치 미리보기는 기본적으로 "아직 없음". 있는 경우는 개별 테스트에서 채운다.
@@ -248,6 +249,26 @@ describe('계획 초안 검토', () => {
    * AI 패널에서 만든 기간 계획은 같은 검토 화면으로 들어온다. 기간·강도 폼은 접고 바로 검토다.
    * 5개를 넘는 항목도 그대로 그린다 — 일반 제안의 5개 상한은 여기에 없다.
    */
+  it('초안을 만든 뒤 새로고침하면 세션에 남긴 id로 저장된 초안을 다시 읽고, 버리면 잊는다', async () => {
+    sessionStorage.clear();
+    await openDraft();
+    expect(sessionStorage.getItem('plan.create.openProposalId')).toBe('77');
+
+    // 새로고침 = 같은 세션에서 다시 마운트. 서버가 저장한 초안이 원본이고 모델은 부르지 않는다.
+    planAPI.loadDraft.mockResolvedValue({ ...DRAFT, proposal: { ...DRAFT.proposal, status: 'PROPOSED' } });
+    const { unmount } = render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    await screen.findByText('새로고침 전에 만들던 초안을 다시 불러왔어요.');
+    expect(planAPI.loadDraft).toHaveBeenCalledWith('77');
+    expect(planAPI.createDraft).toHaveBeenCalledTimes(1);
+    unmount();
+
+    // 이미 처리된 초안(확정·폐기)은 되살리지 않고 기억도 지운다.
+    planAPI.loadDraft.mockResolvedValue({ ...DRAFT, proposal: { ...DRAFT.proposal, status: 'DISMISSED' } });
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    await waitFor(() => expect(sessionStorage.getItem('plan.create.openProposalId')).toBeNull());
+    expect(screen.queryByText('새로고침 전에 만들던 초안을 다시 불러왔어요.')).not.toBeInTheDocument();
+  });
+
   it('AI 대화에서 넘어온 초안은 바로 검토로 시작하고 5개 넘는 항목도 그린다', async () => {
     const manyItems = Array.from({ length: 9 }, (_, i) => ({
       proposalItemId: 100 + i, title: `항목 ${i + 1}`, expectedMinutes: 30, courseId: 6, targetDate: null,
