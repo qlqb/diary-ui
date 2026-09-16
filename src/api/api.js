@@ -1284,6 +1284,15 @@ export const planAPI = {
     loadDraft: (proposalId) => request(`/plans/proposals/${proposalId}/draft`),
 
     /**
+     * 검토 상태 저장(제목·항목 포함/제외·편집값·답). 실행 데이터를 바꾸지 않는다. version이 낡았으면 409 E409_022 —
+     * 늦은 자동 저장이 다른 탭의 편집을 덮지 않는다.
+     */
+    saveReviewState: (proposalId, state) => request(`/plans/proposals/${proposalId}/review-state`, {
+        method: 'PUT',
+        body: JSON.stringify(state),
+    }),
+
+    /**
      * 항목의 「자세히」. GET은 있으면 돌려주고 없으면 available=false. POST는 없을 때 만든다(모델 1회).
      * 어느 쪽도 항목·시간·마감·선택을 바꾸지 않는다.
      */

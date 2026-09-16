@@ -209,23 +209,24 @@ export default function AiPanel({
         } else if (last.responseType === 'PROPOSAL' && last.proposalId) {
           // 아직 적용하지 않은 초안이 있으면 화면에 다시 띄운다 — 새로고침으로 사라지지 않는다.
           try {
-            const proposal = await proposalAPI.get(last.proposalId);
-            if (loadTokenRef.current === myToken && proposal.status === 'PROPOSED') {
-              /*
-               * 기간 계획 초안은 일반 제안(적용 바)이 아니라 계획 검토 화면으로 간다. 저장된 초안을 그 모양으로 다시
-               * 읽을 수 있으면 그쪽으로, 아니면(기간이 없는 일반 제안) 기존 경로다.
-               */
-              let periodDraft = null;
-              if (planAPI?.loadDraft && onPeriodPlan) {
-                try {
-                  periodDraft = await planAPI.loadDraft(last.proposalId);
-                } catch { periodDraft = null; }
-              }
-              if (loadTokenRef.current !== myToken) return;
-              if (periodDraft?.proposalId) {
-                setPeriodPlanNotice(periodDraft.proposal?.items?.length ?? 0);
-                onPeriodPlan(periodDraft);
-              } else {
+            /*
+             * 기간 계획 초안은 일반 제안(적용 바)이 아니라 계획 검토 화면으로 간다. 저장된 초안을 먼저 그 모양으로 읽는다 —
+             * 메시지가 가리키는 초안이 「이미 알아요」·되돌리기로 이미 대체됐으면 서버가 그 대체(최신 열린 초안)를
+             * 돌려준다. 그래서 새로고침 뒤에도 옛 id가 아니라 지금 열린 초안이 복구된다.
+             */
+            let periodDraft = null;
+            if (planAPI?.loadDraft && onPeriodPlan) {
+              try {
+                periodDraft = await planAPI.loadDraft(last.proposalId);
+              } catch { periodDraft = null; }
+            }
+            if (loadTokenRef.current !== myToken) return;
+            if (periodDraft?.proposalId && (periodDraft.proposal?.status ?? 'PROPOSED') === 'PROPOSED') {
+              setPeriodPlanNotice(periodDraft.proposal?.items?.length ?? 0);
+              onPeriodPlan(periodDraft);
+            } else if (!periodDraft?.proposalId) {
+              const proposal = await proposalAPI.get(last.proposalId);
+              if (loadTokenRef.current === myToken && proposal.status === 'PROPOSED') {
                 onProposal?.(proposal);
               }
             }

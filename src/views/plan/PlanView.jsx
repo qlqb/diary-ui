@@ -123,7 +123,17 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
             {' '}{placeResult.placed.length}개를 넣었어요.
           </p>
           {placeResult.unplaced.length > 0 && (
-            <p className="muted">이번 주에는 자리가 없어 {placeResult.unplaced.length}개는 날짜 미정으로 남겨뒀어요.</p>
+            <div className="muted">
+              <p>{placeResult.unplaced.length}개는 시각을 정하지 못했어요. 횟수를 줄이거나 다른 날로 옮기지 않았어요 — 필요하면 직접 조정해 주세요.</p>
+              <ul className="plan-unplaced-reasons">
+                {placeResult.unplaced.map((u) => (
+                  <li key={u.executionItemId}>
+                    {u.title}{u.scheduledDate ? ` (${formatDateKo(u.scheduledDate)})` : ''}
+                    {u.reason ? ` — ${u.reason}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}

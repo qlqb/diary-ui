@@ -37,6 +37,17 @@ function flowKeyOf(startDate, endDate, scopeCourseId, requestedIds) {
 /** 세션에 남기는 "열린 초안" id의 키. 탭마다 따로다. */
 const RECOVER_KEY = 'plan.create.openProposalId';
 
+/** 이전 초안의 검토 상태를 다시 만든 초안으로 옮길 모양으로 바꾼다 — 제외한 항목은 안정된 식별자와 함께. */
+function carryReview(state, previousDraft) {
+  if (!state || state.proposalId !== previousDraft?.proposalId) return null;
+  const items = previousDraft?.proposal?.items ?? [];
+  const excludedItems = (state.excludedProposalItemIds ?? []).map((id) => {
+    const item = items.find((i) => i.proposalItemId === id);
+    return { proposalItemId: id, targetExecutionItemId: item?.targetExecutionItemId ?? null };
+  });
+  return { title: state.title ?? null, excludedItems };
+}
+
 export default function PlanCreateView({
   projectTitles = {}, scopeCourseId = null, onClearScope, onConfirmed, onCancel,
   initialDraft = null, onInitialDraftCleared, onOpenSchedule, onOpenSource,
@@ -80,6 +91,12 @@ export default function PlanCreateView({
    * 계획에 남는다 — 확정을 막고 다시 만들기·표시 되돌리기를 준다.
    */
   const [blocked, setBlocked] = useState(null);
+  /**
+   * 검토 화면이 알려 준 최신 검토 상태(제목·제외). 다시 만들 때 안정된 식별자가 있는 선택만 새 초안으로 옮기는 데 쓴다.
+   * 서버에도 저장되지만(자동 저장), 다시 만들기는 새 초안 id라 저장된 상태가 따라오지 않는다.
+   */
+  const reviewRef = useRef(null);
+  const [carriedReview, setCarriedReview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   /**
@@ -235,6 +252,8 @@ export default function PlanCreateView({
       });
       if (ticket.current !== mine) return false;
       carry.current = null;
+      setCarriedReview(null);
+      reviewRef.current = null;
       setDraft(result);
       rememberDraft(result);
       return true;
@@ -270,6 +289,7 @@ export default function PlanCreateView({
     try {
       const result = await planAPI.redraft(source.proposalId, { ...changes, requestKey });
       if (ticket.current !== mine) return false;
+      setCarriedReview(carryReview(reviewRef.current, source));
       setDraft(result);
       rememberDraft(result);
       return true;
@@ -513,6 +533,8 @@ export default function PlanCreateView({
           onOpenSource={onOpenSource}
           onExcludeThisTime={redraftable ? excludeThisTime : null}
           onRedraft={redraftable ? redraftAfterMark : null}
+          initialReview={carriedReview}
+          onReviewStateChange={(state) => { reviewRef.current = state; }}
           onNotify={setNotice}
           busy={loading}
           confirmBlockedReason={blocked ? '방금 표시한 내용이 초안에 반영될 때까지 확정할 수 없어요'

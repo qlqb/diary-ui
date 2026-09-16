@@ -32,12 +32,54 @@ import PlanMaterialSelection from './PlanMaterialSelection.jsx';
 
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
+function itemIds(draft) {
+  return new Set((draft?.proposal?.items ?? []).map((i) => i.proposalItemId));
+}
+
+/**
+ * 검토 상태 복구. 같은 초안이면 서버에 저장된 상태(draft.reviewState)를 그대로. 다시 만든 초안이면 이전 초안의 상태
+ * (initialReview) 중 안정된 식별자로 대응되는 것만 옮긴다 — 기존 항목 변경은 targetExecutionItemId로 찾고, 새 항목의 제외는
+ * id가 바뀌어 옮기지 않는다. 옮기지 못한 것이 있으면 사용자에게 말한다.
+ */
+function restoreReview(draft, initialReview) {
+  const ids = itemIds(draft);
+  const stored = draft?.reviewState;
+  if (stored) {
+    const kept = (stored.excludedProposalItemIds ?? []).filter((id) => ids.has(id));
+    return { excluded: new Set(kept), title: stored.title ?? null, note: null };
+  }
+  if (!initialReview) return { excluded: new Set(), title: null, note: null };
+  const items = draft?.proposal?.items ?? [];
+  const byTarget = new Map(items.filter((i) => i.targetExecutionItemId != null).map((i) => [i.targetExecutionItemId, i.proposalItemId]));
+  const excluded = new Set();
+  let lost = 0;
+  for (const prev of initialReview.excludedItems ?? []) {
+    if (prev.targetExecutionItemId != null && byTarget.has(prev.targetExecutionItemId)) {
+      excluded.add(byTarget.get(prev.targetExecutionItemId));
+    } else {
+      lost += 1;
+    }
+  }
+  return {
+    excluded,
+    title: initialReview.title ?? null,
+    note: lost > 0 ? `이전 초안에서 뺀 새 항목 ${lost}개는 다시 만든 초안에 그대로 옮기지 못했어요. 항목을 다시 확인해 주세요.` : null,
+  };
+}
+
 export default function PlanDraftReview({
   draft, projectTitles = {}, todayIso, onConfirmed, onDiscard, discardLabel = '다시 만들기', onOpenSchedule,
   onOpenSource, onExcludeThisTime = null, onRedraft = null, onNotify = null,
-  busy = false, confirmBlockedReason = null, onChooseRequestedMaterial = null,
+  busy = false, confirmBlockedReason = null, onChooseRequestedMaterial = null, initialReview = null,
+  onReviewStateChange = null,
 }) {
-  const [excluded, setExcluded] = useState(() => new Set());
+  /*
+   * 검토 상태(제목·항목 포함/제외)는 서버 초안에 붙어 온다(draft.reviewState). 새로고침·탭 이동 뒤에도 같은 초안이면 그대로
+   * 복구되고, 다시 만든 초안(initialReview)에는 안정된 식별자(기존 항목 변경의 targetExecutionItemId)가 있는 선택만 옮긴다.
+   * 새 항목의 제외는 id가 바뀌어 옮기지 않고 사용자에게 말한다 — 제목만으로 억지로 맞추지 않는다.
+   */
+  const restored = useMemo(() => restoreReview(draft, initialReview), [draft, initialReview]);
+  const [excluded, setExcluded] = useState(() => restored.excluded);
   /*
    * 안내 상세도. 기본은 간단히. 전체 전환과 항목 하나만 펼치기가 있고, 어느 쪽도 항목·선택·시간·마감·
    * 배치를 바꾸지 않는다 — 설명을 펼치는 동작일 뿐이다. 영구 선호로 저장하지 않는다.
@@ -45,7 +87,10 @@ export default function PlanDraftReview({
   const [detailAll, setDetailAll] = useState(false);
   const [detailOpen, setDetailOpen] = useState(() => new Set());
   const [collapsed, setCollapsed] = useState(() => initialCollapsed(draft, projectTitles, todayIso));
-  const [title, setTitle] = useState(() => draft?.suggestedTitle || '');
+  const [title, setTitle] = useState(() => restored.title || draft?.suggestedTitle || '');
+  const reviewVersion = useRef(draft?.reviewState?.version ?? null);
+  const reviewSaveTicket = useRef(0);
+  const [reviewNote, setReviewNote] = useState(restored.note);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -201,6 +246,49 @@ export default function PlanDraftReview({
     && items.every((i) => excluded.has(i.proposalItemId)) && adjustments.every((i) => excluded.has(i.proposalItemId));
   const longPlan = (current?.days ?? 0) > 7;
 
+  /*
+   * 자동 저장. 실행 데이터가 아니라 검토 상태다 — 저장돼도 일정은 바뀌지 않는다. 마지막 응답만 반영하고(늦은 응답 무시),
+   * 다른 탭이 먼저 저장했으면(409) 서버의 최신 상태를 다시 읽어 화면을 맞춘다. 저장 실패는 검토를 막지 않는다.
+   */
+  const reviewStateEnabled = Boolean(proposalId) && Boolean(planAPI?.saveReviewState)
+    && (current?.proposal?.status ?? 'PROPOSED') === 'PROPOSED';
+  const excludedKey = useMemo(() => [...excluded].sort((a, b) => a - b).join(','), [excluded]);
+  const firstReviewRender = useRef(true);
+  useEffect(() => {
+    if (firstReviewRender.current) { firstReviewRender.current = false; return undefined; }
+    // 상위 화면은 저장 여부와 무관하게 최신 검토 상태를 안다 — 다시 만들 때 안정된 선택을 옮기는 근거다.
+    onReviewStateChange?.({ proposalId, title, excludedProposalItemIds: excludedKey ? excludedKey.split(',').map(Number) : [] });
+    if (!reviewStateEnabled) return undefined;
+    const ticket = reviewSaveTicket.current + 1;
+    reviewSaveTicket.current = ticket;
+    const timer = setTimeout(async () => {
+      try {
+        const saved = await planAPI.saveReviewState(proposalId, {
+          version: reviewVersion.current,
+          title: title.trim() || null,
+          excludedProposalItemIds: excludedKey ? excludedKey.split(',').map(Number) : [],
+        });
+        if (reviewSaveTicket.current === ticket && saved?.version != null) reviewVersion.current = saved.version;
+      } catch (err) {
+        if (reviewSaveTicket.current !== ticket) return;
+        if (err?.code === 'E409_022' && planAPI?.loadDraft) {
+          try {
+            const latest = await planAPI.loadDraft(proposalId);
+            const state = latest?.reviewState;
+            if (reviewSaveTicket.current === ticket && state) {
+              reviewVersion.current = state.version ?? null;
+              setExcluded(new Set((state.excludedProposalItemIds ?? []).filter((id) => itemIds(current).has(id))));
+              setTitle(state.title || current?.suggestedTitle || '');
+              setReviewNote('다른 곳에서 먼저 저장된 검토 상태를 불러왔어요.');
+            }
+          } catch { /* 최신 상태를 못 읽어도 검토는 계속된다 */ }
+        }
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excludedKey, title, proposalId, reviewStateEnabled]);
+
   const toggleItem = useCallback((proposalItemId) => {
     setExcluded((prev) => {
       const next = new Set(prev);
@@ -241,6 +329,7 @@ export default function PlanDraftReview({
    * 확인 다이얼로그를 두지 않는다 — 되돌리기가 한 번에 되는 동작에 확인을 붙이면 그 확인이
    * 오히려 "되돌릴 수 없는 일"이라는 신호가 된다. 되돌리기는 토스트에 둔다.
    */
+  const redraftableDraft = Boolean(current?.requestContext?.redraftable);
   const markKnown = useCallback(async (topicId) => {
     if (topicId == null || regenerating) return;
     try {
@@ -249,10 +338,17 @@ export default function PlanDraftReview({
       setError(err.message || '표시를 저장하지 못했습니다.');
       return;
     }
-    if (!strategy) {
+    /*
+     * 어느 경로로 다시 만드는가는 서버의 저장 계약(requestContext.redraftable = 원래 요청이 저장돼 있다)이 정한다 — 전략이
+     * 있는지로 가르지 않는다. 새 운영 경로의 초안은 전략을 항상 갖고 있어서, 그 기준으로는 옛 조각 재생성으로 빠져
+     * 지시·과목 범위·상담 합의·기존 항목 조정이 전부 사라졌다(2026-09-17 지시서 §4).
+     */
+    const commonPath = redraftableDraft && Boolean(onRedraft);
+    if (commonPath || !strategy) {
       /*
-       * 판단 없이 만든 초안(기본 AI 경로)은 조각만 다시 만들 수 없다 — 표식을 저장했으니 같은 조건으로 초안을 다시
-       * 만든다(계획 화면·상담 초안 공통, 서버가 원래 요청을 쓴다). 표식은 다음 계획에도 남는다(「이번만 빼기」와 다르다).
+       * 같은 조건으로 초안을 다시 만든다(계획 화면·상담 초안 공통, 서버가 원래 요청·합의·기존 항목을 그대로 쓴다). 표식은
+       * 다음 계획에도 남는다(「이번만 빼기」와 다르다). 요청이 저장되지 않은 옛 초안(전략 없음)도 이 경로다 — 조각만
+       * 다시 만들 판단이 없다.
        *
        * 안내와 되돌리기는 호출부(onNotify)에 맡긴다. 새 초안이 오면 이 컴포넌트는 key가 바뀌어 다시
        * 만들어지므로, 여기 둔 토스트는 초안이 도착하는 순간 사라져 되돌릴 수 없게 된다.
@@ -284,7 +380,7 @@ export default function PlanDraftReview({
         await regenerate(null);
       },
     });
-  }, [regenerate, regenerating, strategy, onRedraft, onNotify]);
+  }, [regenerate, regenerating, strategy, onRedraft, onNotify, redraftableDraft]);
 
   const handleConfirm = async () => {
     if (!draft || confirming || allExcluded || confirmBlockedReason) return;
@@ -436,6 +532,7 @@ export default function PlanDraftReview({
         <span>계획 이름</span>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
       </label>
+      {reviewNote && <p className="hint plan-review-note" role="status">{reviewNote}</p>}
 
       {previewNote && <p className="hint">{previewNote}</p>}
       {preview && longPlan && (

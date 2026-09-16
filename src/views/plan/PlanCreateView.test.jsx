@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PlanCreateView from './PlanCreateView.jsx';
 import { planAPI, schedulePreviewAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
-  planAPI: { createDraft: vi.fn(), confirm: vi.fn(), findCoveringDate: vi.fn(), loadDraft: vi.fn() },
+  planAPI: { createDraft: vi.fn(), confirm: vi.fn(), findCoveringDate: vi.fn(), loadDraft: vi.fn(), saveReviewState: vi.fn() },
   schedulePreviewAPI: { get: vi.fn(), recompute: vi.fn() },
 }));
 
@@ -267,6 +267,68 @@ describe('계획 초안 검토', () => {
     render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
     await waitFor(() => expect(sessionStorage.getItem('plan.create.openProposalId')).toBeNull());
     expect(screen.queryByText('새로고침 전에 만들던 초안을 다시 불러왔어요.')).not.toBeInTheDocument();
+  });
+
+  it('제목·체크를 고치면 검토 상태를 저장하고, 새로고침 뒤 같은 초안을 그 상태로 되돌리며, 확정에 같은 값을 싣는다', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      planAPI.saveReviewState.mockImplementation(async (id, state) => ({ ...state, version: (state.version ?? 0) + 1 }));
+      await openDraft();
+      const titleInput = screen.getByLabelText('계획 이름');
+      await userEvent.clear(titleInput);
+      await userEvent.type(titleInput, '재귀 따라잡기');
+      await userEvent.click(screen.getByRole('checkbox', { name: /과제 2번/ }));
+      await vi.advanceTimersByTimeAsync(800);
+      await waitFor(() => expect(planAPI.saveReviewState).toHaveBeenLastCalledWith(77, expect.objectContaining({
+        title: '재귀 따라잡기', excludedProposalItemIds: [2],
+      })));
+      // 첫 저장은 version null(저장된 상태 없음), 이후 저장은 서버가 돌려준 version으로 이어진다.
+      expect(planAPI.saveReviewState.mock.calls[0][1].version).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // 새로고침 = 같은 세션에서 다시 마운트. 서버가 저장한 검토 상태가 초안에 붙어 온다.
+    cleanup();
+    sessionStorage.setItem('plan.create.openProposalId', '77');
+    planAPI.loadDraft.mockResolvedValue({
+      ...DRAFT,
+      proposal: { ...DRAFT.proposal, status: 'PROPOSED' },
+      reviewState: { version: 2, title: '재귀 따라잡기', excludedProposalItemIds: [2, 999], editedItems: [], answers: {} },
+    });
+    const { unmount } = render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    await screen.findByText('새로고침 전에 만들던 초안을 다시 불러왔어요.');
+    expect(screen.getByLabelText('계획 이름')).toHaveValue('재귀 따라잡기');
+    expect(screen.getByRole('checkbox', { name: /과제 2번/ })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /연결 리스트 구현/ })).toBeChecked();
+
+    planAPI.confirm.mockResolvedValue({ planVersionId: 5 });
+    await userEvent.click(screen.getByRole('button', { name: '계획 확정' }));
+    await waitFor(() => expect(planAPI.confirm).toHaveBeenCalledWith(77, expect.objectContaining({
+      excludedItemIds: [2], title: '재귀 따라잡기',
+    })));
+    unmount();
+  });
+
+  it('다른 곳에서 먼저 저장된 검토 상태가 있으면(409) 서버의 최신 상태로 화면을 맞춘다', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const stale = Object.assign(new Error('검토 상태가 다른 곳에서 먼저 저장됐어요.'), { code: 'E409_022' });
+      planAPI.saveReviewState.mockRejectedValue(stale);
+      planAPI.loadDraft.mockResolvedValue({
+        ...DRAFT, proposal: { ...DRAFT.proposal, status: 'PROPOSED' },
+        reviewState: { version: 3, title: '다른 탭 제목', excludedProposalItemIds: [1] },
+      });
+      await openDraft();
+      await userEvent.click(screen.getByRole('checkbox', { name: /과제 2번/ }));
+      await vi.advanceTimersByTimeAsync(800);
+      await waitFor(() => expect(screen.getByText('다른 곳에서 먼저 저장된 검토 상태를 불러왔어요.')).toBeInTheDocument());
+      expect(screen.getByLabelText('계획 이름')).toHaveValue('다른 탭 제목');
+      expect(screen.getByRole('checkbox', { name: /연결 리스트 구현/ })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: /과제 2번/ })).toBeChecked();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('AI 대화에서 넘어온 초안은 바로 검토로 시작하고 5개 넘는 항목도 그린다', async () => {
