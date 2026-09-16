@@ -2,7 +2,7 @@ task: ai-plan-connection
 status: READY_FOR_REVIEW
 api_base: 22ccd69 (dev-playground) + feat/ai-material-selection 824ddf0
 ui_base: 7d0c275 (dev-playground) + feat/ai-material-selection d52d73f
-spec_deviations: 판단 경로(plan.draft.generator=JUDGMENT|V1) 미연결. 상담의 기간 되묻기("이번 주"가 오늘부터인지 달력 주인지)는 기존 규칙 그대로라 사용자가 날짜로 답해야 OFFER가 나온다. 자료 선택 재사용 지문에 상담 내용은 넣지 않는다(합의는 계획 호출 입력). 반복 3회 평가는 하지 않았다(시나리오 6 × 1회 + 결함 수정 뒤 2개 재실행).
+spec_deviations: (2026-09-18 후속 반영 — §6) 판단 경로(plan.draft.generator=JUDGMENT|V1) 미연결. 상담의 기간 되묻기("이번 주"가 오늘부터인지 달력 주인지)는 기존 규칙 그대로라 사용자가 날짜로 답해야 OFFER가 나온다. 자료 선택 재사용 지문에 상담 내용은 넣지 않는다(합의는 계획 호출 입력). 반복 3회 평가는 하지 않았다(시나리오 6 × 1회 + 결함 수정 뒤 2개 재실행).
 
 # AI 상담·계획·실행 연결 — 검증 기록 (2026-09-17)
 
@@ -106,3 +106,83 @@ spec_deviations: 판단 경로(plan.draft.generator=JUDGMENT|V1) 미연결. 상�
 - 상담의 기간·강도 되묻기 완화(제품 규칙이라 손대지 않음). 날짜 없는 반복 항목의 배치.
 - 합성 계정 9개(`plan-conn-*@example.com`: 첫 검증의 `stuck-9561398542`, 전체 실행 6개, 결함 수정 뒤 재실행한 `agree`·`change`)는 로컬
   DB에 남아 있다. 정리는 사용자 판단.
+
+## 6. 후속 수정 (2026-09-18) — 리뷰 지적 7건
+
+리뷰 기준 API `9fe19e7` / UI `885dbee`(원격 `feat/ai-plan-connection`, 조상 dev-playground API 679680b / UI 400942c). 이후 커밋:
+
+| 저장소 | 커밋 | 내용 |
+|---|---|---|
+| diary-api | `b959e86` | 수정 1~3: 재계획 확정(같은 plan_key의 다음 판, 출처 보존), 저장 트랜잭션(TransactionTemplate), 공통 재생성·대체 사슬 |
+| diary-api | `7903c8b` | 수정 4~7: 합의 범위(흐름·실제 날짜), 검토 상태 저장(review_state_json), 일정 기반 변경 감지, 일일 반복(날짜 보존·그 날 안 배치) |
+| diary-api | `687dc00` | 문서: 11번 §5-1-4, 13번 §11.1, 05번 §10.8.1, api-spec, 99-changelog |
+| diary-api | `0005b98` | 계획 탭 전역 상담에 학습 항목 상세(되묻기 제거), 평가 게이트 수정 |
+| diary-ui | `04ccea7` | 수정 3·5·7: 「이미 알아요」 공통 경로(redraftable 계약), 검토 상태 자동 저장·복구·옮김, 미배치 이유 |
+| diary-ui | 이 문서 | 검증 기록 |
+
+마이그레이션 `diary-api/docs/sql/2026-09-18-plan-review-state.sql`(`ai_proposals.review_state_json`, 추가 전용, 로컬 memo DB에만 적용).
+합의 항목의 범위 필드(periodStart/periodEnd/saidOn/flowProposalId)와 `plan_request_json.flowRootProposalId`는 같은 컬럼 안의 필드 추가라 DDL 없음.
+
+### 6.1 항목별 원인 · 수정 · 재현
+
+| # | 원인 | 수정 | 재현 테스트(수정 전 → 후) |
+|---|---|---|---|
+| 1 재계획 확정 | `PlanConfirmService`가 조정 대상 id(createdItemId=바뀐 대상)를 신규 id와 함께 모아 `assignPlanVersionId`(IS NULL 조건)에 넣어 행 수 불일치 → 전체 롤백 | CREATE/조정/제외/KEEP을 나눠 확정. 기존 항목의 출처 판이 속한 plan_key의 `version+1`, 새 항목만 새 출처, 스냅샷 = 계속할 범위(보류·취소 제외). 조정 전용도 확정. 오늘을 덮는 계획 목록·상담 [계획 상태]는 최신 판만 | `PlanReplanConfirmIntegrationTest`(4, 실 DB): 수정 전 2 실패(`plan_version_id 기록 행 수 불일치: 기대=4, 실제=1`, `기대=3, 실제=0`) → 수정 후 4 통과 |
+| 2 저장 트랜잭션 | `createDraft`/`redraft` → 같은 클래스의 `persist` 내부 호출이라 `@Transactional` 미적용. 제안 저장만 커밋, 메타·요청 맥락·옛 초안 폐기는 autocommit | `TransactionTemplate`로 잠금→저장→폐기 묶음. 같은 키 재시도는 원본 상태보다 먼저 답하고, 다른 대상의 키는 409 | `PlanDraftPersistenceDbTest`(7, 실 Spring 빈·실 DB·latch 경합): 수정 전 4 실패(저장 구간 트랜잭션 없음, 메타 실패 뒤 반쯤 저장된 제안 잔존, 동시 대체 2건 생성, 다른 대상 키 재사용) → 수정 후 7 통과 |
+| 3 공통 재생성 | `PlanDraftReview.markKnown`이 `strategy != null`이면 옛 `items:regenerate`로 → 지시·범위·상담 출처·합의·기존 항목 조정 없는 Spec | UI는 `requestContext.redraftable`로 가르고, 서버 `regenerateItems`도 요청이 저장돼 있으면 redraft로 위임. `loadDraft`는 대체 사슬의 끝을 돌려준다 | UI `PlanCreateViewExclude.test.jsx`(+2: 전략 있어도 redraft, 옛 초안만 regenerate), API `PlanDraftPersistenceDbTest.loadingAReplacedDraft…`, 실호출 known 시나리오 |
+| 4 합의 범위 | `scope`만 있고 초안·기간 식별자가 없어 "이번 주만"이 다음 주로 전파 | THIS_DRAFT=초안 흐름(flowProposalId), PERIOD=실제 날짜(모델→OFFER 기간→발언 시점의 주, 사용자 시간대). `effectiveFor(기간, 흐름)`만 실림, 일부 겹침은 원래 범위 표시, 지난 합의 "기간 지남", 옛 날짜 없는 항목 "범위 미확인". 다른 대화는 어려움·원인(과목·항목·시점)과 겹치는 기간 합의만 | `PlanBriefServiceTest`(12, +6), `PlanConnectionFlowTest.T24b` |
+| 5 검토 상태 | 세션에 proposalId만, 제목·체크는 로컬 상태 | `review_state_json`(version, 409) + `PUT …/review-state`, `loadDraft.reviewState`. UI 자동 저장(700ms, 늦은 응답 무시, 409면 서버 상태로), 다시 만든 초안에는 대상 실행 항목 id가 있는 선택만 옮기고 나머지는 사용자에게 안내. 처리된 초안엔 쓰기 불가 | `PlanDraftPersistenceDbTest.reviewStateIsSavedPerVersion…`, UI `PlanCreateView.test.jsx`(+2), `PlanCreateViewExclude.test.jsx`(+1), 브라우저 §6.3 |
+| 6 변경 감지 | `EvidenceFingerprint.of`가 오늘 구간 시작을 "today"로 바꿔 13~23→14~23을 못 봄 | 남는 시간 구간 대신 그것을 만든 일정(시각 박힌 항목·수업 발생분·약속)을 해시. 날짜 변경·마감 경과는 별도 | `EvidenceFingerprintTest`(4: 1분 경과 동일, 13~14시 일정 추가 감지, 종료·분할·삭제·수업 변경 감지, 자정 재확인) |
+| 7 일일 반복 | `AiProposalService.validateAndNormalize`가 DATE_ONLY 항목의 날짜를 버리고 계획 시작일 대입 → 7개가 첫날에 몰림 → 재계획이 중복으로 6개 DROP | 항목 날짜 보존. 롤링 배치가 DATE_ONLY를 그 날 안에서만 배치, 없으면 이유(`unplaced[].reason`)와 함께 미배치(횟수·날짜 유지). 프롬프트가 빈도(FREQUENCY)와 상한을 구분하고 날짜 다른 반복을 중복으로 보지 않음 | `PlanDailyRepeatIntegrationTest`(실 DB: 7일 항목 날짜별 확정·배치 6 + 막힌 날 1 미배치 "M/D에 남는 시간이 없어요"), `PlanResultNormalizerTest`(+1), 실호출 flow |
+
+추가로 실호출에서 찾은 것: 계획 탭 전역 상담이 학습 항목 없이 진행돼 "3주차에 무엇을 다루나요?"라고 되물었다(저장된 정보의 재질문).
+`AiWorkspaceContextBuilder`가 scope PLAN/PLANNING에도 상세를 싣도록 고쳤고(`0005b98`), 재실행에서 첫 턴에 OFFER가 나왔다.
+
+### 6.2 결정적 테스트 · 실 DB
+
+- diary-api 전체 **1,081 통과**(로컬 memo DB 포함, 103 클래스). CI 제외 목록 27개(`PlanReplanConfirmIntegrationTest`,
+  `PlanDraftPersistenceDbTest`, `PlanDailyRepeatIntegrationTest` 추가).
+- diary-ui **446 통과**, eslint 0.
+
+### 6.3 실제 모델 평가 (단회)
+
+`verify-ai-plan-connection-2026-09-17.py flow known adjust_only`, gpt-5.6-terra(상담)/gpt-5.6-luna(생성), 합성 계정만.
+첫 실행(`plan-conn-flow-9571182090`)은 게이트 실패 1건 — 부분 수행이 만든 잔여 항목을 "새 항목"으로 센 스크립트 결함(출처 비교 시점).
+수정 뒤 재실행(`plan-conn-flow-9571622…`, JSON `ai-plan-connection-1789571634.json`) **GATE PASSED**.
+
+| 단계 | 결과 |
+|---|---|
+| 상담 1턴 | "오늘부터 일요일까지 자료구조 3주차… 보통 강도로" → OFFER("정리하면: … 만들어볼까요?") 6.0s |
+| 상담 2턴 | "금요일 저녁 비워 줘, 영어회화 7일 동안 매일 15분" → 기간을 9/23까지 늘릴지 되물음(CHAT) 10.1s. 합의: GOAL(PERIOD)·평일 저녁(PERIOD)·금요일 비움(PERIOD)·영어 매일 15분(THIS_DRAFT) |
+| 초안 | CREATE_PERIOD_PLAN → 항목 12, 선택 1·판단 1, 9,046→3,285 토큰, 30.3s. 영어 항목 7개가 9/17~9/23 날짜별 하나 |
+| 검토 수정·복구 | PUT review-state {제목, 제외 1} → version 1; GET draft → 같은 제목·제외 복원 |
+| 첫 확정·배치 | v1(planKey 7b43…, version 1) 제목 "내가 고친 계획 이름", 항목 11(제외 반영), 배치 11/11 |
+| 부분 수행·원인 | 첫 자료구조 항목 30%·15분·메모 → 상담이 원인(코드로 옮길 때 막힘)을 받아 CAUSE/DIFFICULTY 저장 |
+| 재계획 | 상담은 "조정부터 할까요, 새 기간 계획을 만들까요"로 되물음(규칙 21) → 버튼 경로로 진행. 초안: 기존 항목 KEEP 다수 + CREATE 2, 11,348→2,313 토큰, 24.8s |
+| 재계획 확정 | v2 = 같은 planKey, version 2. 기존 항목 11개의 `plan_version_id`는 v1 그대로, 새 항목 2개(12746·12747)만 v2. v2 항목 13, 영어 7일 날짜 유지 |
+| 시간표·회고 | v2 회고: PARTIAL_DONE 1, REMAINING 7, UNPLACED 1, LEFTOVER 1, OUTSIDE_PLAN 1(시드 항목) |
+| 새 상담 | "지난 계획 진행이 어땠는지…" → 재귀 종료 조건 연습·수업 핵심·남은 읽기 순으로 답함. 파일·상황 재질문 0 |
+| known | 「이미 알아요」 → `items:regenerate`가 redraft로(previousDraft=원본, redraftable), 옛 id로 loadDraft → 최신 초안, 되돌리기도 redraft. 첫 초안 DISMISSED |
+| adjust_only | "새 항목 없이 줄이거나 빼 줘" → DROP 3·REDUCE 2, CREATE 0 → 확정 성공(같은 planKey, version 2) |
+
+첫 실행에서는 재계획 초안이 시드 항목(계획 밖 "3주차 재귀 개념 읽기")을 DROP하고 영어 7일을 모두 KEEP했다 — 날짜가 다른 일일
+실행을 중복으로 보지 않았다(수정 전 실호출에서는 6개 DROP).
+
+되묻기(우회 사실): 상담이 기간 확장(2턴)과 "조정/새 계획"(재계획 턴)을 되물었고, 스크립트는 사용자가 답하듯 다음 문장을 보내거나
+버튼 경로(CREATE_PERIOD_PLAN)로 진행했다. 되묻기 정책 자체는 이번 범위 밖이며 그대로다. 재실행에서 "매일 15분"이 FREQUENCY가
+아니라 GOAL로 기록된 턴이 있었다(필수 검증 아님, 초안·배치에는 영향 없음).
+
+### 6.4 화면 확인 (1536×760, 합성 계정 `plan-conn-absent-…`, 초안 3804)
+
+- 제목을 "복구 확인용 제목"으로 고치고 마지막 항목 체크를 풀자 `PUT …/review-state` 200이 두 번 갔다(자동 저장).
+- 새로고침 → 계획 탭: "새로고침 전에 만들던 초안을 다시 불러왔어요." + 제목 "복구 확인용 제목" + 같은 항목만 체크 해제(체크 상태
+  `false,true,true,true,false` — 첫 값은 그룹 전체 선택).
+- 확인하지 못한 것: 미배치 이유 목록의 실제 렌더링(배치가 전부 성공한 계정이라 화면에 나오지 않음 — 단위·DB 테스트로만), 상담
+  패널에서의 「이미 알아요」 클릭(API 시나리오 known과 단위 테스트로 확인).
+
+### 6.5 남은 것
+
+- 반복 3회 평가 미실행(단회 + 재실행 1). 실제 학교 자료 평가 미실행(권한·자료 없음).
+- `editedItems`·`answers`는 저장 계약만 있고 화면에서 직접 편집·답 입력 UI가 없어 빈 값으로 저장된다.
+- 상담의 기간·강도·"조정/새 계획" 되묻기 정책은 그대로다(범위 밖). 판단 경로(JUDGMENT/V1) 미연결.
+- 합성 계정(`plan-conn-*`)이 로컬 DB에 남아 있다(이번 추가 6개 포함). 정리는 사용자 판단.
