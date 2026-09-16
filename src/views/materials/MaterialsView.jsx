@@ -563,8 +563,11 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
     (async () => {
       try {
         const recent = await zipImportAPI.listRecent();
+        // 되살릴 것: 아직 도는 가져오기와, 끝났지만 "고르지 않고 남겨 둔 파일"이 있는 가져오기.
+        // 전부 가져온 뒤에는 다시 뜨지 않는다 — 할 일이 없는 패널을 자료함 위에 계속 둘 이유가 없다.
         const open = recent.find((i) => i.status === 'PREPARING' || i.status === 'IMPORTING'
-            || i.status === 'READY');
+            || i.status === 'READY'
+            || (i.archiveAvailable && (i.entries ?? []).some((e) => e.supported && e.status === 'PENDING')));
         if (!cancelled && open) {
           zipDoneRef.current = open.doneCount ?? 0;
           setZipImport(open);

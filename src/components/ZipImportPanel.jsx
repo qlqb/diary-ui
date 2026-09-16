@@ -74,7 +74,12 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
   const selectable = useMemo(
       () => entries.filter((e) => e.supported && e.status === 'PENDING'), [entries]);
   const failed = useMemo(() => entries.filter((e) => e.status === 'FAILED'), [entries]);
-  const waiting = current?.status === 'READY' || (current?.status === 'PARTIAL' && selectable.length > 0);
+  /**
+   * 고를 수 있는가. 한 번 확정한 뒤에도 남겨 둔 파일을 더 가져올 수 있어야 하므로 상태가 아니라
+   * "아직 고르지 않은 파일이 있고 원본 압축이 남아 있는가"로 판단한다. 취소·만료는 제외다.
+   */
+  const closed = current?.status === 'CANCELLED' || current?.status === 'EXPIRED';
+  const waiting = !closed && selectable.length > 0 && current?.archiveAvailable !== false;
 
   const toggle = (entryId) => {
     setSelected((prev) => {

@@ -693,6 +693,30 @@ describe('압축 파일과 본문 재추출', () => {
     expect(screen.getByRole('button', { name: /1개 올리기/ })).toBeInTheDocument(); // pdf만 대기열에
   });
 
+  it('끝났어도 고르지 않고 남겨 둔 파일이 있으면 되살린다', async () => {
+    materialStoreAPI.list.mockResolvedValue([]);
+    zipImportAPI.listRecent.mockResolvedValue([{
+      ...zipListing, status: 'COMPLETED', doneCount: 1, archiveAvailable: true,
+    }]);
+
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    expect(await screen.findByRole('button', { name: /1개 가져오기/ })).toBeInTheDocument();
+  });
+
+  it('남은 파일이 없으면 끝난 가져오기를 다시 띄우지 않는다', async () => {
+    materialStoreAPI.list.mockResolvedValue([]);
+    zipImportAPI.listRecent.mockResolvedValue([{
+      ...zipListing, status: 'COMPLETED', doneCount: 1, archiveAvailable: true,
+      entries: [{ ...zipListing.entries[0], status: 'DONE', materialId: 3 }, zipListing.entries[1]],
+    }]);
+
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    await waitFor(() => expect(zipImportAPI.listRecent).toHaveBeenCalled());
+    expect(screen.queryByText('3주차/강의.pdf')).not.toBeInTheDocument();
+  });
+
   it('다시 들어오면 진행 중이던 가져오기를 되살린다', async () => {
     materialStoreAPI.list.mockResolvedValue([]);
     zipImportAPI.listRecent.mockResolvedValue([{ ...zipListing, status: 'IMPORTING', remainingCount: 1 }]);

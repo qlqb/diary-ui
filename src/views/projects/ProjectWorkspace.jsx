@@ -834,7 +834,14 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
         <UploadForm
           courseId={courseId}
           onCancel={() => setUploadOpen(false)}
-          onUploaded={async () => { setUploadOpen(false); await onChanged(); }}
+          /*
+            keepOpen: 압축 가져오기는 파일 하나가 끝날 때마다 목록을 새로 읽는데, 그때마다 폼을 닫으면
+            남은 파일의 진행이 화면에서 사라진다. 자료 하나짜리 업로드는 예전처럼 닫는다.
+          */
+          onUploaded={async ({ keepOpen } = {}) => {
+            if (!keepOpen) setUploadOpen(false);
+            await onChanged();
+          }}
         />
       )}
 
@@ -877,6 +884,7 @@ function UploadForm({ courseId, onCancel, onUploaded }) {
     setError(null);
     try {
       if (isArchiveFile(file.name)) {
+        // 압축은 업로드가 아니라 가져오기다. 폼은 열린 채로 두고 목록을 패널이 보여준다.
         const created = await zipImportAPI.create(file, courseId, materialType);
         importedRef.current = created.doneCount ?? 0;
         setZipImport(created);
@@ -896,7 +904,7 @@ function UploadForm({ courseId, onCancel, onUploaded }) {
     setZipImport(next);
     if ((next?.doneCount ?? 0) > importedRef.current) {
       importedRef.current = next.doneCount;
-      await onUploaded();
+      await onUploaded({ keepOpen: true });
     }
   };
 

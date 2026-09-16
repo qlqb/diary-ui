@@ -108,7 +108,24 @@ describe('압축 가져오기 패널', () => {
     expect(zipImportAPI.retryEntry).toHaveBeenCalledTimes(1);
   });
 
-  it('원본 압축이 지워졌으면 다시 시도 버튼을 주지 않는다', () => {
+  it('확정한 뒤에도 남겨 둔 파일을 더 가져올 수 있다', () => {
+    // 처음에 2개 중 1개만 골랐다면, 완료 뒤에도 나머지 하나를 다시 고를 수 있어야 한다.
+    render(<ZipImportPanel onChanged={vi.fn()} onClose={vi.fn()} zipImport={{
+      ...READY,
+      status: 'COMPLETED',
+      doneCount: 1,
+      entries: [
+        { ...READY.entries[0], status: 'DONE', materialId: 77 },
+        READY.entries[1],
+        READY.entries[2], READY.entries[3],
+      ],
+    }} />);
+
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: /1개 가져오기/ })).toBeInTheDocument();
+  });
+
+  it('원본 압축이 지워졌으면 다시 시도도, 추가 선택도 없다', () => {
     render(<ZipImportPanel onChanged={vi.fn()} onClose={vi.fn()} zipImport={{
       ...READY,
       status: 'PARTIAL',
@@ -118,6 +135,7 @@ describe('압축 가져오기 패널', () => {
     }} />);
 
     expect(screen.queryByRole('button', { name: /다시/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
   it('진행 중이면 서버 상태를 따라본다', async () => {
