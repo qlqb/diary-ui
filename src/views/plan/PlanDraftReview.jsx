@@ -23,7 +23,7 @@ import { PLAN_INTENSITY_LABEL } from '../../types/execution.js';
 import { formatDateKo, formatMinutes } from '../../lib/planTime.js';
 import { groupItems, initialCollapsed, placementsToEditedItems } from '../../lib/planDraft.js';
 import {
-  ACTION_TYPE_LABEL, PRIORITY_LABEL, TREATMENT_LABEL, formatDeadline, formatEstimate,
+  ACTION_TYPE_LABEL, EXISTING_ACTION_LABEL, PRIORITY_LABEL, TREATMENT_LABEL, formatDeadline, formatEstimate,
 } from '../../lib/planLabels.js';
 import PlanStrategyPanel from './PlanStrategyPanel.jsx';
 import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
@@ -126,7 +126,14 @@ export default function PlanDraftReview({
    */
   const reloadProvenance = useCallback(() => setProvenanceReload((v) => v + 1), []);
 
-  const items = useMemo(() => current?.proposal?.items ?? [], [current]);
+  /*
+   * 새 항목과 기존 항목 조정(줄이기·옮기기·빼기)을 나눈다. 재계획은 새 항목만 더해 기존 미완료 항목을 중복시키지 않는다 —
+   * 기존 항목의 변경은 확정 때 함께 적용되는 별도 변경안이고, 체크를 풀면 그 변경만 빠진다.
+   */
+  const items = useMemo(() => (current?.proposal?.items ?? []).filter((i) => !i.operation || i.operation === 'CREATE'),
+    [current]);
+  const adjustments = useMemo(() => (current?.proposal?.items ?? []).filter((i) => i.operation && i.operation !== 'CREATE'),
+    [current]);
 
   /** 항목 하나의 근거. 서버가 제안 항목 id로 내려주므로 화면이 제목으로 짝짓지 않는다. */
   const evidenceByItem = useMemo(() => {
@@ -190,7 +197,8 @@ export default function PlanDraftReview({
   const available = current?.estimatedAvailableMinutes ?? null;
   const target = current?.targetMinutes ?? 0;
   const buffer = available != null ? Math.max(0, available - selectedMinutes) : null;
-  const allExcluded = items.length > 0 && excluded.size >= items.length;
+  const allExcluded = items.length + adjustments.length > 0
+    && items.every((i) => excluded.has(i.proposalItemId)) && adjustments.every((i) => excluded.has(i.proposalItemId));
   const longPlan = (current?.days ?? 0) > 7;
 
   const toggleItem = useCallback((proposalItemId) => {
@@ -371,6 +379,23 @@ export default function PlanDraftReview({
         )}
         <PlanMaterialSelection selection={current.materialSelection}
           onChooseRequestedMaterial={onChooseRequestedMaterial} busy={busy || regenerating} />
+        {/*
+          서버가 실제로 센 호출·읽기 횟수. 모델이 "다 읽었다"고 말하는 것과 다르다. 자료 선택을 생략하고 이전 근거를
+          다시 읽었으면 그 사실도 말한다.
+        */}
+        {current.generation && (
+          <p className="hint plan-generation-line">
+            AI 호출 {current.generation.normalCalls}회
+            {current.generation.recoveryCalls > 0 ? ` (다시 답하기 ${current.generation.recoveryCalls}회)` : ''}
+            {' · 원문 읽기 '}{current.generation.retrievalRounds}회
+            {current.generation.selectionReused ? ' · 이전 초안과 근거가 같아 자료 선택은 생략했어요' : ''}
+          </p>
+        )}
+        {current.previousDraft && (current.previousDraft.changes ?? []).length > 0 && (
+          <p className="hint plan-generation-line">
+            이전 초안 이후 달라진 것: {current.previousDraft.changes.join(', ')}
+          </p>
+        )}
         <p className="plan-detail-level" role="group" aria-label="안내 상세도">
           <span className="view-dim">안내</span>
           <button type="button" className={`chip-toggle${!detailAll ? ' is-on' : ''}`} aria-pressed={!detailAll}
@@ -418,6 +443,36 @@ export default function PlanDraftReview({
           정확한 시각은 처음 7일({formatDateKo(preview.horizonStart)} ~ {formatDateKo(preview.horizonEnd)})만 미리 계산했어요.
           이번 주 이후 항목은 해당 주가 가까워지면 배치됩니다.
         </p>
+      )}
+
+      {adjustments.length > 0 && (
+        <div className="plan-group plan-group-adjustments">
+          <div className="plan-group-head">
+            <span className="plan-group-title">이미 있던 항목의 변경 {adjustments.length}개</span>
+          </div>
+          <ul className="plan-group-items">
+            {adjustments.map((item) => (
+              <li key={item.proposalItemId} className="plan-item">
+                <label>
+                  <input type="checkbox" checked={!excluded.has(item.proposalItemId)}
+                    onChange={() => toggleItem(item.proposalItemId)} />
+                  <span className="plan-item-title">{item.beforeTitle ?? item.title}</span>
+                  <span className="plan-item-meta">
+                    {[
+                      EXISTING_ACTION_LABEL[item.operation] ?? item.operation,
+                      item.operation === 'REDUCE' && item.expectedMinutes
+                        ? `${item.beforeExpectedMinutes ?? '?'}분 → ${item.expectedMinutes}분` : null,
+                      item.operation === 'MOVE' && item.targetDate
+                        ? `${item.beforeScheduledDate ? formatDateKo(item.beforeScheduledDate) : '날짜 미정'} → ${formatDateKo(item.targetDate)}` : null,
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                </label>
+                {item.reason && <p className="plan-item-reason">{item.reason}</p>}
+              </li>
+            ))}
+          </ul>
+          <p className="hint">체크를 풀면 그 변경만 빠지고 기존 항목은 그대로 남아요.</p>
+        </div>
       )}
 
       {groups.map((group) => (
@@ -605,7 +660,7 @@ function PlanDraftGroup({
                       : null,
                     ACTION_TYPE_LABEL[item.actionType],
                     formatEstimate(item.expectedMinutes),
-                    formatDeadline(item.deadlineAt, classAtByCourse?.get(item.courseId)),
+                    formatDeadline(item.deadlineAt, classAtByCourse?.get(item.courseId), item.deadlineSource),
                     /*
                       targetDate가 아니라 placementType으로 판단한다. 제안의 targetDate는 서버가
                       요청 기간의 시작일로 강제하는 값이라 미배치 항목에도 값이 들어 있다.

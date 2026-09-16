@@ -21,7 +21,7 @@ import {
   ImagePlus,
 } from 'lucide-react';
 import {
-  conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI, scheduleImportAPI,
+  conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI, scheduleImportAPI, planAPI,
 } from '../api/api.js';
 import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
 import ScheduleImportReviewModal from './ScheduleImportReviewModal.jsx';
@@ -108,6 +108,8 @@ export default function AiPanel({
   const [quickReplies, setQuickReplies] = useState([]);
   /** 기간 계획 초안을 검토 화면으로 넘겼다는 안내. 항목 수만 든다. */
   const [periodPlanNotice, setPeriodPlanNotice] = useState(null);
+  /** 기간 계획 생성의 진행 단계(서버가 실제로 밟은 단계). 턴이 끝나면 사라진다. */
+  const [periodPlanStage, setPeriodPlanStage] = useState(null);
   const [contextSuggestions, setContextSuggestions] = useState([]);
   /**
    * AI가 뽑은 일정 후보(약속·반복 일정). contextSuggestions와 나란히 두되 합치지 않는다 —
@@ -162,6 +164,7 @@ export default function AiPanel({
     setCurrentOffer(null);
     setQuickReplies([]);
     setPeriodPlanNotice(null);
+    setPeriodPlanStage(null);
     setContextSuggestions([]);
     setScheduleSuggestions([]);
     setScheduleActionState({});
@@ -208,7 +211,23 @@ export default function AiPanel({
           try {
             const proposal = await proposalAPI.get(last.proposalId);
             if (loadTokenRef.current === myToken && proposal.status === 'PROPOSED') {
-              onProposal?.(proposal);
+              /*
+               * 기간 계획 초안은 일반 제안(적용 바)이 아니라 계획 검토 화면으로 간다. 저장된 초안을 그 모양으로 다시
+               * 읽을 수 있으면 그쪽으로, 아니면(기간이 없는 일반 제안) 기존 경로다.
+               */
+              let periodDraft = null;
+              if (planAPI?.loadDraft && onPeriodPlan) {
+                try {
+                  periodDraft = await planAPI.loadDraft(last.proposalId);
+                } catch { periodDraft = null; }
+              }
+              if (loadTokenRef.current !== myToken) return;
+              if (periodDraft?.proposalId) {
+                setPeriodPlanNotice(periodDraft.proposal?.items?.length ?? 0);
+                onPeriodPlan(periodDraft);
+              } else {
+                onProposal?.(proposal);
+              }
             }
           } catch { /* 제안 조회 실패해도 대화 자체는 정상 표시한다 */ }
         }
@@ -227,7 +246,7 @@ export default function AiPanel({
     } finally {
       if (loadTokenRef.current === myToken) setLoadingHistory(false);
     }
-  }, [onProposal, resetTurnState]);
+  }, [onProposal, onPeriodPlan, resetTurnState]);
 
   const startNewConversation = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -287,6 +306,7 @@ export default function AiPanel({
     setCurrentOffer(null);
     setQuickReplies([]);
     setPeriodPlanNotice(null);
+    setPeriodPlanStage(null);
     setAppliedNotice(false);
 
     if (optimisticUserText) {
@@ -322,9 +342,13 @@ export default function AiPanel({
           } else if (eventName === 'proposal.ready') {
             // 카드를 여기서 그리지 않는다 — 초안은 실제 화면으로 넘긴다.
             onProposal?.(data);
+          } else if (eventName === 'period_plan.progress') {
+            // 서버가 실제로 밟은 단계만 보여 준다. 모델이 완료를 선언하는 문구가 아니다.
+            setPeriodPlanStage(data?.label ?? null);
           } else if (eventName === 'period_plan.ready') {
             // 기간 계획은 일반 제안(적용 바)이 아니라 계획 검토·확정 화면으로 간다 — 계획
             // 탭에서 만든 것과 같은 화면, 같은 확정 API다.
+            setPeriodPlanStage(null);
             setPeriodPlanNotice(data?.proposal?.items?.length ?? 0);
             onPeriodPlan?.(data);
           } else if (eventName === 'context.suggestions.ready') {
@@ -339,6 +363,7 @@ export default function AiPanel({
               : m)));
             setQuickReplies(Array.isArray(data?.quickReplies) ? data.quickReplies : []);
           } else if (eventName === 'message.error') {
+            setPeriodPlanStage(null);
             setMessages((prev) => prev.filter((m) => m.key !== streamingKey));
             setSendError(data?.message || 'AI 응답을 받지 못했습니다.');
           }
@@ -770,6 +795,10 @@ export default function AiPanel({
                   {currentOffer.label || '이 내용으로 초안 만들기'}
                 </button>
               </div>
+            )}
+
+            {periodPlanStage && sending && (
+              <p className="ai-hint" role="status"><Loader2 size={13} className="spin" /> {periodPlanStage}…</p>
             )}
 
             {periodPlanNotice != null && (

@@ -227,11 +227,25 @@ export function PlanReviewPanel({ planVersionId }) {
         {review.targetMinutes != null ? `${formatMinutesKo(review.targetMinutes)} 중 ` : ''}
         {formatMinutesKo(review.completedMinutes)}을 했어요.
       </p>
+      {/*
+        실측과 추정을 한 숫자로 뭉치지 않는다. 시간을 적지 않은 완료 항목은 예정 시간으로 셌다는 사실을 숨기면
+        "실제로 몇 시간 했는지"가 거짓이 된다.
+      */}
+      {review.measuredMinutes != null && (review.unmeasuredDoneCount ?? 0) > 0 && (
+        <p className="hint">
+          실제로 적은 시간은 {formatMinutesKo(review.measuredMinutes)}이고, 시간을 적지 않은 {review.unmeasuredDoneCount}개는
+          예정 시간({formatMinutesKo(review.estimatedMinutes ?? 0)})으로 셌어요.
+        </p>
+      )}
       <ul className="plan-review-list">
         {review.items.map((item) => (
           <li key={`${item.executionItemId}-${item.category}`} className="plan-review-item">
             <span className="plan-item-title">{item.title}</span>
-            <span className="plan-item-meta">{categoryLabel(item)}</span>
+            <span className="plan-item-meta">
+              {categoryLabel(item)}
+              {item.actualMinutesSource === 'ESTIMATED' ? ' · 시간 미기록(예정 시간으로 셈)' : ''}
+              {item.actualMinutesSource === 'MEASURED' && item.actualMinutes != null ? ` · 실제 ${item.actualMinutes}분` : ''}
+            </span>
           </li>
         ))}
       </ul>

@@ -73,7 +73,7 @@ describe('T12 빼기 → 재생성 → 하나 복원 / 모두 복원', () => {
 
     await userEvent.click(buttonIn('자료구조 · ADT와 복잡도', '이번만 빼기'));
 
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(77, { excludeTopicIds: [101] }));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(77, expect.objectContaining({ excludeTopicIds: [101] })));
     expect(planAPI.createDraft).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/이번 계획에서만 뺐어요/)).toBeInTheDocument();
     expect(screen.getByText(/이번 계획에서만 뺀 항목: ADT와 복잡도/)).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('T12 빼기 → 재생성 → 하나 복원 / 모두 복원', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '되돌리기' }));
 
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenLastCalledWith(78, { excludeTopicIds: [] }));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenLastCalledWith(78, expect.objectContaining({ excludeTopicIds: [] })));
     expect(await screen.findByText('자료구조 · ADT와 복잡도')).toBeInTheDocument();
     expect(screen.queryByText(/이번 계획에서만 뺀 항목/)).not.toBeInTheDocument();
     // 되돌리기는 후보 자격을 돌려줄 뿐 — 모델이 다시 고른다는 약속을 하지 않는다.
@@ -95,7 +95,7 @@ describe('T12 빼기 → 재생성 → 하나 복원 / 모두 복원', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '모두 되돌리기' }));
 
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(80, { excludeTopicIds: [] }));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(80, expect.objectContaining({ excludeTopicIds: [] })));
     expect(await screen.findByText('자료구조 · ADT와 복잡도')).toBeInTheDocument();
   });
 });
@@ -155,17 +155,17 @@ describe('T15 상담 초안', () => {
     expect(screen.getByText(/AI 대화에서 만든 기간 계획이에요/)).toBeInTheDocument();
 
     await userEvent.click(buttonIn('자료구조 · ADT와 복잡도', '이번만 빼기'));
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(90, { excludeTopicIds: [101] }));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(90, expect.objectContaining({ excludeTopicIds: [101] })));
 
     await userEvent.click(await screen.findByRole('button', { name: '이미 알아요' }));
     await waitFor(() => expect(topicAPI.updateUserMark).toHaveBeenCalledWith(102, 'KNOWN'));
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(91, {}));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(91, expect.objectContaining({})));
     // 다시 만든 뒤에도 상담 초안이다 — 화면의 기간 입력으로 바뀌지 않는다.
     expect(screen.getByText(/AI 대화에서 만든 기간 계획이에요/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: '되돌리기' }));
     await waitFor(() => expect(topicAPI.updateUserMark).toHaveBeenLastCalledWith(102, null));
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenLastCalledWith(92, {}));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenLastCalledWith(92, expect.objectContaining({})));
     expect(await screen.findByText('자료구조 · 연결 리스트')).toBeInTheDocument();
     expect(planAPI.createDraft).not.toHaveBeenCalled();
   });
@@ -227,13 +227,13 @@ describe('T17 이미 알아요 되돌리기', () => {
     planAPI.redraft.mockResolvedValueOnce(draft(78, [LIST])).mockResolvedValueOnce(draft(79, [ADT, LIST]));
 
     await userEvent.click(buttonIn('자료구조 · ADT와 복잡도', '이미 알아요'));
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(77, {}));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(77, expect.objectContaining({})));
     expect(await screen.findByText(/다음 계획부터도 이 내용은 건너뛸게요/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: '되돌리기' }));
 
     await waitFor(() => expect(topicAPI.updateUserMark).toHaveBeenLastCalledWith(101, null));
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenLastCalledWith(78, {}));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenLastCalledWith(78, expect.objectContaining({})));
     expect(await screen.findByText('자료구조 · ADT와 복잡도')).toBeInTheDocument();
   });
 });
@@ -254,7 +254,7 @@ describe('구간만 인용한 항목의 학습 항목 찾기', () => {
     await userEvent.click(await within(screen.getByText('자료구조 · 연결 리스트 삭제 실습').closest('li'))
       .findByRole('button', { name: '이번만 빼기' }));
 
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(95, { excludeTopicIds: [102] }));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(95, expect.objectContaining({ excludeTopicIds: [102] })));
   });
 });
 
@@ -288,6 +288,6 @@ describe('자료 지정', () => {
     expect(screen.getByText(/p.7 원문 전체/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /과제 안내.pdf \(자료 42\)/ }));
-    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(97, { requestedMaterialIds: [30, 42] }));
+    await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(97, expect.objectContaining({ requestedMaterialIds: [30, 42] })));
   });
 });

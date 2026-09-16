@@ -72,6 +72,28 @@ export const PROVENANCE_SOURCE_LABEL = {
   USER_CONTEXT: '확인된 이야기',
   PLAN_REVIEW: '직전 계획 돌아보기',
   TURN_INPUT: '이번에 직접 말한 것',
+  MATERIAL_SECTION: '자료 구간',
+  ASSIGNMENT: '과제',
+  CONVERSATION_MESSAGE: 'AI 대화 원문',
+  PLAN_BRIEF: '대화에서 합의한 것',
+  EXECUTION_HISTORY: '실행 기록',
+  NEXT_CLASS: '다음 수업',
+};
+
+/** 마감이 어디서 왔는가. 확인된 사실과 AI 제안을 구분해 말한다. */
+export const DEADLINE_SOURCE_LABEL = {
+  CLASS: '수업 전',
+  ASSIGNMENT: '과제 마감',
+  AI_PROPOSED: 'AI 제안 목표',
+  USER: '직접 정함',
+};
+
+/** 이미 있던 항목을 어떻게 하기로 했는가. */
+export const EXISTING_ACTION_LABEL = {
+  KEEP: '그대로',
+  REDUCE: '줄이기',
+  MOVE: '옮기기',
+  DROP: '이번 계획에서 빼기',
 };
 
 /** 원본을 어떤 모양으로 줬는가. "원본 전체"로 오해하지 않게 하는 값이다. */
@@ -85,6 +107,8 @@ export const PROVENANCE_REPRESENTATION_LABEL = {
 export const SERVER_CALCULATION_LABEL = {
   AVAILABILITY_ESTIMATE: '남는 시간 추정',
   STUDY_BUDGET: '학습 예산',
+  MATERIAL_SELECTION: '자료 선택 결과',
+  GENERATION_CALLS: '호출 횟수·토큰',
 };
 
 /**
@@ -113,16 +137,19 @@ const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
  * @param deadlineAt ISO datetime 또는 null
  * @param classAt    같은 과목 조각들이 공유하는 다음 수업 시각. 모르면 생략
  */
-export function formatDeadline(deadlineAt, classAt = null) {
+export function formatDeadline(deadlineAt, classAt = null, source = null) {
   if (!deadlineAt) return null;
   const at = new Date(deadlineAt);
   if (Number.isNaN(at.getTime())) return null;
-  if (classAt && new Date(classAt).getTime() === at.getTime()) {
+  if (source === 'CLASS' || (classAt && new Date(classAt).getTime() === at.getTime())) {
     return `${WEEKDAY_KO[at.getDay()]}요일 수업 전`;
   }
   const hh = String(at.getHours()).padStart(2, '0');
   const mm = String(at.getMinutes()).padStart(2, '0');
-  return `${at.getMonth() + 1}/${at.getDate()} ${hh}:${mm}까지`;
+  const when = `${at.getMonth() + 1}/${at.getDate()} ${hh}:${mm}까지`;
+  if (source === 'AI_PROPOSED') return `${when} (AI 제안 목표)`;
+  if (source === 'ASSIGNMENT') return `${when} (과제 마감)`;
+  return when;
 }
 
 /**

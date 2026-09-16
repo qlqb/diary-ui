@@ -24,6 +24,11 @@ import PlanDraftReview from './PlanDraftReview.jsx';
 
 const MAX_PLAN_DAYS = 31;
 
+function newRequestKey() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `plan-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 /** 같은 작성 흐름인가를 가르는 열쇠. 기간·범위·지정 자료가 같으면 같은 흐름이다. */
 function flowKeyOf(startDate, endDate, scopeCourseId, requestedIds) {
   return [startDate, endDate, scopeCourseId ?? 'all', [...requestedIds].sort((a, b) => a - b).join(',')].join('|');
@@ -64,6 +69,26 @@ export default function PlanCreateView({
   const [blocked, setBlocked] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  /**
+   * 서버가 실제로 밟은 생성 단계("자료 확인 중", "계획 정리 중"). 요청 키로 진행 상태를 물어 본다 — 모델이 완료를
+   * 선언하는 문구가 아니라 서버가 옮긴 단계다. 조회가 안 되면 기본 문구만 보인다.
+   */
+  const [stageLabel, setStageLabel] = useState(null);
+  const activeKey = useRef(null);
+  useEffect(() => {
+    if (!loading || !activeKey.current || !planAPI?.draftProgress) return undefined;
+    const key = activeKey.current;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const state = await planAPI.draftProgress(key);
+        if (!cancelled && state?.known && state.label && activeKey.current === key) setStageLabel(state.label);
+      } catch { /* 진행 상태는 보조 정보다 — 못 읽어도 생성은 계속된다 */ }
+    };
+    poll();
+    const timer = setInterval(poll, 1500);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [loading]);
   /** 확정 이력이 없으면(=첫 계획) 강도를 펼친 상태로 시작한다. */
   const [hasHistory, setHasHistory] = useState(true);
   /**
@@ -154,8 +179,12 @@ export default function PlanCreateView({
     setLoading(true);
     setError(null);
     const carried = carry.current && carry.current.key === flowKey ? carry.current.excludedTopics : [];
+    const requestKey = newRequestKey();
+    activeKey.current = requestKey;
+    setStageLabel(null);
     try {
       const result = await planAPI.createDraft({
+        requestKey,
         startDate, endDate, intensity,
         instruction: instruction.trim() || null,
         // 프로젝트 화면에서 들어왔으면 그 프로젝트만 대상으로 한다. 안 넘기면 서버가
@@ -177,6 +206,7 @@ export default function PlanCreateView({
       if (ticket.current === mine) {
         inFlight.current = false;
         setLoading(false);
+        setStageLabel(null);
       }
     }
   };
@@ -195,8 +225,11 @@ export default function PlanCreateView({
     inFlight.current = true;
     setLoading(true);
     setError(null);
+    const requestKey = newRequestKey();
+    activeKey.current = requestKey;
+    setStageLabel(null);
     try {
-      const result = await planAPI.redraft(source.proposalId, changes);
+      const result = await planAPI.redraft(source.proposalId, { ...changes, requestKey });
       if (ticket.current !== mine) return false;
       setDraft(result);
       return true;
@@ -207,6 +240,7 @@ export default function PlanCreateView({
       if (ticket.current === mine) {
         inFlight.current = false;
         setLoading(false);
+        setStageLabel(null);
       }
     }
   };
@@ -369,7 +403,7 @@ export default function PlanCreateView({
           {!draft && (
             <button type="button" className="btn-primary" disabled={!periodValid || loading}
               onClick={() => handleDraft()}>
-              <Sparkles size={16} /> {loading ? '자료를 고르고 초안을 만들고 있어요…' : '초안 만들기'}
+              <Sparkles size={16} /> {loading ? `${stageLabel ?? '자료를 고르고 초안을 만들고 있어요'}…` : '초안 만들기'}
             </button>
           )}
         </>
@@ -420,7 +454,11 @@ export default function PlanCreateView({
           )}
         </p>
       )}
-      {loading && draft && <p className="hint" role="status">같은 조건으로 초안을 다시 만들고 있어요…</p>}
+      {loading && draft && (
+        <p className="hint" role="status">
+          같은 조건으로 초안을 다시 만들고 있어요{stageLabel ? ` — ${stageLabel}` : ''}…
+        </p>
+      )}
 
       {draft && !draft.ask && (
         <PlanDraftReview
