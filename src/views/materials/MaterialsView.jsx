@@ -29,6 +29,9 @@ import UndoToast from '../../components/UndoToast.jsx';
 import {
   MaterialType, MATERIAL_TYPE_HINT, ExtractionStatus, EXTRACTION_STATUS_LABEL, MaterialAnalysisStatus,
 } from '../../types/learning.js';
+import {
+  MATERIAL_ACCEPT, MATERIAL_FORMATS_LABEL, isAllowedMaterialFile, materialFileKind,
+} from '../../lib/materialFormats.js';
 
 /**
  * 필터는 이 셋만.
@@ -76,7 +79,7 @@ const ProposalStatus = Object.freeze({
 /**
  * 업로드 제약. 서버(FileStorageService)와 같은 값을 들고 있어야 한다.
  *
- * - 확장자: ALLOWED_EXTENSIONS = {pdf, pptx}
+ * - 형식:   lib/materialFormats.js (서버 MaterialFileFormat과 같은 목록)
  * - 크기:   storage.materials.max-file-size-bytes 기본값 20971520 (= 20MB)
  *
  * spring.servlet.multipart.max-file-size는 25MB지만 그건 요청 자체를 거르는 상한이고,
@@ -86,22 +89,14 @@ const ProposalStatus = Object.freeze({
  * 그래서 검증을 여기서 한 번 더 한다. 서버 검증을 대신하는 게 아니라, 뻔히 400 날 파일을
  * 올려놓고 기다리게 하지 않기 위한 것이다.
  */
-const ACCEPT = '.pdf,.pptx';
-const ALLOWED_EXTENSIONS = ['pdf', 'pptx'];
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const MAX_FILE_SIZE_LABEL = '20MB';
-const UPLOAD_HINT = `PDF·PPTX · 여러 파일 선택 가능 · 파일당 ${MAX_FILE_SIZE_LABEL}까지`;
+const UPLOAD_HINT = `${MATERIAL_FORMATS_LABEL} · 여러 파일 선택 가능 · 파일당 ${MAX_FILE_SIZE_LABEL}까지`;
 
 function formatDate(value) {
   if (!value) return '';
   const d = new Date(value);
   return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-function fileKind(filename, contentType) {
-  const ext = (filename ?? '').split('.').pop()?.toUpperCase();
-  if (ext === 'PDF' || ext === 'PPTX') return ext;
-  return contentType?.includes('presentation') ? 'PPTX' : 'PDF';
 }
 
 function formatSize(bytes) {
@@ -113,8 +108,7 @@ function formatSize(bytes) {
 
 /** 올릴 수 없는 파일이면 그 이유를, 올릴 수 있으면 null을 돌려준다. */
 function rejectReason(file) {
-  const ext = (file?.name ?? '').split('.').pop()?.toLowerCase();
-  if (!ALLOWED_EXTENSIONS.includes(ext)) return 'PDF나 PPTX만 올릴 수 있어요';
+  if (!isAllowedMaterialFile(file?.name)) return `${MATERIAL_FORMATS_LABEL}만 올릴 수 있어요`;
   if (!file.size) return '내용이 비어 있는 파일이에요';
   if (file.size > MAX_FILE_SIZE_BYTES) return `${MAX_FILE_SIZE_LABEL}까지 올릴 수 있어요`;
   return null;
@@ -627,7 +621,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
             ref={uploader.inputRef}
             type="file"
             multiple
-            accept={ACCEPT}
+            accept={MATERIAL_ACCEPT}
             tabIndex={-1}
             aria-hidden="true"
             style={{ display: 'none' }}
@@ -645,6 +639,14 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
             <Plus size={13} /> 파일 추가
           </button>
         </header>
+
+        {/*
+          드롭 영역은 항상 여기 있다. 예전에는 자료가 하나도 없을 때만 나타나서, 자료가 쌓이거나
+          분석이 도는 순간 "끌어다 놓을 자리"가 화면에서 사라졌다 — 끌어다 놓는 것 자체는 그때도
+          되지만(화면 전체가 드롭 대상이다) 놓을 자리가 안 보이면 되는지 알 수 없다.
+          자료가 있으면 한 줄로 줄여 목록 자리를 뺏지 않는다.
+        */}
+        <DropArea compact={loading || materials.length > 0} onPick={uploader.openPicker} />
 
         <AnalysisOverviewBar overview={analysis.overview} error={analysis.error} busy={analysisBusy}
             onPause={toggleAnalysis} onResume={toggleAnalysis} />
@@ -795,7 +797,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
         {loading && materials.length === 0 ? (
             <p className="view-dim">불러오는 중...</p>
         ) : visible.length === 0 ? (
-            <EmptyState filter={filter} total={materials.length} onPick={uploader.openPicker} />
+            <EmptyState filter={filter} total={materials.length} />
         ) : (
             <ul className="material-list">
               {visible.map((m) => {
@@ -823,7 +825,7 @@ export default function MaterialsView({ projects, onProjectsChanged }) {
                           <FileText size={14} /> {m.originalFilename}
                         </span>
                         <span className="material-row-meta">
-                          {fileKind(m.originalFilename, m.contentType)} · {formatDate(m.createdAt)}
+                          {materialFileKind(m.originalFilename, m.contentType)} · {formatDate(m.createdAt)}
                         </span>
                       </button>
 
@@ -1018,17 +1020,24 @@ function UploadItemState({ item }) {
 }
 
 /**
- * 자료가 하나도 없을 때는 이 박스가 곧 업로드 영역이다.
+ * 업로드 영역. 목록 위에 늘 있고, 클릭하면 파일 고르기 창이 열린다.
  *
- * 예전에는 안내 문구가 적힌 큰 박스와 클릭해야 하는 작은 input이 따로 있었다. 시선이 가는
- * 면적과 실제로 눌러야 하는 곳이 어긋나 있었고, 같은 말을 두 번 하고 있었다.
+ * 안내 문구가 적힌 큰 박스와 클릭해야 하는 작은 input을 따로 두지 않는다 — 시선이 가는 면적과
+ * 실제로 눌러야 하는 곳이 어긋나고 같은 말을 두 번 하게 된다.
+ *
+ * compact는 자료가 이미 있을 때다. 한 줄로 줄여 목록이 밀려나지 않게 하되, 없애지는 않는다.
+ * 무엇을 올릴 수 있는지(형식·크기)는 두 모양 모두 적는다 — 그 안내가 필요한 순간은 자료가
+ * 없을 때가 아니라 새 파일을 올리려는 순간이다.
  */
-function EmptyState({ filter, total, onPick }) {
-  if (filter === 'unlinked' && total > 0) {
-    return <p className="view-dim">지금은 모든 자료가 프로젝트에 연결되어 있어요.</p>;
-  }
-  if (total > 0) {
-    return <p className="view-dim">이 조건에 맞는 자료가 없어요.</p>;
+function DropArea({ compact, onPick }) {
+  if (compact) {
+    return (
+        <button type="button" className="dropzone is-compact" onClick={onPick}>
+          <span className="dropzone-icon"><UploadCloud size={18} /></span>
+          <span className="dropzone-title">파일을 끌어다 놓거나 클릭해서 추가하세요</span>
+          <span className="dropzone-hint">{UPLOAD_HINT}</span>
+        </button>
+    );
   }
   return (
       <button type="button" className="dropzone" onClick={onPick}>
@@ -1041,6 +1050,17 @@ function EmptyState({ filter, total, onPick }) {
       </span>
       </button>
   );
+}
+
+/** 목록이 비었을 때의 한 줄. 자료가 아예 없는 경우는 위의 DropArea가 이미 말하고 있다. */
+function EmptyState({ filter, total }) {
+  if (filter === 'unlinked' && total > 0) {
+    return <p className="view-dim">지금은 모든 자료가 프로젝트에 연결되어 있어요.</p>;
+  }
+  if (total > 0) {
+    return <p className="view-dim">이 조건에 맞는 자료가 없어요.</p>;
+  }
+  return <p className="view-dim">아직 올린 자료가 없어요.</p>;
 }
 
 /**
@@ -1120,7 +1140,7 @@ function MaterialDetail({ materialId, onBack, onChanged }) {
               <h1 className="view-title">{material?.originalFilename}</h1>
               <p className="view-sub">
               <span className="view-sub-dim">
-                {fileKind(material?.originalFilename, material?.contentType)} · {formatDate(material?.createdAt)}
+                {materialFileKind(material?.originalFilename, material?.contentType)} · {formatDate(material?.createdAt)}
               </span>
                 {material?.extractionStatus !== ExtractionStatus.SUCCESS && (
                     <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[material?.extractionStatus]}</span>

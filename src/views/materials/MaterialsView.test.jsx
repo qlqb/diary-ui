@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import MaterialsView from './MaterialsView.jsx';
 import { PENDING_DELETE_WINDOW_MS } from './usePendingDelete.js';
-import { materialStoreAPI } from '../../api/api.js';
+import { materialAnalysisStatusAPI, materialStoreAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
   materialAnalysisStatusAPI: {
@@ -581,5 +581,66 @@ describe('연결 제안 배너', () => {
     await user.click(screen.getByRole('button', { name: /2개 올리기/ }));
 
     expect(await screen.findByText('자료를 살펴보는 중')).toBeInTheDocument();
+  });
+});
+
+describe('올릴 수 있는 형식', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    materialStoreAPI.list.mockResolvedValue([]);
+  });
+
+  it('HWP·IPYNB·ZIP은 담기고, HWPX는 이유와 함께 걸러진다', async () => {
+    const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+    const input = container.querySelector('input[type="file"]');
+    expect(input).toHaveAttribute('accept', '.pdf,.pptx,.hwp,.ipynb,.zip');
+
+    // 브라우저는 hwp·ipynb의 type을 비워 보내기도 한다. 화면은 확장자로만 거른다.
+    const files = [
+      new File(['x'], '강의계획서.hwp', { type: '' }),
+      new File(['{}'], '실습3.ipynb', { type: '' }),
+      new File(['PK'], '3주차.zip', { type: 'application/x-zip-compressed' }),
+      new File(['PK'], '계획서.hwpx', { type: '' }),
+    ];
+    await act(async () => {
+      fireEvent.change(input, { target: { files } });
+    });
+
+    expect(screen.getByRole('button', { name: /3개 올리기/ })).toBeInTheDocument();
+    expect(screen.getByText('PDF·PPTX·HWP·IPYNB·ZIP만 올릴 수 있어요')).toBeInTheDocument();
+  });
+});
+
+describe('드롭 영역', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    materialStoreAPI.get.mockResolvedValue(DETAIL);
+  });
+
+  it('자료가 이미 있어도, 분석이 도는 중에도 드롭 영역이 남는다', async () => {
+    materialStoreAPI.list.mockResolvedValue([MATERIAL]);
+    materialAnalysisStatusAPI.overview.mockResolvedValue({
+      materials: [{ materialId: 4, status: 'RUNNING', sectionCount: 0 }],
+      paused: false, serviceAvailable: true, queued: 0, running: 1, done: 0,
+    });
+
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    expect(await screen.findByRole('button', { name: /^자료구조\.pdf/ })).toBeInTheDocument();
+    const drop = screen.getByRole('button', { name: /파일을 끌어다 놓거나 클릭해서 추가하세요/ });
+    expect(drop).toBeInTheDocument();
+    // 목록을 밀어내지 않도록 줄인 모양이지만, 무엇을 올릴 수 있는지는 그대로 적는다.
+    expect(drop.className).toContain('is-compact');
+    expect(within(drop).getByText(/PDF·PPTX·HWP·IPYNB·ZIP/)).toBeInTheDocument();
+  });
+
+  it('자료가 없으면 설명이 붙은 큰 드롭 영역이다', async () => {
+    materialStoreAPI.list.mockResolvedValue([]);
+
+    render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
+
+    const drop = await screen.findByRole('button', { name: /파일을 끌어다 놓거나 클릭해서 추가하세요/ });
+    expect(drop.className).not.toContain('is-compact');
+    expect(await screen.findByText('아직 올린 자료가 없어요.')).toBeInTheDocument();
   });
 });

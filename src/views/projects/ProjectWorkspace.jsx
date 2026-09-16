@@ -36,6 +36,7 @@ import {
 } from '../../types/learning.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
+import { MATERIAL_ACCEPT } from '../../lib/materialFormats.js';
 import { todayString } from '../../lib/datetime.js';
 import { formatDateKo, toIsoDate } from '../../lib/planTime.js';
 
@@ -879,7 +880,7 @@ function UploadForm({ courseId, onCancel, onUploaded }) {
 
   return (
     <form className="material-link-form" onSubmit={handleSubmit}>
-      <input type="file" accept=".pdf,.pptx" aria-label="새 자료 파일" disabled={uploading}
+      <input type="file" accept={MATERIAL_ACCEPT} aria-label="새 자료 파일" disabled={uploading}
         onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
       <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={uploading} />
       <button type="submit" className="btn-ghost btn-sm" disabled={!file || uploading}>
