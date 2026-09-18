@@ -1293,20 +1293,57 @@ export const planAPI = {
     /** 초안 생성. intensity를 생략하면 서버가 직전 계획에서 승계한다. */
     createDraft: ({
         startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null,
-        familiarityAnswer = null, familiarityTopicIds = null, excludeTopicIds = null,
+        familiarityAnswer = null, familiarityTopicIds = null, excludeTopicIds = null, requestedMaterialIds = null,
+        requestKey = null,
     }) => {
         return request('/plans/draft', {
             method: 'POST',
             body: JSON.stringify({
                 startDate, endDate, intensity, title, instruction, courseIds,
+                // 중복 클릭·재시도·늦은 응답이 초안을 두 개 만들지 않게 하는 요청 키. 진행 상태 조회의 열쇠이기도 하다.
+                requestKey,
                 // 되묻기에 답한 뒤의 재요청. 이 값이 없으면 서버가 같은 질문을 다시 던진다 —
                 // "처음이에요"는 저장할 상태가 없어서 요청에 실어야만 사슬이 끝난다.
                 familiarityAnswer, familiarityTopicIds,
                 // 「이번 계획에서만 제외」. 저장되지 않는다 — 영구 표식(이미 알아요)과 다르다.
                 excludeTopicIds,
+                // 이번 요청에서 사용자가 지정한 자료(자료함의 [이 자료로 계획]). 연결 출처와 다른 것이다.
+                requestedMaterialIds,
             }),
         });
     },
+
+    /**
+     * 같은 조건으로 초안 다시 만들기(「이번만 빼기」·되돌리기·「이미 알아요」 뒤). 계획 화면·상담 초안 공통.
+     * 기간·강도·범위·지시·지정 자료는 서버가 초안을 만든 요청을 쓴다. 바뀐 것만 보낸다 — 없는 필드는 유지된다.
+     * 성공하면 새 초안이 오고 기존 초안은 서버에서 폐기된다. 실패하면 기존 초안은 그대로다.
+     */
+    redraft: (proposalId, { excludeTopicIds, requestedMaterialIds, requestKey } = {}) =>
+        request(`/plans/proposals/${proposalId}/redraft`, {
+            method: 'POST',
+            body: JSON.stringify({
+                ...(excludeTopicIds !== undefined ? { excludeTopicIds } : {}),
+                ...(requestedMaterialIds !== undefined ? { requestedMaterialIds } : {}),
+                ...(requestKey ? { requestKey } : {}),
+            }),
+        }),
+
+    /**
+     * 진행 중인 초안 생성의 단계(서버가 실제로 밟은 단계). 모르는 키면 known=false.
+     */
+    draftProgress: (requestKey) => request(`/plans/draft/progress?requestKey=${encodeURIComponent(requestKey)}`),
+
+    /** 저장된 초안을 다시 읽는다(새로고침·탭 이동 뒤 복구). 모델을 부르지 않는다. */
+    loadDraft: (proposalId) => request(`/plans/proposals/${proposalId}/draft`),
+
+    /**
+     * 검토 상태 저장(제목·항목 포함/제외·편집값·답). 실행 데이터를 바꾸지 않는다. version이 낡았으면 409 E409_022 —
+     * 늦은 자동 저장이 다른 탭의 편집을 덮지 않는다.
+     */
+    saveReviewState: (proposalId, state) => request(`/plans/proposals/${proposalId}/review-state`, {
+        method: 'PUT',
+        body: JSON.stringify(state),
+    }),
 
     /**
      * 항목의 「자세히」. GET은 있으면 돌려주고 없으면 available=false. POST는 없을 때 만든다(모델 1회).

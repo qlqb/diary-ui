@@ -123,7 +123,17 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
             {' '}{placeResult.placed.length}개를 넣었어요.
           </p>
           {placeResult.unplaced.length > 0 && (
-            <p className="muted">이번 주에는 자리가 없어 {placeResult.unplaced.length}개는 날짜 미정으로 남겨뒀어요.</p>
+            <div className="muted">
+              <p>{placeResult.unplaced.length}개는 시각을 정하지 못했어요. 횟수를 줄이거나 다른 날로 옮기지 않았어요 — 필요하면 직접 조정해 주세요.</p>
+              <ul className="plan-unplaced-reasons">
+                {placeResult.unplaced.map((u) => (
+                  <li key={u.executionItemId}>
+                    {u.title}{u.scheduledDate ? ` (${formatDateKo(u.scheduledDate)})` : ''}
+                    {u.reason ? ` — ${u.reason}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
@@ -227,11 +237,25 @@ export function PlanReviewPanel({ planVersionId }) {
         {review.targetMinutes != null ? `${formatMinutesKo(review.targetMinutes)} 중 ` : ''}
         {formatMinutesKo(review.completedMinutes)}을 했어요.
       </p>
+      {/*
+        실측과 추정을 한 숫자로 뭉치지 않는다. 시간을 적지 않은 완료 항목은 예정 시간으로 셌다는 사실을 숨기면
+        "실제로 몇 시간 했는지"가 거짓이 된다.
+      */}
+      {review.measuredMinutes != null && (review.unmeasuredDoneCount ?? 0) > 0 && (
+        <p className="hint">
+          실제로 적은 시간은 {formatMinutesKo(review.measuredMinutes)}이고, 시간을 적지 않은 {review.unmeasuredDoneCount}개는
+          예정 시간({formatMinutesKo(review.estimatedMinutes ?? 0)})으로 셌어요.
+        </p>
+      )}
       <ul className="plan-review-list">
         {review.items.map((item) => (
           <li key={`${item.executionItemId}-${item.category}`} className="plan-review-item">
             <span className="plan-item-title">{item.title}</span>
-            <span className="plan-item-meta">{categoryLabel(item)}</span>
+            <span className="plan-item-meta">
+              {categoryLabel(item)}
+              {item.actualMinutesSource === 'ESTIMATED' ? ' · 시간 미기록(예정 시간으로 셈)' : ''}
+              {item.actualMinutesSource === 'MEASURED' && item.actualMinutes != null ? ` · 실제 ${item.actualMinutes}분` : ''}
+            </span>
           </li>
         ))}
       </ul>
