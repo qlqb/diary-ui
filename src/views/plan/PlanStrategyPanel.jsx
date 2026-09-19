@@ -4,7 +4,7 @@
  * 이게 없으면 계획은 "AI가 준 목록"이다. 왜 이 과목이 먼저인지, 왜 어떤 내용이 빠졌는지
  * 사용자가 알 수 없고, 그러면 고칠 수도 없다 — 무엇을 고쳐야 결과가 달라지는지 모르니까.
  *
- * 맨 위에는 목표·도달점·유지한 결정·과목 순서·줄인 범위·이번에 달라진 이유가 온다. 가정·질문·읽지 못한 범위는
+ * 맨 위에는 목표·도달점·유지한 결정·프로젝트 순서·줄인 범위·이번에 달라진 이유가 온다. 가정·질문·읽지 못한 범위는
  * "확인된 사실"이 아니라는 표시와 함께 따로 둔다 — 추정이 등록된 사실과 같은 무게로 읽히면 안 된다.
  *
  * 기본은 펼침이다. 접어 두면 아무도 열지 않고, 그러면 판단층은 저장만 되고 읽히지 않는다.
@@ -83,7 +83,7 @@ export default function PlanStrategyPanel({ strategy, projectTitles = {} }) {
 
           {courses.length > 0 && (
             <div className="plan-strategy-courses">
-              <span className="plan-strategy-label">과목 순서</span>
+              <span className="plan-strategy-label">프로젝트 순서</span>
               <ol>
                 {courses.map((course) => (
                   <li key={course.courseId}>

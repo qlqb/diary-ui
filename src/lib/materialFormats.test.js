@@ -5,8 +5,18 @@ import {
 } from './materialFormats.js';
 
 describe('materialFormats', () => {
-  it('accept 값에 자료 다섯 형식과 압축이 있다', () => {
-    expect(MATERIAL_ACCEPT).toBe('.pdf,.pptx,.hwp,.hwpx,.ipynb,.zip');
+  it('accept 값에 자료 여섯 형식과 압축이 있다', () => {
+    expect(MATERIAL_ACCEPT).toBe('.pdf,.pptx,.hwp,.hwpx,.ipynb,.sh,.zip');
+  });
+
+  it('셸 스크립트(.sh)는 텍스트 자료로 받는다', () => {
+    expect(isAllowedMaterialFile('setup.sh')).toBe(true);
+    expect(isAcceptedFile('RUN.SH')).toBe(true);
+    expect(materialFileKind('setup.sh', null)).toBe('SH');
+    expect(materialFileKind('자료', 'application/x-sh')).toBe('SH');
+    // 다른 스크립트·실행 파일까지 열어 준 것은 아니다.
+    expect(isAcceptedFile('run.bat')).toBe(false);
+    expect(isAcceptedFile('run.bash')).toBe(false);
   });
 
   it('확장자는 대소문자를 가리지 않고, 마지막 점 뒤만 본다', () => {

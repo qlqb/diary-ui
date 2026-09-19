@@ -30,10 +30,13 @@ import {
   MaterialType, MATERIAL_TYPE_HINT, ExtractionStatus, EXTRACTION_STATUS_LABEL, MaterialAnalysisStatus,
 } from '../../types/learning.js';
 import {
-  MATERIAL_ACCEPT, UPLOAD_FORMATS_LABEL, MATERIAL_FORMATS_LABEL,
+  MATERIAL_ACCEPT, UPLOAD_FORMATS_LABEL, MATERIAL_FORMATS_LABEL, SHELL_SCRIPT_HINT,
   isAcceptedFile, isArchiveFile, materialFileKind,
 } from '../../lib/materialFormats.js';
 import ZipImportPanel from '../../components/ZipImportPanel.jsx';
+import MaterialStages from './MaterialStages.jsx';
+import { NOT_USED_IMPACT, UNHELD_ATTACHMENT_NOTE, unheldAttachmentsOf } from '../../lib/materialStages.js';
+import '../../styles/material-status.css';
 
 /**
  * 필터는 이 셋만.
@@ -147,6 +150,11 @@ function useUploadQueue({ onBatchDone }) {
   const [items, setItemsState] = useState([]);
   const [running, setRunning] = useState(false);
   const [skipped, setSkipped] = useState(0);
+  /**
+   * 방금 끝난 배치의 결과. 일부가 안 됐는데 "다 올렸어요"로 끝내지 않으려고 둔다 — 성공한 파일은
+   * 대기열에서 사라지므로, 이 요약이 없으면 무엇이 안 됐는지가 성공 목록에 묻힌다.
+   */
+  const [summary, setSummary] = useState(null);
   const itemsRef = useRef(items);
   const runningRef = useRef(false);
   const inputRef = useRef(null);
@@ -215,6 +223,7 @@ function useUploadQueue({ onBatchDone }) {
     runningRef.current = true;
     setRunning(true);
     setSkipped(0);
+    setSummary(null);
 
     // 이번 배치에서 실제로 올라간 것만 모은다 — 연결 제안이 "방금 올린 자료"를 대상으로
     // 삼으려면 목록 전체가 아니라 이 배치의 id를 알아야 한다.
@@ -241,6 +250,19 @@ function useUploadQueue({ onBatchDone }) {
       setRunning(false);
     }
 
+    // 대기열을 비우기 전에 센다. 미지원(rejected)은 서버에 가지 않았지만 사용자가 고른 파일이므로 함께 말한다.
+    const settled = itemsRef.current;
+    setSummary({
+      uploaded: uploaded.length,
+      failed: settled.filter((it) => it.state === 'failed')
+        .map((it) => ({ name: it.file.name, reason: it.error || '올리지 못했어요' })),
+      unsupported: settled.filter((it) => it.state === 'rejected')
+        .map((it) => ({ name: it.file.name, reason: it.error || '올릴 수 없는 형식이에요' })),
+      unread: settled.filter((it) => it.state === 'done' && it.extractionStatus
+          && it.extractionStatus !== ExtractionStatus.SUCCESS)
+        .map((it) => ({ name: it.file.name, reason: EXTRACTION_STATUS_LABEL[it.extractionStatus] ?? '본문을 읽지 못했어요' })),
+    });
+
     if (uploaded.length > 0) {
       await onBatchDone(uploaded);
       // 본문까지 읽힌 파일은 아래 목록에 그대로 나타나므로 대기열에서 비운다.
@@ -266,7 +288,12 @@ function useUploadQueue({ onBatchDone }) {
       [items],
   );
 
-  return { items, running, skipped, stagedCount, inputRef, addFiles, remove, clearSettled, start, retry, openPicker };
+  const dismissSummary = useCallback(() => setSummary(null), []);
+
+  return {
+    items, running, skipped, stagedCount, summary, inputRef,
+    addFiles, remove, clearSettled, start, retry, openPicker, dismissSummary,
+  };
 }
 
 export default function MaterialsView({ projects, onProjectsChanged, onPlanWithMaterial = null }) {
@@ -396,7 +423,7 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
       .reduce((sum, g) => sum + (g.members?.length ?? 0), 0);
 
   const bannerSubtitle = (() => {
-    if (proposalTrigger === ProposalTrigger.AUTO) return '방금 올린 자료에서 과목을 확인했어요.';
+    if (proposalTrigger === ProposalTrigger.AUTO) return '방금 올린 자료가 어느 프로젝트에 맞는지 확인했어요.';
     if (proposalTrigger === ProposalTrigger.REMAINING) return `이어서 자료 ${proposalTotalCount}개를 확인했어요.`;
     return `연결 안 된 자료 ${proposalTotalCount}개를 확인했어요.`;
   })();
@@ -752,6 +779,8 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
             onClear={uploader.clearSettled}
         />
 
+        <UploadSummary summary={uploader.summary} onDismiss={uploader.dismissSummary} />
+
         {/*
           배치가 자동 임계값에 못 미치면 제안을 부르지 않는다. 대신 방금 올린 자료로 바로
           들어갈 통로만 한 줄 남긴다 — 모델을 부르는 것은 여기서도 사용자가 누른 뒤다.
@@ -953,6 +982,7 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
                         )}
                         {m.extractionStatus === ExtractionStatus.SUCCESS && analysis.byMaterialId.get(m.materialId) && (
                             <AnalysisStatusChip status={analysis.byMaterialId.get(m.materialId)}
+                                limit={analysis.overview?.limit ?? null}
                                 onRetry={() => analysis.retry(m.materialId)} />
                         )}
                         {/*
@@ -999,6 +1029,19 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
                         </button>
                       </div>
                     </div>
+
+                    {/*
+                      등록 / 텍스트 추출 / 내용 분석 / 구조 제안(연결). 칩 하나로는 어느 단계에서
+                      기다리는지 알 수 없어서 단계마다 글자로 적는다. 한도 대기 문구도 여기 붙는다.
+                    */}
+                    <MaterialStages material={m} status={analysis.byMaterialId.get(m.materialId) ?? null}
+                        limit={analysis.overview?.limit ?? null} />
+                    {unheldAttachmentsOf(m) && (
+                        <p className="material-unheld-note">
+                          {UNHELD_ATTACHMENT_NOTE}
+                          {unheldAttachmentsOf(m).length > 0 && ` — ${unheldAttachmentsOf(m).join(', ')}`}
+                        </p>
+                    )}
 
                     {/* 폼을 같은 li 안에 둔다 — 목록이 재정렬되거나 필터가 바뀌어도 자기 행을 따라간다. */}
                     {isLinking && (
@@ -1094,6 +1137,7 @@ function UploadTray({ items, running, skipped, stagedCount, onStart, onRemove, o
 
         <div className="upload-tray-foot">
           <span className="upload-tray-hint">{UPLOAD_HINT}</span>
+          <span className="upload-format-note">{SHELL_SCRIPT_HINT}</span>
           {settledCount > 0 && (
               <button type="button" className="btn-ghost btn-sm" disabled={running} onClick={onClear}>
                 정리
@@ -1106,6 +1150,53 @@ function UploadTray({ items, running, skipped, stagedCount, onStart, onRemove, o
           </button>
         </div>
       </div>
+  );
+}
+
+/**
+ * 배치 결과 요약. "N개 올림 · M개 실패 · K개 미지원"과, 안 된 파일마다 이유와 영향.
+ *
+ * 미지원은 오류가 아니다 — 고른 파일 중 이 앱이 읽지 못하는 형식이 있었다는 사실이다. 그래도 그 파일
+ * 내용은 상담·계획에 쓰이지 않으므로, 사용자가 "올렸으니 AI가 봤겠지"라고 믿지 않게 같은 말을 붙인다.
+ */
+function UploadSummary({ summary, onDismiss }) {
+  if (!summary) return null;
+  const { uploaded, failed, unsupported, unread } = summary;
+  const problems = [
+    ...failed.map((f) => ({ ...f, kind: '실패' })),
+    ...unsupported.map((f) => ({ ...f, kind: '미지원' })),
+    ...unread.map((f) => ({ ...f, kind: '본문 못 읽음' })),
+  ];
+  if (uploaded === 0 && problems.length === 0) return null;
+
+  const parts = [`${uploaded}개 올림`];
+  if (failed.length > 0 || unsupported.length > 0) {
+    parts.push(`${failed.length}개 실패`);
+    parts.push(`${unsupported.length}개 미지원`);
+  }
+  if (unread.length > 0) parts.push(`${unread.length}개 본문 못 읽음`);
+
+  return (
+      <section className={`upload-summary${problems.length > 0 ? ' has-problem' : ''}`}
+          role="status" aria-label="업로드 결과">
+        <div className="upload-summary-head">
+          <p className="upload-summary-title">{parts.join(' · ')}</p>
+          <button type="button" className="icon-btn" aria-label="업로드 결과 닫기" onClick={onDismiss}>
+            <X size={13} />
+          </button>
+        </div>
+        {problems.length > 0 && (
+            <ul className="upload-summary-list">
+              {problems.map((f, i) => (
+                  <li key={`${f.kind}-${f.name}-${i}`} className="upload-summary-item">
+                    <span className="upload-summary-kind">{f.kind}</span>
+                    {f.name} — {f.reason}
+                    <span className="upload-summary-impact">{NOT_USED_IMPACT}</span>
+                  </li>
+              ))}
+            </ul>
+        )}
+      </section>
   );
 }
 
@@ -1161,6 +1252,7 @@ function DropArea({ compact, onPick }) {
         <span className="dropzone-icon"><UploadCloud size={22} /></span>
         <span className="dropzone-title">파일을 끌어다 놓거나 클릭해서 추가하세요</span>
         <span className="dropzone-hint">{UPLOAD_HINT}</span>
+        <span className="dropzone-hint">{SHELL_SCRIPT_HINT}</span>
         <span className="dropzone-desc">
         올려둔 자료는 프로젝트에 연결해 AI가 참고하게 할 수 있어요.
         프로젝트를 먼저 정하지 않아도 괜찮아요.
@@ -1360,6 +1452,16 @@ function MaterialSections({ materialId }) {
                     <span className="material-name">{sec.title}</span>
                     {sec.taskText && <span className="material-section-task">수행: {sec.taskText}</span>}
                     {sec.assignmentCue && <span className="chip chip-warn">제출 단서</span>}
+                    {/*
+                      본문이 다른 파일을 가리키는데 그 파일이 앱에 없을 때. 앱이 아는 것은 "여기에 올라오지
+                      않았다"까지다 — 사용자가 그 파일을 갖고 있는지는 말하지 않는다.
+                    */}
+                    {unheldAttachmentsOf(sec) && (
+                        <span className="material-unheld-note">
+                          {UNHELD_ATTACHMENT_NOTE}
+                          {unheldAttachmentsOf(sec).length > 0 && ` — ${unheldAttachmentsOf(sec).join(', ')}`}
+                        </span>
+                    )}
                     {sec.excerpt && <blockquote className="material-section-excerpt">“{sec.excerpt}”</blockquote>}
                   </li>
               ))}

@@ -254,7 +254,7 @@ export function PlanReviewPanel({ planVersionId }) {
             <span className="plan-item-meta">
               {categoryLabel(item)}
               {item.actualMinutesSource === 'ESTIMATED' ? ' · 시간 미기록(예정 시간으로 셈)' : ''}
-              {item.actualMinutesSource === 'MEASURED' && item.actualMinutes != null ? ` · 실제 ${item.actualMinutes}분` : ''}
+              {item.actualMinutesSource === 'MEASURED' && item.actualMinutes != null ? ` · 내가 적은 시간 ${item.actualMinutes}분` : ''}
             </span>
           </li>
         ))}

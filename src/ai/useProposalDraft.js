@@ -10,9 +10,10 @@
  * 이 훅은 apply()가 호출되기 전까지 어떤 서버 상태도 바꾸지 않는다.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { proposalAPI, schedulePreviewAPI } from '../api/api.js';
 import { toHHmm } from '../lib/datetime.js';
+import { acquirePreview, previewInputKey, storedOrRecompute } from './previewSolveCache.js';
 
 /** 서버 제안 항목 -> 화면에서 다루는 초안 카드. */
 function toCard(item) {
@@ -48,6 +49,16 @@ export function useProposalDraft({ onApplied } = {}) {
   const [placing, setPlacing] = useState(false);
   // 자동 배치 요청이 겹치지 않게 한다. state는 비동기라 클릭이 겹치는 순간을 못 잡는다.
   const placingRef = useRef(false);
+  /*
+   * 배치 미리보기는 계획 검토 화면(PlanDraftReview)과 나눠 쓴다(previewSolveCache). 초안이 열려 있는 동안
+   * 이 훅이 그 결과를 쥐고 있어서, 같은 제안을 검토 화면이 뒤늦게 열어도 같은 입력을 다시 풀지 않는다.
+   */
+  const previewHold = useRef(null);
+  const releasePreview = useCallback(() => {
+    previewHold.current?.release();
+    previewHold.current = null;
+  }, []);
+  useEffect(() => releasePreview, [releasePreview]);
 
   /**
    * 날짜·시각이 정해지지 않은(UNSCHEDULED) 후보가 있으면 서버에 배치를 계산시킨다.
@@ -61,8 +72,11 @@ export function useProposalDraft({ onApplied } = {}) {
     placingRef.current = true;
     setPlacing(true);
     try {
-      const stored = await schedulePreviewAPI.get(proposalId);
-      const preview = stored ?? (await schedulePreviewAPI.recompute(proposalId, {}));
+      releasePreview();
+      const hold = acquirePreview(proposalId, previewInputKey(proposalId, cards),
+        storedOrRecompute(schedulePreviewAPI, proposalId));
+      previewHold.current = hold;
+      const preview = await hold.promise;
       const placedById = new Map((preview?.placedItems ?? []).map((p) => [p.proposalItemId, p]));
       const unplacedById = new Map((preview?.unplacedItems ?? []).map((p) => [p.proposalItemId, p]));
 
@@ -89,7 +103,7 @@ export function useProposalDraft({ onApplied } = {}) {
       placingRef.current = false;
       setPlacing(false);
     }
-  }, []);
+  }, [releasePreview]);
 
   /** AI가 새 제안을 만들었을 때(SSE) 또는 저장된 제안을 복원할 때 호출한다. */
   const openDraft = useCallback(async (proposal, meta = {}) => {
@@ -119,9 +133,10 @@ export function useProposalDraft({ onApplied } = {}) {
   }, []);
 
   const discardDraft = useCallback(() => {
+    releasePreview();
     setDraft(null);
     setApplyError(null);
-  }, []);
+  }, [releasePreview]);
 
   const apply = useCallback(async () => {
     if (!draft || applying) return false;
@@ -165,6 +180,7 @@ export function useProposalDraft({ onApplied } = {}) {
     setApplyError(null);
     try {
       await proposalAPI.apply(draft.proposalId, editedItems, excludedItemIds);
+      releasePreview();
       setDraft(null);
       await onApplied?.();
       return true;
@@ -174,7 +190,7 @@ export function useProposalDraft({ onApplied } = {}) {
     } finally {
       setApplying(false);
     }
-  }, [draft, applying, onApplied]);
+  }, [draft, applying, onApplied, releasePreview]);
 
   return { draft, openDraft, patchCard, toggleExclude, discardDraft, apply, applying, applyError, placing };
 }

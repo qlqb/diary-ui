@@ -550,7 +550,7 @@ describe('연결 제안 배너', () => {
 
     expect(await screen.findByText('연결 안 된 자료 1개를 확인했어요.')).toBeInTheDocument();
     // 자동은 방금 올린 배치만 본다 — 범위가 다르므로 문구도 달라야 한다.
-    expect(screen.queryByText('방금 올린 자료에서 과목을 확인했어요.')).not.toBeInTheDocument();
+    expect(screen.queryByText('방금 올린 자료가 어느 프로젝트에 맞는지 확인했어요.')).not.toBeInTheDocument();
   });
 
   it('검토하기를 눌러야 다이얼로그가 열린다 — 배너만으로는 안 열린다', async () => {
@@ -603,7 +603,7 @@ describe('올릴 수 있는 형식', () => {
     materialStoreAPI.list.mockResolvedValue([]);
     const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
     const input = container.querySelector('input[type="file"]');
-    expect(input).toHaveAttribute('accept', '.pdf,.pptx,.hwp,.hwpx,.ipynb,.zip');
+    expect(input).toHaveAttribute('accept', '.pdf,.pptx,.hwp,.hwpx,.ipynb,.sh,.zip');
 
     // 브라우저는 hwp·ipynb의 type을 비워 보내기도 한다. 화면은 확장자로만 거른다.
     const files = [
@@ -617,7 +617,7 @@ describe('올릴 수 있는 형식', () => {
     });
 
     expect(screen.getByRole('button', { name: /3개 올리기/ })).toBeInTheDocument();
-    expect(screen.getByText('PDF·PPTX·HWP·HWPX·IPYNB·ZIP만 올릴 수 있어요')).toBeInTheDocument();
+    expect(screen.getByText('PDF·PPTX·HWP·HWPX·IPYNB·SH·ZIP만 올릴 수 있어요')).toBeInTheDocument();
   });
 });
 

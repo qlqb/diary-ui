@@ -5,8 +5,9 @@
  * 이어갈 수 있다"이고, 그래서 맨 위가 현재 상태 + 이어서 물어볼 것이다. 오른쪽 AI 패널은
  * 이 화면에 들어온 순간 이 프로젝트로 범위가 바뀌어 있다.
  *
- * 학습 구조(topic 트리)는 항상 관리해야 하는 핵심 UI가 아니라, 필요할 때 펼쳐 보는 보조
- * 정보다 — 기본은 접혀 있다.
+ * 학습 지도는 이 화면의 두 번째 구역이다("작업 공간 / 학습 지도"). 예전에는 맨 아래 접힌 블록이라
+ * 자료 하나하나에 딸린 부속처럼 보였고, 프로젝트 전체가 어떻게 생겼는지 볼 곳이 없었다. 다만 지도는
+ * 여전히 선택이다 — 정리하지 않아도 상담·계획은 그대로 되고, 지도 화면이 그 말을 직접 한다.
  *
  * 자료는 올리는 순간부터 AI가 쓸 수 있다. 구조 분석(topic 트리 만들기)은 계획·진도 관리를
  * 하고 싶을 때만 누르는 별도 선택지이고, 검수를 마쳐야 질문할 수 있는 구조가 아니다.
@@ -14,12 +15,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, ChevronDown, ChevronRight, FileText, Sparkles, Upload, Archive, Pencil, Loader2, Link2, X,
+  ArrowLeft, FileText, Sparkles, Upload, Archive, Pencil, Loader2, Link2, X,
 } from 'lucide-react';
 import ExecutionRow from '../../components/ExecutionRow.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
-import LearningMap from '../learning/LearningMap.jsx';
-import TopicDetail from '../learning/TopicDetail.jsx';
+import ProjectLearningMap from '../learning/ProjectLearningMap.jsx';
 import MaterialReview from '../learning/MaterialReview.jsx';
 import AssignmentSection from './AssignmentSection.jsx';
 import TopicChangeProposalCard from './TopicChangeProposalCard.jsx';
@@ -35,28 +35,13 @@ import {
 } from '../../types/learning.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
-import { MATERIAL_ACCEPT, isArchiveFile } from '../../lib/materialFormats.js';
+import { MATERIAL_ACCEPT, SHELL_SCRIPT_HINT, isArchiveFile } from '../../lib/materialFormats.js';
+import MaterialStages from '../materials/MaterialStages.jsx';
+import { CONSULT_BEFORE_APPROVAL, dailyLimitCopy } from '../../lib/materialStages.js';
 import ZipImportPanel from '../../components/ZipImportPanel.jsx';
 import { todayString } from '../../lib/datetime.js';
 import { formatDateKo, toIsoDate } from '../../lib/planTime.js';
-
-function flatten(topics) {
-  const out = [];
-  const walk = (nodes) => nodes.forEach((n) => { out.push(n); if (n.children?.length) walk(n.children); });
-  walk(topics ?? []);
-  return out;
-}
-
-function findAncestors(topics, targetId, path = []) {
-  for (const node of topics) {
-    if (node.topicId === targetId) return path;
-    if (node.children?.length) {
-      const found = findAncestors(node.children, targetId, [...path, { topicId: node.topicId, title: node.title }]);
-      if (found) return found;
-    }
-  }
-  return null;
-}
+import '../../styles/learning-map.css';
 
 /**
  * 교재 정보 한 줄.
@@ -88,6 +73,7 @@ function TextbookLine({ project }) {
 export default function ProjectWorkspace({
   courseId, onBack, onAsk, draft, onPatchCard, onToggleExclude, onProjectsChanged, refreshToken,
   onCreatePlan, onOpenPlan, onItemDeleted,
+  onOpenConsult = null, initialSection = null,
 }) {
   const [project, setProject] = useState(null);
   const [currentPlan, setCurrentPlan] = useState(null);
@@ -102,15 +88,18 @@ export default function ProjectWorkspace({
    * 복원이 "새 courseId × 이전 프로젝트 자료"로 서버에 묻게 된다.
    */
   const [materialsCourseId, setMaterialsCourseId] = useState(null);
-  const [topics, setTopics] = useState([]);
   const [notes, setNotes] = useState([]);
   const [executions, setExecutions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
-  const [structureOpen, setStructureOpen] = useState(false);
-  const [selectedTopicId, setSelectedTopicId] = useState(null);
+  /** 'work' | 'map'. 바깥에서 "학습 지도를 열어 달라"고 들어오면 지도부터 보인다. */
+  const [section, setSection] = useState(initialSection === 'map' ? 'map' : 'work');
+  /** 익숙함 표식·진도가 바뀌면 지도를 다시 읽게 하는 카운터. */
+  const [mapRefresh, setMapRefresh] = useState(0);
+  const proposalsRef = useRef(null);
+  const materialsRef = useRef(null);
   /** 자료 분석이 끝나 변경안·과제 후보가 새로 생겼을 때 그 두 구역만 다시 읽게 하는 카운터. */
   const [proposalRefresh, setProposalRefresh] = useState(0);
   const [renaming, setRenaming] = useState(false);
@@ -120,10 +109,9 @@ export default function ProjectWorkspace({
     setLoading(true);
     setError(null);
     try {
-      const [projectData, materialsData, topicsData, notesData, executionsData] = await Promise.all([
+      const [projectData, materialsData, notesData, executionsData] = await Promise.all([
         courseAPI.get(courseId),
         materialAPI.listByCourse(courseId),
-        topicAPI.getTree(courseId),
         courseNoteAPI.list(courseId),
         executionItemAPI.getByCourse(courseId, todayString()),
       ]);
@@ -131,7 +119,6 @@ export default function ProjectWorkspace({
       setMaterials(materialsData ?? []);
       // 목록과 그 목록의 주인을 함께 세운다. 따로 두면 그 사이가 또 틈이 된다.
       setMaterialsCourseId(courseId);
-      setTopics(topicsData ?? []);
       setNotes(notesData ?? []);
       setExecutions(executionsData ?? []);
     } catch (err) {
@@ -151,9 +138,22 @@ export default function ProjectWorkspace({
     try {
       await topicAPI.updateUserMark(topicId, mark);
     } finally {
-      load();
+      setMapRefresh((v) => v + 1);
     }
-  }, [load]);
+  }, []);
+
+  /** 다른 구역의 한 지점으로 데려간다. 구역을 바꾼 뒤 그려지고 나서 스크롤·포커스한다. */
+  const revealIn = useCallback((nextSection, ref) => {
+    setSection(nextSection);
+    setTimeout(() => {
+      const el = ref.current;
+      if (!el) return;
+      const reduce = typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      el.scrollIntoView?.({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+      el.focus?.();
+    }, 0);
+  }, []);
 
   useEffect(() => { load(); }, [load, refreshToken]);
 
@@ -186,8 +186,6 @@ export default function ProjectWorkspace({
     .filter((i) => i.status === 'PLANNED')
     .sort((a, b) => String(a.scheduledDate ?? '9999').localeCompare(String(b.scheduledDate ?? '9999')))[0] ?? null;
 
-  const flatTopics = flatten(topics);
-  const selectedTopic = flatTopics.find((t) => t.topicId === selectedTopicId) ?? null;
   const assessments = notes.filter((n) => n.category === 'ASSESSMENT');
 
   /*
@@ -357,6 +355,26 @@ export default function ProjectWorkspace({
         </div>
       </section>
 
+      {/*
+        구역 전환. 라우터가 없어서 상태 하나로 나눈다. 탭은 색이 아니라 aria-selected와 밑줄로 고른 쪽을 알린다.
+      */}
+      <div className="project-sections" role="tablist" aria-label="프로젝트 구역">
+        <button type="button" role="tab" id="project-tab-work" aria-selected={section === 'work'}
+          aria-controls="project-panel-work"
+          className={`project-section-tab${section === 'work' ? ' is-active' : ''}`}
+          onClick={() => setSection('work')}>
+          작업 공간
+        </button>
+        <button type="button" role="tab" id="project-tab-map" aria-selected={section === 'map'}
+          aria-controls="project-panel-map"
+          className={`project-section-tab${section === 'map' ? ' is-active' : ''}`}
+          onClick={() => setSection('map')}>
+          학습 지도
+        </button>
+      </div>
+
+      {section === 'work' && (
+        <div id="project-panel-work" role="tabpanel" aria-labelledby="project-tab-work">
       <section className="view-section">
         <h2 className="section-title">관련 실행</h2>
         {relatedExecutions.length === 0 && projectDraftCards.length === 0 ? (
@@ -382,53 +400,45 @@ export default function ProjectWorkspace({
         )}
       </section>
 
-      <MaterialsSection
-        courseId={courseId}
-        materials={materials}
-        materialsCourseId={materialsCourseId}
-        onChanged={load}
-        onAsk={onAsk}
-        onProposalsChanged={() => setProposalRefresh((v) => v + 1)}
-      />
 
-      <TopicChangeProposalsSection courseId={courseId} refreshToken={proposalRefresh + refreshToken}
-        onApplied={load} />
+          <div ref={materialsRef} tabIndex={-1} className="project-anchor">
+            <MaterialsSection
+              courseId={courseId}
+              materials={materials}
+              materialsCourseId={materialsCourseId}
+              onChanged={load}
+              onAsk={onAsk}
+              onProposalsChanged={() => setProposalRefresh((v) => v + 1)}
+            />
+          </div>
 
-      <AssignmentSection courseId={courseId} todayIso={todayString()} refreshToken={refreshToken + proposalRefresh} />
+          <TopicChangeProposalsSection courseId={courseId} refreshToken={proposalRefresh + refreshToken}
+            onApplied={load} />
 
-      <section className="view-section">
-        <button type="button" className="collapse-head" onClick={() => setStructureOpen((v) => !v)}>
-          {structureOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          <span className="section-title">학습 상태 자세히</span>
-          <span className="view-dim">
-            {flatTopics.length > 0 ? `${flatTopics.length}개 항목` : '아직 없음'}
-          </span>
-        </button>
-        {structureOpen && (
-          flatTopics.length === 0 ? (
-            <p className="view-dim">
-              자료의 구조를 분석해 적용하면 여기에 진도 관리용 목차가 생겨요. 없어도 AI와 이야기하는 데는
-              지장이 없어요.
-            </p>
-          ) : (
-            <div className="structure-shell">
-              <LearningMap
-                topics={topics}
-                selectedTopicId={selectedTopicId}
-                onSelectTopic={(topic) => setSelectedTopicId(topic.topicId)}
-                onMarkTopic={markTopic}
-              />
-              <TopicDetail
-                courseTitle={project?.title}
-                ancestors={selectedTopicId != null ? findAncestors(topics, selectedTopicId) ?? [] : []}
-                topic={selectedTopic}
-                onProgressChanged={load}
-                onStartTutor={(topic) => onAsk(`${topic.title}에 대해 알려줘.`)}
-              />
-            </div>
-          )
-        )}
-      </section>
+          <AssignmentSection courseId={courseId} todayIso={todayString()} refreshToken={refreshToken + proposalRefresh} />
+        </div>
+      )}
+
+      {section === 'map' && (
+        <div id="project-panel-map" role="tabpanel" aria-labelledby="project-tab-map">
+          <ProjectLearningMap
+            courseId={courseId}
+            courseTitle={project?.title}
+            refreshToken={refreshToken + proposalRefresh + mapRefresh}
+            onOpenConsult={onOpenConsult ?? (() => onAsk('이 프로젝트를 어떻게 진행하면 좋을지 상담하고 싶어.'))}
+            onReviewProposals={() => revealIn('map', proposalsRef)}
+            onOpenMaterials={() => revealIn('work', materialsRef)}
+            onAsk={onAsk}
+            onMarkTopic={markTopic}
+            onChanged={load}
+          />
+          {/* 지도의 "승인 전 제안"을 적용하는 곳. 같은 카드를 지도 바로 아래에 둬서 구역을 오가지 않게 한다. */}
+          <div ref={proposalsRef} tabIndex={-1} className="project-anchor">
+            <TopicChangeProposalsSection courseId={courseId} refreshToken={proposalRefresh + refreshToken}
+              onApplied={async () => { setProposalRefresh((v) => v + 1); await load(); }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -536,6 +546,8 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
    * 8초 간격으로 다시 읽고, 진행 중이던 것이 끝나면 변경안·과제 구역을 다시 읽게 알린다.
    */
   const [analysisStatus, setAnalysisStatus] = useState({});
+  /** 오늘 분석 한도. 닿았으면 "언제 이어지는지"를 말해야 해서 자료별 상태와 함께 들고 있는다. */
+  const [analysisLimit, setAnalysisLimit] = useState(null);
   const statusTicket = useRef(0);
   const materialIdKey = materials.map((m) => m.materialId).join(',');
   useEffect(() => {
@@ -554,6 +566,7 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
         if (stopped || statusTicket.current !== mine) return;
         const next = {};
         (overview?.materials ?? []).forEach((st) => { if (ids.has(st.materialId)) next[st.materialId] = st; });
+        setAnalysisLimit(overview?.limit ?? null);
         setAnalysisStatus((prev) => {
           const finishedNow = Object.values(next).some((st) => !isAnalysisInProgress(st.state)
             && prev[st.materialId] && isAnalysisInProgress(prev[st.materialId].state));
@@ -734,6 +747,17 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
 
       {error && <p className="view-error">{error}</p>}
 
+      {/*
+        한도에 닿아 기다리는 것은 실패가 아니다. 언제 이어지는지를 말하고, 그동안에도 상담·계획은
+        된다는 것을 같은 자리에서 말한다.
+      */}
+      {(analysisLimit?.reached === true
+        || Object.values(analysisStatus).some((st) => st.waitingReason === 'DAILY_LIMIT')) && (
+        <p className="analysis-waiting-note" role="status">
+          {dailyLimitCopy(analysisLimit?.resumesAt ?? null)} · {CONSULT_BEFORE_APPROVAL}
+        </p>
+      )}
+
       {materials.length === 0 ? (
         <p className="view-dim">아직 연결된 자료가 없어요. 없어도 AI와 이야기할 수 있어요.</p>
       ) : (
@@ -752,6 +776,7 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
               {m.extractionStatus === ExtractionStatus.SUCCESS ? (
                 analysisStatus[m.materialId]
                   ? <AnalysisStatusChip status={analysisStatus[m.materialId]} busy={busyId === m.materialId}
+                      limit={analysisLimit}
                       onRetry={() => retryAnalysis(m.materialId)} />
                   : <span className="chip chip-status">분석 상태 확인 중</span>
               ) : (
@@ -804,6 +829,7 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
                   <X size={13} /> 연결 해제
                 </button>
               </span>
+              <MaterialStages material={m} status={analysisStatus[m.materialId] ?? null} limit={analysisLimit} />
               {analyses[m.materialId] && (
                 <div className="material-review-slot">
                   <MaterialReview
@@ -918,6 +944,7 @@ function UploadForm({ courseId, onCancel, onUploaded }) {
       </button>
       <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={uploading}>취소</button>
       <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
+      <p className="material-form-hint">{SHELL_SCRIPT_HINT}</p>
       {error && <p className="view-error">{error}</p>}
       {zipImport && (
         <ZipImportPanel zipImport={zipImport} onChanged={handleZipChanged}

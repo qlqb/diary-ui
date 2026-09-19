@@ -158,7 +158,7 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <span className="material-review-head-title">구조 분석 결과</span>
           <span className="material-review-head-count">
-            학습 내용 {topicCount}개 · 과목 정보 {courseNotes.length}건
+            학습 내용 {topicCount}개 · 프로젝트 정보 {courseNotes.length}건
           </span>
         </button>
         <div className="material-review-head-actions">

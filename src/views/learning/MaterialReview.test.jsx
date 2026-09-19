@@ -134,7 +134,7 @@ describe('MaterialReview - AI 분석 초안 편집', () => {
   });
 });
 
-describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
+describe('MaterialReview - 프로젝트 정보/평가 정보 분류 표시', () => {
   const analysisWithNotes = {
     analysisId: 8,
     status: 'DRAFT',
@@ -158,10 +158,10 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
     materialAnalysisAPI.apply.mockResolvedValue({});
   });
 
-  it('학습 내용과 분리해 과목 정보/평가 정보를 카테고리별로 보여준다 — Apply 전에 무엇이 확정될지 알 수 있다', async () => {
+  it('학습 내용과 분리해 프로젝트 정보/평가 정보를 카테고리별로 보여준다 — Apply 전에 무엇이 확정될지 알 수 있다', async () => {
     await renderOpened(analysisWithNotes);
 
-    expect(screen.getByText('과목 정보')).toBeInTheDocument();
+    expect(screen.getByText('프로젝트 정보')).toBeInTheDocument();
     expect(screen.getByText('평가/일정')).toBeInTheDocument();
     expect(screen.getByText('담당교수')).toBeInTheDocument();
     expect(screen.getByText('홍길동 교수')).toBeInTheDocument();
@@ -171,7 +171,7 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
     expect(screen.getByDisplayValue('연결 리스트')).toBeInTheDocument();
   });
 
-  it('과목 정보/평가 정보는 이 화면에서 편집하지 않지만, 적용 시 그대로 함께 저장된다', async () => {
+  it('프로젝트 정보/평가 정보는 이 화면에서 편집하지 않지만, 적용 시 그대로 함께 저장된다', async () => {
     const user = userEvent.setup();
     await renderOpened(analysisWithNotes);
 
@@ -182,10 +182,10 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
     }));
   });
 
-  it('과목 정보/평가 정보가 없으면 해당 섹션을 보여주지 않는다', async () => {
+  it('프로젝트 정보/평가 정보가 없으면 해당 섹션을 보여주지 않는다', async () => {
     await renderOpened(analysis);
 
-    expect(screen.queryByText('과목 정보')).not.toBeInTheDocument();
+    expect(screen.queryByText('프로젝트 정보')).not.toBeInTheDocument();
     expect(screen.queryByText('평가/일정')).not.toBeInTheDocument();
   });
   /*
@@ -213,7 +213,7 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
       },
     };
 
-    it('토픽이 0개여도 과목 정보가 있으면 적용할 수 있다', async () => {
+    it('토픽이 0개여도 프로젝트 정보가 있으면 적용할 수 있다', async () => {
       const user = userEvent.setup();
       const onApplied = vi.fn();
       render(<MaterialReview analysis={syllabusOnly} onApplied={onApplied} onDismiss={vi.fn()} />);
@@ -233,7 +233,7 @@ describe('MaterialReview - 과목 정보/평가 정보 분류 표시', () => {
       expect(onApplied).toHaveBeenCalled();
     });
 
-    it('과목 정보가 없어도 교재 정보만 있으면 적용할 수 있다', () => {
+    it('프로젝트 정보가 없어도 교재 정보만 있으면 적용할 수 있다', () => {
       render(
         <MaterialReview
           analysis={{

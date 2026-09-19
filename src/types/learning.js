@@ -65,7 +65,7 @@ export const CourseNoteCategory = Object.freeze({
 });
 
 export const COURSE_NOTE_CATEGORY_LABEL = Object.freeze({
-  [CourseNoteCategory.COURSE_INFO]: '과목 정보',
+  [CourseNoteCategory.COURSE_INFO]: '프로젝트 정보',
   [CourseNoteCategory.ASSESSMENT]: '평가/일정',
 });
 

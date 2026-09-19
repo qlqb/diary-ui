@@ -6,8 +6,10 @@
  * 파일 선택창에서는 함께 고를 수 있어야 하므로 accept에는 .zip이 들어간다.
  *
  * hwp는 HWP 5.0만 읽는다. hwpx는 별도 형식이라 둘 다 적는다.
+ *
+ * sh는 실행하지 않는다 — 실습 자료에 딸려 오는 스크립트를 "무엇을 하는 파일인지" 읽을 텍스트로만 받는다.
  */
-export const MATERIAL_EXTENSIONS = ['pdf', 'pptx', 'hwp', 'hwpx', 'ipynb'];
+export const MATERIAL_EXTENSIONS = ['pdf', 'pptx', 'hwp', 'hwpx', 'ipynb', 'sh'];
 
 export const ARCHIVE_EXTENSION = 'zip';
 
@@ -17,7 +19,10 @@ export const MATERIAL_ACCEPT = [...MATERIAL_EXTENSIONS, ARCHIVE_EXTENSION]
   .join(',');
 
 /** 안내 문구에 쓰는 형식 나열. */
-export const MATERIAL_FORMATS_LABEL = 'PDF·PPTX·HWP·HWPX·IPYNB';
+export const MATERIAL_FORMATS_LABEL = 'PDF·PPTX·HWP·HWPX·IPYNB·SH';
+
+/** 셸 스크립트를 올려도 되는지 망설이는 사람에게 하는 말. 업로드 안내 옆에 늘 붙는다. */
+export const SHELL_SCRIPT_HINT = '셸 스크립트(.sh)는 실행하지 않고 텍스트 자료로만 읽어요';
 export const UPLOAD_FORMATS_LABEL = `${MATERIAL_FORMATS_LABEL} · ZIP(안에 든 파일을 골라서)`;
 
 export function materialExtension(filename) {
@@ -43,6 +48,8 @@ export function isAcceptedFile(filename) {
 
 const KIND_BY_CONTENT_TYPE = [
   ['ipynb', 'IPYNB'],
+  ['x-sh', 'SH'],
+  ['shellscript', 'SH'],
   ['hwp+zip', 'HWPX'],
   ['hwp', 'HWP'],
   ['presentation', 'PPTX'],

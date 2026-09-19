@@ -7,10 +7,16 @@
  *
  * 여기서 "완료"는 자료가 만들어졌다는 뜻이지 AI 분석이 끝났다는 뜻이 아니다. 문구를 그렇게 쓴다 —
  * 자료함 목록의 분석 상태 칩이 그 다음 단계를 따로 보여준다.
+ *
+ * 목록은 둘로 나눈다: 가져올 수 있는(가져온) 파일 / 가져오지 못한 파일(실패·미지원). 미지원은 가져오기
+ * 전체의 오류가 아니다 — 압축 안에 이 앱이 읽지 않는 형식이 섞여 있었다는 사실일 뿐이라 경고 아이콘을
+ * 쓰지 않는다. 다만 실패든 미지원이든 그 파일 내용은 상담·계획에 쓰이지 않으므로 그 말은 똑같이 붙인다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, FileArchive, Loader2, RotateCcw, X } from 'lucide-react';
+import { AlertCircle, Check, FileArchive, Info, Loader2, RotateCcw, X } from 'lucide-react';
 import { zipImportAPI } from '../api/api.js';
+import { NOT_USED_IMPACT } from '../lib/materialStages.js';
+import '../styles/material-status.css';
 
 const POLL_MS = 1500;
 
@@ -19,8 +25,8 @@ const ENTRY_LABEL = Object.freeze({
   QUEUED: '차례 기다리는 중',
   IMPORTING: '가져오는 중',
   DONE: '자료 등록 완료',
-  FAILED: '실패',
-  UNSUPPORTED: '가져올 수 없음',
+  FAILED: '가져오지 못했어요',
+  UNSUPPORTED: '이 앱이 읽지 않는 형식이에요',
 });
 
 /** 이 상태에서는 서버가 계속 일하고 있다 — 화면도 따라가야 한다. */
@@ -74,6 +80,9 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
   const selectable = useMemo(
       () => entries.filter((e) => e.supported && e.status === 'PENDING'), [entries]);
   const failed = useMemo(() => entries.filter((e) => e.status === 'FAILED'), [entries]);
+  const unsupported = useMemo(() => entries.filter((e) => !e.supported && e.status !== 'FAILED'), [entries]);
+  const usable = useMemo(() => entries.filter((e) => e.supported && e.status !== 'FAILED'), [entries]);
+  const doneEntries = useMemo(() => entries.filter((e) => e.status === 'DONE'), [entries]);
   /**
    * 고를 수 있는가. 한 번 확정한 뒤에도 남겨 둔 파일을 더 가져올 수 있어야 하므로 상태가 아니라
    * "아직 고르지 않은 파일이 있고 원본 압축이 남아 있는가"로 판단한다. 취소·만료는 제외다.
@@ -104,6 +113,47 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
     }
   };
 
+  const renderEntry = (entry) => {
+    const problem = entry.status === 'FAILED' || !entry.supported;
+    return (
+        <li key={entry.entryId}
+            className={`zip-import-item${entry.supported ? '' : ' is-unsupported'}`}>
+          {waiting && entry.supported && entry.status === 'PENDING' ? (
+              <label className="zip-import-check">
+                <input
+                    type="checkbox"
+                    checked={selected.has(entry.entryId)}
+                    onChange={() => toggle(entry.entryId)}
+                    disabled={busy}
+                />
+                <span className="zip-import-path">{entry.entryPath}</span>
+              </label>
+          ) : (
+              <span className="zip-import-path">{entry.entryPath}</span>
+          )}
+          <span className="zip-import-meta">{formatSize(entry.sizeBytes)}</span>
+          <span className={`zip-import-status is-${entry.status.toLowerCase()}`}>
+            {entry.status === 'IMPORTING' && <Loader2 size={12} className="spin" />}
+            {entry.status === 'DONE' && <Check size={12} />}
+            {entry.status === 'FAILED' && <AlertCircle size={12} />}
+            {entry.status !== 'FAILED' && !entry.supported && <Info size={12} />}
+            {' '}
+            <span className="zip-import-kind">
+              {entry.status === 'FAILED' ? '실패 · ' : !entry.supported ? '미지원 · ' : ''}
+            </span>
+            {entry.skipReason || entry.errorMessage || ENTRY_LABEL[entry.status]}
+          </span>
+          {entry.status === 'FAILED' && current.archiveAvailable && (
+              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                      onClick={() => run(() => zipImportAPI.retryEntry(current.importId, entry.entryId))}>
+                <RotateCcw size={12} /> 다시
+              </button>
+          )}
+          {problem && <span className="zip-import-impact">{NOT_USED_IMPACT}</span>}
+        </li>
+    );
+  };
+
   if (!current) return null;
 
   return (
@@ -122,40 +172,33 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
         {error && <p className="view-error">{error}</p>}
         {current.message && <p className="zip-import-note">{current.message}</p>}
 
-        <ul className="zip-import-list">
-          {entries.map((entry) => (
-              <li key={entry.entryId}
-                  className={`zip-import-item${entry.supported ? '' : ' is-unsupported'}`}>
-                {waiting && entry.supported && entry.status === 'PENDING' ? (
-                    <label className="zip-import-check">
-                      <input
-                          type="checkbox"
-                          checked={selected.has(entry.entryId)}
-                          onChange={() => toggle(entry.entryId)}
-                          disabled={busy}
-                      />
-                      <span className="zip-import-path">{entry.entryPath}</span>
-                    </label>
-                ) : (
-                    <span className="zip-import-path">{entry.entryPath}</span>
-                )}
-                <span className="zip-import-meta">{formatSize(entry.sizeBytes)}</span>
-                <span className={`zip-import-status is-${entry.status.toLowerCase()}`}>
-              {entry.status === 'IMPORTING' && <Loader2 size={12} className="spin" />}
-                  {entry.status === 'DONE' && <Check size={12} />}
-                  {(entry.status === 'FAILED' || entry.status === 'UNSUPPORTED') && <AlertCircle size={12} />}
-                  {' '}
-                  {entry.skipReason || entry.errorMessage || ENTRY_LABEL[entry.status]}
-            </span>
-                {entry.status === 'FAILED' && current.archiveAvailable && (
-                    <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                            onClick={() => run(() => zipImportAPI.retryEntry(current.importId, entry.entryId))}>
-                      <RotateCcw size={12} /> 다시
-                    </button>
-                )}
-              </li>
-          ))}
-        </ul>
+        {/* 한 줄 요약. 일부가 안 됐는데 전체 성공처럼 끝내지 않는다. */}
+        {(doneEntries.length > 0 || failed.length > 0) && (
+            <p className="zip-import-summary" role="status">
+              {doneEntries.length}개 올림 · {failed.length}개 실패 · {unsupported.length}개 미지원
+            </p>
+        )}
+
+        {usable.length > 0 && (
+            <>
+              <p className="zip-import-group-title">가져올 수 있는 파일 {usable.length}개</p>
+              <ul className="zip-import-list">
+                {usable.map((entry) => renderEntry(entry))}
+              </ul>
+            </>
+        )}
+
+        {(failed.length > 0 || unsupported.length > 0) && (
+            <>
+              <p className="zip-import-group-title">
+                가져오지 못한 파일 {failed.length + unsupported.length}개
+                {' '}(실패 {failed.length} · 미지원 {unsupported.length})
+              </p>
+              <ul className="zip-import-list">
+                {[...failed, ...unsupported].map((entry) => renderEntry(entry))}
+              </ul>
+            </>
+        )}
 
         <div className="zip-import-foot">
           <span className="zip-import-hint">
@@ -206,6 +249,7 @@ function statusLine(zipImport) {
     case 'COMPLETED':
       return `자료 ${doneCount}개 등록 완료 (분석은 이어서 진행돼요)`;
     case 'PARTIAL':
+      // 실패한 파일이 있다 — "완료"라고 하지 않는다. 미지원 개수는 아래 요약 줄이 따로 말한다.
       return `자료 ${doneCount}개 등록 · ${failedCount}개 실패`;
     case 'FAILED':
       return '가져오지 못했어요';

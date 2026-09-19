@@ -60,24 +60,36 @@ describe('계획 초안 검토', () => {
     await screen.findByRole('button', { name: '계획 확정' });
   }
 
-  it('게이지가 선택된 항목의 시간 합을 보여주고, 체크를 풀면 줄어든다', async () => {
+  it('요약이 선택된 항목의 시간 합을 먼저 보여주고, 체크를 풀면 줄어든다', async () => {
     await openDraft();
 
     // 40 + 60 + 30 + 20 = 150분 = 2h 30m
-    expect(screen.getByText('2h 30m / 6h 30m')).toBeInTheDocument();
+    expect(screen.getByText('고른 항목 4개 · 합계 2h 30m')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('checkbox', { name: /과제 2번/ }));
 
     // 60분이 빠져 90분 = 1h 30m
-    await waitFor(() => expect(screen.getByText('1h 30m / 6h 30m')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('고른 항목 3개 · 합계 1h 30m')).toBeInTheDocument());
+  });
+
+  /*
+   * 예산은 상한이지 채울 양이 아니다. 그래서 "선택 / 목표" 막대도, 덜 채운 비율도 없다.
+   */
+  it('예산은 상한이라고 작게 말하고, 덜 채운 비율은 어디에도 없다', async () => {
+    await openDraft();
+
+    expect(screen.getByText(/예산\(상한\) 6h 30m — 채워야 하는 양이 아니에요/)).toBeInTheDocument();
+    expect(screen.queryByText(/학습 목표/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+\s*%/)).not.toBeInTheDocument();
+    expect(screen.queryByText('2h 30m / 6h 30m')).not.toBeInTheDocument();
   });
 
   it('AI가 기준선을 조정했으면 이유를 한 줄로 보여준다', async () => {
     await openDraft();
 
     expect(screen.getByText('알바 일정을 고려해 낮게 잡았어요')).toBeInTheDocument();
-    // 목표는 서버가 계산한 값(390분 = 6h 30m)이다. 요약 줄과 게이지 라벨 두 곳에 나온다.
-    expect(screen.getAllByText(/목표 6h 30m/).length).toBeGreaterThan(0);
+    // 예산은 서버가 계산한 값(390분 = 6h 30m)이다. 상한으로만 말한다.
+    expect(screen.getAllByText(/예산\(상한\) 6h 30m/).length).toBeGreaterThan(0);
   });
 
   it('조정이 없으면 이유 줄을 그리지 않는다', async () => {
@@ -105,7 +117,7 @@ describe('계획 초안 검토', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: '자료구조 전체 선택' }));
 
     // 자료구조의 40 + 60이 빠지고 30 + 20 = 50분만 남는다.
-    await waitFor(() => expect(screen.getByText('50m / 6h 30m')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('고른 항목 2개 · 합계 50m')).toBeInTheDocument());
     expect(screen.getByRole('checkbox', { name: /연결 리스트 구현/ })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: /과제 2번/ })).not.toBeChecked();
   });
@@ -160,20 +172,22 @@ describe('계획 초안 검토', () => {
   });
 
   /*
-   * 강도는 남는 시간의 비율이다. 요약 줄에 추정 남는 시간·학습 목표·선택 합계·여유를 함께
-   * 보여주고, 항목을 빼면 합계와 여유가 바로 바뀐다. 목표보다 적어도 경고하지 않는다.
+   * 요약은 고른 양(항목 수·합계)이 먼저고, 예산(상한)·남는 시간 추정·여유는 작은 글씨로 뒤따른다.
+   * 항목을 빼면 합계와 여유가 바로 바뀐다. 예산보다 적어도 경고하지 않는다.
    */
-  it('요약에 추정 남는 시간·목표·선택 합계·여유를 보여주고, 빼면 여유가 늘어난다', async () => {
+  it('요약에 고른 합계가 먼저, 예산·남는 시간·여유가 보조로 나오고, 빼면 여유가 늘어난다', async () => {
     await openDraft();
 
-    expect(screen.getByText(/추정 남는 시간 10h · 학습 목표 6h 30m/)).toBeInTheDocument();
+    expect(screen.getByText('고른 항목 4개 · 합계 2h 30m')).toBeInTheDocument();
     // 600 - 150 = 450분 = 7h 30m
-    expect(screen.getByText(/선택한 항목 4개 · 합계 2h 30m · 여유\/휴식 약 7h 30m/)).toBeInTheDocument();
+    expect(screen.getByText(/예산\(상한\) 6h 30m — 채워야 하는 양이 아니에요 · 남는 시간 추정 10h · 여유\/휴식 약 7h 30m/))
+      .toBeInTheDocument();
     expect(screen.getByText(/기본 시간대.*추정/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('checkbox', { name: /과제 2번/ }));
 
-    await waitFor(() => expect(screen.getByText(/선택한 항목 3개 · 합계 1h 30m · 여유\/휴식 약 8h 30m/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('고른 항목 3개 · 합계 1h 30m')).toBeInTheDocument());
+    expect(screen.getByText(/여유\/휴식 약 8h 30m/)).toBeInTheDocument();
     expect(screen.queryByText(/부족|미달|실패/)).not.toBeInTheDocument();
   });
 
@@ -346,7 +360,9 @@ describe('계획 초안 검토', () => {
     }
     expect(screen.getAllByRole('checkbox').length).toBeGreaterThanOrEqual(9);
     expect(screen.getByRole('button', { name: '계획 확정' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /적용/ })).not.toBeInTheDocument();
+    // 일반 제안의 "변경 N개 적용" 바는 여기서 쓰지 않는다. 첫 화면 요약의 [적용]은 계획 확정과 같은 동작이다.
+    expect(screen.queryByRole('button', { name: /변경 \d+개 적용/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '적용' })).toBeInTheDocument();
     expect(planAPI.createDraft).not.toHaveBeenCalled();
   });
 });
