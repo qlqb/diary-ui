@@ -29,6 +29,7 @@ import ScheduleImportReviewModal from './ScheduleImportReviewModal.jsx';
 import ConsultQuestionCard from './ConsultQuestionCard.jsx';
 import ConsultUnderstandingCard from './ConsultUnderstandingCard.jsx';
 import { planStageLabel } from './consultLabels.js';
+import { isDismissed } from './dismissedDrafts.js';
 import { PLAN_INTENSITY_LABEL } from '../types/execution.js';
 
 /** 화면별 추천 질문. 지금 이 화면에서 실제로 할 수 있는 것만 보여준다. */
@@ -314,7 +315,9 @@ export default function AiPanel({
       if (last?.role === 'ASSISTANT' && last.responseType === 'OFFER') {
         setCurrentOffer({ label: '이 내용으로 초안 만들기' });
       }
-      if (lastDraftMessage) {
+      // 방금 버린 초안은 되살리지 않는다. 서버에도 버렸다고 쓰지만(DISMISSED), 그 응답이 오기 전에
+      // 이 조회가 돌아올 수 있다 — 그 틈에 다시 열리면 사용자에게는 "버렸는데 또 나온다"가 된다.
+      if (lastDraftMessage && !isDismissed(lastDraftMessage.proposalId)) {
         const last = lastDraftMessage;
         if (last.responseType === 'PROPOSAL' && last.proposalId) {
           // 아직 적용하지 않은 초안이 있으면 화면에 다시 띄운다 — 새로고침으로 사라지지 않는다.
@@ -331,14 +334,17 @@ export default function AiPanel({
               } catch { periodDraft = null; }
             }
             if (loadTokenRef.current !== myToken) return;
+            // 대체 사슬을 따라온 초안(다른 id)도 방금 버린 것일 수 있다.
+            if (isDismissed(periodDraft?.proposalId)) return;
             if (periodDraft?.proposalId && (periodDraft.proposal?.status ?? 'PROPOSED') === 'PROPOSED') {
-              setPeriodPlanNotice(periodDraft.proposal?.items?.length ?? 0);
+              setPeriodPlanNotice({ count: periodDraft.proposal?.items?.length ?? 0, restored: true });
               // 되살린 초안이라는 것을 알린다 — 셸은 지금 열려 있는 다른 초안을 이것으로 덮지 않는다.
               onPeriodPlan(periodDraft, { restored: true });
             } else if (!periodDraft?.proposalId) {
               const proposal = await proposalAPI.get(last.proposalId);
               if (loadTokenRef.current === myToken && proposal.status === 'PROPOSED') {
-                onProposal?.(proposal);
+                // 되살린 제안이다 — 셸은 이것 때문에 사용자가 보던 탭을 옮기지 않는다.
+                onProposal?.(proposal, { restored: true });
               }
             }
           } catch { /* 제안 조회 실패해도 대화 자체는 정상 표시한다 */ }
@@ -471,7 +477,7 @@ export default function AiPanel({
             // 기간 계획은 일반 제안(적용 바)이 아니라 계획 검토·확정 화면으로 간다 — 계획
             // 탭에서 만든 것과 같은 화면, 같은 확정 API다.
             setPeriodPlanStage(null);
-            setPeriodPlanNotice(data?.proposal?.items?.length ?? 0);
+            setPeriodPlanNotice({ count: data?.proposal?.items?.length ?? 0, restored: false });
             onPeriodPlan?.(data);
           } else if (eventName === 'context.suggestions.ready') {
             setContextSuggestions((prev) => [...prev, ...(data?.suggestions ?? [])]);
@@ -1062,9 +1068,12 @@ export default function AiPanel({
             {periodPlanNotice != null && (
               <p className="ai-applied">
                 <Sparkles size={13} />{' '}
-                {workspace
-                  ? `계획 초안 ${periodPlanNotice}개를 만들었어요. 계획 미리보기에서 확인하고 적용해 주세요.`
-                  : `계획 초안 ${periodPlanNotice}개를 계획 화면에 표시했어요. 확인하고 확정해주세요.`}
+                {/* 되살린 초안은 화면을 옮기지 않는다 — "표시했어요"라고 말하지 않고 어디에 있는지만 알린다. */}
+                {periodPlanNotice.restored
+                  ? `아직 확정하지 않은 계획 초안 ${periodPlanNotice.count}개가 있어요. 계획 탭에서 이어서 볼 수 있어요.`
+                  : (workspace
+                    ? `계획 초안 ${periodPlanNotice.count}개를 만들었어요. 계획 미리보기에서 확인하고 적용해 주세요.`
+                    : `계획 초안 ${periodPlanNotice.count}개를 계획 화면에 표시했어요. 확인하고 확정해주세요.`)}
               </p>
             )}
 

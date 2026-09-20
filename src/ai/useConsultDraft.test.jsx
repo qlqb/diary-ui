@@ -8,10 +8,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useConsultDraft } from './useConsultDraft.js';
-import { planAPI } from '../api/api.js';
+import { planAPI, proposalAPI } from '../api/api.js';
 
 vi.mock('../api/api.js', () => ({
   planAPI: { redraft: vi.fn(), draftProgress: vi.fn() },
+  proposalAPI: { dismiss: vi.fn() },
 }));
 
 const draftOf = (proposalId, extra = {}) => ({
@@ -177,5 +178,27 @@ describe('적용', () => {
 
     expect(result.current.draft).toBeNull();
     expect(result.current.applied).toMatchObject({ title: '이번 주 계획', plan: { planVersionId: 5 } });
+  });
+});
+
+describe('초안 버리기', () => {
+  it('버리기는 서버에도 쓴다 — 되살리기가 다시 열지 않게', async () => {
+    proposalAPI.dismiss.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useConsultDraft());
+    act(() => result.current.accept(draftOf(77)));
+
+    act(() => result.current.discard());
+
+    expect(result.current.draft).toBeNull();
+    await waitFor(() => expect(proposalAPI.dismiss).toHaveBeenCalledWith(77));
+  });
+
+  it('확정 뒤 화면 정리(clear)는 서버에 버렸다고 쓰지 않는다', () => {
+    const { result } = renderHook(() => useConsultDraft());
+    act(() => result.current.accept(draftOf(78)));
+
+    act(() => result.current.clear());
+
+    expect(proposalAPI.dismiss).not.toHaveBeenCalled();
   });
 });

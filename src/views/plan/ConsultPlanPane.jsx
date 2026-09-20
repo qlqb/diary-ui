@@ -28,7 +28,7 @@ export default function ConsultPlanPane({
   const [notice, setNotice] = useState(null);
 
   const {
-    draft, stale, staleReasons, regenerating, stageLabel, error, outcome, applied, regenerate, clear, markApplied,
+    draft, stale, staleReasons, regenerating, stageLabel, error, outcome, applied, regenerate, discard, markApplied,
   } = consultDraft;
   const direction = consultState?.direction ?? null;
   // 대화 쪽에서 새 초안을 만들고 있는 중(SSE가 알려 준 실제 단계)도 "만드는 중"이다.
@@ -121,7 +121,8 @@ export default function ConsultPlanPane({
           projectTitles={projectTitles}
           todayIso={todayIso}
           onConfirmed={(plan) => { markApplied(plan); onConfirmed?.(plan); }}
-          onDiscard={clear}
+          /* 버리기는 서버에도 남는다(DISMISSED) — 화면에서만 지우면 대화를 다시 열 때 되살아난다. */
+          onDiscard={discard}
           discardLabel="이 초안 버리기"
           onOpenSchedule={onOpenSchedule}
           onOpenSource={onOpenSource}

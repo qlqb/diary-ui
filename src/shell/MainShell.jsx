@@ -33,6 +33,7 @@ import {
 import AiPanel from '../ai/AiPanel.jsx';
 import { useProposalDraft } from '../ai/useProposalDraft.js';
 import { useConsultDraft } from '../ai/useConsultDraft.js';
+import { dismissDraft } from '../ai/dismissedDrafts.js';
 import { useViewportLayout } from '../ai/useViewportLayout.js';
 import ConsultPaneFrame from '../views/plan/ConsultPaneFrame.jsx';
 import ConsultScopePane from '../views/plan/ConsultScopePane.jsx';
@@ -357,10 +358,12 @@ export default function MainShell({ user, onLogout }) {
    * 사용자가 그것을 못 보는 상태를 만들지 않는다. 프로젝트 안에서 만든 초안은 그 프로젝트
    * 화면에 이미 보이므로 그대로 둔다.
    */
-  const handleProposal = useCallback(async (proposal) => {
+  const handleProposal = useCallback(async (proposal, { restored = false } = {}) => {
     await openDraft(proposal, { courseId: scope.courseId ?? null });
     if (tab === 'projects') return;
-    setTab(tabForProposal(proposal.items, today));
+    // 되살린 제안은 화면을 옮기지 않는다(null) — 그 규칙은 tabForProposal에 적어 두었다.
+    const next = tabForProposal(proposal.items, today, { restored });
+    if (next) setTab(next);
   }, [openDraft, scope.courseId, tab, today]);
 
   /**
@@ -385,6 +388,12 @@ export default function MainShell({ user, onLogout }) {
     setPlanRequestedMaterials([]);
     acceptConsultDraft(periodDraft);
     setMemoryOpen(false);
+    /*
+     * 되살린 초안은 여기서 끝이다 — 들고만 있고 화면은 사용자가 보던 그대로 둔다. 탭을 옮길 때마다
+     * 그 탭의 대화가 옛 초안을 되살려 계획 탭으로 끌고 가면, 사용자는 다른 탭에 들어갈 수 없다.
+     * 초안이 있다는 것은 AI 패널이 한 줄로 말한다.
+     */
+    if (restored) return;
     setOpenPlanId(null);
     if (at.tab === 'plan') {
       // 계획 탭 안에서는 보고 있던 방식(상담 / 직접 만들기)을 그대로 둔다.
@@ -398,7 +407,7 @@ export default function MainShell({ user, onLogout }) {
     }
     setTab('plan');
     // 좁은 화면에서는 초안이 시트 안에 있다. 새 초안이 왔으면 열어서 보여 준다.
-    if (!restored) setOpenPane('preview');
+    setOpenPane('preview');
   }, [acceptConsultDraft]);
 
   /**
@@ -565,6 +574,8 @@ export default function MainShell({ user, onLogout }) {
                 setPlanRequestedMaterials((prev) => prev.filter((m) => m.materialId !== materialId))}
               initialDraft={aiPeriodDraft}
               onInitialDraftCleared={consultDraft.clear}
+              /* [이 초안 버리기] — 화면에서 지우는 것으로 끝내지 않고 서버에도 버렸다고 쓴다. */
+              onDiscardDraft={dismissDraft}
               onOpenSchedule={() => setTab('schedule')}
               onOpenConsult={() => openConsult(planScopeCourseId)}
               onAsk={ask}

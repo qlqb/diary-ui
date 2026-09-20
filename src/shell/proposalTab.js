@@ -14,8 +14,14 @@
  *
  * payload에는 "임시값"이라는 표시가 없다. 구분할 수 있는 것은 placementType뿐이다.
  * 계획 화면(PlanCreateView)은 이미 같은 이유로 placementType을 보고 판단하고 있다.
+ *
+ * @param restored 저장된 제안을 다시 읽어 되살린 것인가. 되살린 제안은 화면을 옮기지 않는다(null) —
+ *                 탭을 누를 때마다 그 탭의 대화가 옛 제안을 되살려 사용자를 도로 끌고 가면, 원하는
+ *                 탭에 들어갈 수 없다. 데려가는 것은 방금 만든 제안일 때뿐이다.
+ * @returns 옮겨 갈 탭 이름, 또는 그대로 두라는 뜻의 null
  */
-export function tabForProposal(items, today) {
+export function tabForProposal(items, today, { restored = false } = {}) {
+  if (restored) return null;
   const list = items ?? [];
 
   // 날짜가 아직 안 정해진 후보가 하나라도 있으면 여러 날에 걸친 계획이다.

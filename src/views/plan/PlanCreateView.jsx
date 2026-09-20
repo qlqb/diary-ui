@@ -58,6 +58,8 @@ export default function PlanCreateView({
   onAsk = null,
   /** 입력창을 채우지 않고 대화로 초점만 옮긴다([계속 상담]). 쓰던 글은 그대로다. */
   onFocusChat = null,
+  /** 상담 초안을 버렸다고 셸에 알린다(서버에도 DISMISSED로 쓴다). */
+  onDiscardDraft = null,
 }) {
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const presets = useMemo(() => periodPresets(todayIso), [todayIso]);
@@ -536,7 +538,16 @@ export default function PlanCreateView({
           projectTitles={projectTitles}
           todayIso={todayIso}
           onConfirmed={(plan) => { rememberDraft(null); if (initialDraft) onInitialDraftCleared?.(); onConfirmed?.(plan); }}
-          onDiscard={() => clearDraft({ keepFlow: true })}
+          /*
+           * 상담에서 온 초안의 [이 초안 버리기]는 서버에도 버렸다고 써야 한다 — 화면에서만 지우면
+           * 대화를 다시 읽을 때 되살아난다. 직접 만들기의 [다시 만들기]는 조건을 고쳐 새로 만드는
+           * 길이라 서버 초안을 버리지 않는다(곧 새 초안이 그것을 대체한다).
+           */
+          onDiscard={() => {
+            const discarded = draftRef.current?.proposalId ?? null;
+            clearDraft({ keepFlow: true });
+            if (fromConversation && discarded != null) onDiscardDraft?.(discarded);
+          }}
           discardLabel={fromConversation ? '이 초안 버리기' : '다시 만들기'}
           onOpenSchedule={onOpenSchedule}
           onOpenSource={onOpenSource}

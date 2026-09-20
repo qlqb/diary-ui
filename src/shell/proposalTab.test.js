@@ -39,6 +39,12 @@ describe('tabForProposal', () => {
       .toBe('schedule');
   });
 
+  it('되살린 제안은 화면을 옮기지 않는다', () => {
+    // 실제 화면에서 찾은 결함: 초안을 버리고 일정 탭을 눌러도, 그 탭의 대화가 서버에 남아 있던
+    // 제안을 되살리면서 탭을 도로 가져가 일정 탭에 들어갈 수 없었다.
+    expect(tabForProposal([item('DATE_ONLY', TODAY)], TODAY, { restored: true })).toBeNull();
+  });
+
   it('항목이 없으면 일정 탭으로 둔다', () => {
     expect(tabForProposal([], TODAY)).toBe('schedule');
     expect(tabForProposal(null, TODAY)).toBe('schedule');

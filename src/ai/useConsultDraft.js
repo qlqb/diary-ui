@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { planAPI } from '../api/api.js';
 import { planStageLabel } from './consultLabels.js';
+import { dismissDraft } from './dismissedDrafts.js';
 
 function newRequestKey() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -63,6 +64,19 @@ export function useConsultDraft() {
     setOutcome(null);
     setDraft(null);
   }, []);
+
+  /**
+   * 사용자가 이 초안을 버렸다. 화면에서 지우고 서버에도 버렸다고 쓴다(status DISMISSED).
+   *
+   * clear()와 나눈 이유: clear()는 "이 초안은 이제 내 것이 아니다"라는 화면 정리이고(확정 직후, 다른
+   * 조건으로 새로 시작), 서버의 초안을 버려야 하는 것은 사용자가 [이 초안 버리기]를 눌렀을 때뿐이다.
+   * 화면에서만 지우면 대화를 다시 읽을 때 서버의 PROPOSED가 되살아난다 — 버렸는데 다시 나온다.
+   */
+  const discard = useCallback(() => {
+    const proposalId = draftRef.current?.proposalId ?? null;
+    clear();
+    dismissDraft(proposalId);
+  }, [clear]);
 
   /**
    * @param draftIds null이면 지금 열린 초안. 목록이면 그 안에 열린 초안이 있을 때만 표시한다
@@ -149,6 +163,6 @@ export function useConsultDraft() {
 
   return {
     draft, stale, staleReasons, regenerating, stageLabel, error, outcome, applied,
-    accept, clear, markStale, markApplied, regenerate,
+    accept, clear, discard, markStale, markApplied, regenerate,
   };
 }

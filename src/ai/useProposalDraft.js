@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { proposalAPI, schedulePreviewAPI } from '../api/api.js';
 import { toHHmm } from '../lib/datetime.js';
 import { acquirePreview, previewInputKey, storedOrRecompute } from './previewSolveCache.js';
+import { dismissDraft } from './dismissedDrafts.js';
 
 /** 서버 제안 항목 -> 화면에서 다루는 초안 카드. */
 function toCard(item) {
@@ -132,11 +133,22 @@ export function useProposalDraft({ onApplied } = {}) {
     }));
   }, []);
 
+  /**
+   * 초안을 버린다. 화면에서 지우고 **서버에도 버렸다고 쓴다**(status DISMISSED).
+   *
+   * 화면에서만 지우면 서버에는 PROPOSED가 그대로 남고, 탭을 옮기거나 새로고침해 대화를 다시 읽는 순간
+   * 같은 초안이 되살아난다 — 사용자에게는 "버렸는데 다시 나온다"로 보인다. 열린 초안이 있는지는 서버가
+   * 들고 있으므로, 그 상태를 바꾸는 행동(만들기·적용·다시 만들기·버리기)은 모두 서버에 쓴다.
+   *
+   * 서버에 쓰지 못해도 이 세션에서는 되살리지 않는다(dismissedDrafts). 새로고침하면 서버 상태가 이긴다.
+   */
   const discardDraft = useCallback(() => {
+    const proposalId = draft?.proposalId ?? null;
     releasePreview();
     setDraft(null);
     setApplyError(null);
-  }, [releasePreview]);
+    dismissDraft(proposalId);
+  }, [draft, releasePreview]);
 
   const apply = useCallback(async () => {
     if (!draft || applying) return false;

@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AiPanel from './AiPanel.jsx';
 import { conversationAPI, consultContextAPI, planAPI } from '../api/api.js';
+import { markDismissed, resetDismissed } from './dismissedDrafts.js';
 
 vi.mock('../api/api.js', () => ({
   conversationAPI: {
@@ -60,6 +61,8 @@ async function start(user, props = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
+  // 버린 초안 목록은 모듈 전역이다 — 테스트끼리 새어 나가지 않게 비운다.
+  resetDismissed();
   conversationAPI.list.mockResolvedValue([]);
   conversationAPI.create.mockResolvedValue({ conversationId: 1 });
   conversationAPI.getContextSuggestions.mockResolvedValue([]);
@@ -256,6 +259,39 @@ describe('새로고침 뒤 초안 복구', () => {
     await waitFor(() => expect(planAPI.loadDraft).toHaveBeenCalledWith(4124));
     await waitFor(() => expect(onPeriodPlan).toHaveBeenCalledWith(
       expect.objectContaining({ proposalId: 4125 }), { restored: true }));
+  });
+
+  it('방금 버린 초안은 되살리지 않는다 — 서버 응답이 오기 전에 대화를 다시 읽어도', async () => {
+    /*
+     * 실제 화면에서 찾은 결함: [초안 버리기] → 일정 탭 → 그 탭의 대화가 서버에 남아 있던 초안을 되살리고,
+     * 되살린 초안이 탭을 계획으로 끌고 가서 일정 탭에 들어갈 수 없었다.
+     */
+    markDismissed(4124);
+    conversationAPI.list.mockResolvedValue([{ conversationId: 9, title: '계획', lastMessageAt: '2026-09-19T10:00:00' }]);
+    conversationAPI.getMessages.mockResolvedValue([
+      { messageId: 1, role: 'USER', content: '오늘 계획 짜줘', responseType: null, proposalId: null },
+      { messageId: 2, role: 'ASSISTANT', content: '초안을 만들었어요.', responseType: 'PROPOSAL', proposalId: 4124 },
+    ]);
+    const onPeriodPlan = vi.fn();
+    render(<AiPanel scope={SCOPE} variant="workspace" onPeriodPlan={onPeriodPlan} />);
+
+    await waitFor(() => expect(conversationAPI.getMessages).toHaveBeenCalled());
+    expect(planAPI.loadDraft).not.toHaveBeenCalled();
+    expect(onPeriodPlan).not.toHaveBeenCalled();
+  });
+
+  it('버린 초안을 서버가 대체 초안으로 돌려줘도, 그 대체가 버린 것이면 열지 않는다', async () => {
+    markDismissed(4125);
+    conversationAPI.list.mockResolvedValue([{ conversationId: 9, title: '계획', lastMessageAt: '2026-09-19T10:00:00' }]);
+    conversationAPI.getMessages.mockResolvedValue([
+      { messageId: 2, role: 'ASSISTANT', content: '초안을 만들었어요.', responseType: 'PROPOSAL', proposalId: 4124 },
+    ]);
+    planAPI.loadDraft.mockResolvedValue({ proposalId: 4125, proposal: { status: 'PROPOSED', items: [{}] } });
+    const onPeriodPlan = vi.fn();
+    render(<AiPanel scope={SCOPE} variant="workspace" onPeriodPlan={onPeriodPlan} />);
+
+    await waitFor(() => expect(planAPI.loadDraft).toHaveBeenCalledWith(4124));
+    expect(onPeriodPlan).not.toHaveBeenCalled();
   });
 });
 

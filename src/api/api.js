@@ -632,6 +632,14 @@ export const proposalAPI = {
         return request(`/ai/proposals/${proposalId}`);
     },
 
+    /**
+     * 이 제안을 버린다. 화면에서 지우는 것만으로는 부족하다 — 열린 초안이 있는지는 서버가 들고 있어서,
+     * 대화를 다시 열면 되살아난다. 이미 버렸으면 그대로 204, 이미 적용했으면 409다.
+     */
+    dismiss: (proposalId) => {
+        return request(`/ai/proposals/${proposalId}/dismiss`, { method: 'POST' });
+    },
+
     /** 편집/제외 항목을 담아 전체 적용. editedItems/excludedItemIds에 없는 항목은 원본 그대로 적용된다 */
     apply: (proposalId, editedItems = [], excludedItemIds = []) => {
         return request(`/ai/proposals/${proposalId}/apply`, {
