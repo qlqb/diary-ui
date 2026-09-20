@@ -18,13 +18,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Sparkles, Loader2, Send, List, Plus, MessageCircle, ArrowLeft, PanelRightClose, CircleCheck, Trash2,
-  ImagePlus,
+  ImagePlus, FolderOpen, ListChecks, BrainCircuit,
 } from 'lucide-react';
 import {
   conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI, scheduleImportAPI, planAPI,
+  consultContextAPI,
 } from '../api/api.js';
 import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
 import ScheduleImportReviewModal from './ScheduleImportReviewModal.jsx';
+import ConsultQuestionCard from './ConsultQuestionCard.jsx';
+import ConsultUnderstandingCard from './ConsultUnderstandingCard.jsx';
+import { planStageLabel } from './consultLabels.js';
+import { isDismissed } from './dismissedDrafts.js';
 import { PLAN_INTENSITY_LABEL } from '../types/execution.js';
 
 /** 화면별 추천 질문. 지금 이 화면에서 실제로 할 수 있는 것만 보여준다. */
@@ -32,8 +37,45 @@ const SUGGESTED_PROMPTS = {
   today: ['지금부터 뭐부터 하면 좋을까?', '오늘 너무 피곤해. 남은 걸 줄여줘'],
   schedule: ['이번 주 계획 짜줘', '이번 주에 빈 시간이 언제야?'],
   project: ['이 주제 어디부터 시작하면 좋을까?', '오늘 30분만 해보고 싶어'],
+  consult: ['이번 주 계획을 같이 짜줘', '어디서부터 시작하면 좋을지 모르겠어'],
   all: ['요즘 뭐부터 정리하면 좋을까?', '이번 주에 뭘 챙겨야 해?'],
 };
+
+/**
+ * 보내지 않은 입력을 대화마다 세션에 남긴다. 새로고침으로 쓰던 글이 사라지지 않게 하려는 것이고,
+ * 탭을 닫으면 같이 사라진다(sessionStorage). 저장은 사용자가 직접 친 순간에만 한다 — 화면 전환이
+ * 입력창을 비우는 것까지 받아 적으면 다른 대화에 남겨 둔 글을 덮어쓴다.
+ */
+const INPUT_DRAFT_PREFIX = 'ai.input.';
+function inputDraftKey(conversationId, scopeKey) {
+  return `${INPUT_DRAFT_PREFIX}${conversationId != null ? `c:${conversationId}` : `new:${scopeKey}`}`;
+}
+function readInputDraft(key) {
+  try { return sessionStorage.getItem(key) ?? ''; } catch { return ''; }
+}
+function writeInputDraft(key, text) {
+  try {
+    if (text) sessionStorage.setItem(key, text);
+    else sessionStorage.removeItem(key);
+  } catch { /* 세션 저장은 보조 수단이다 */ }
+}
+
+/** 이만큼 이내면 "바닥 근처"로 본다. 위로 올려 읽는 중이면 새 글이 와도 끌어내리지 않는다. */
+const NEAR_BOTTOM_PX = 80;
+
+/**
+ * 상담 턴이 실어 온 부가 정보(질문·이해한 내용·방향)를 화면 상태로 옮긴다. 서버가 아직 이 필드를
+ * 모르면 전부 없다 — 있는 것만 그린다.
+ */
+function consultOf(payload) {
+  const consult = payload?.consult;
+  if (!consult || typeof consult !== 'object') return null;
+  return {
+    question: consult.question?.text ? consult.question : null,
+    understanding: Array.isArray(consult.understanding) ? consult.understanding : [],
+    direction: consult.direction?.after ? consult.direction : null,
+  };
+}
 
 function contextSuggestionCopy(operation) {
   switch (operation) {
@@ -86,6 +128,21 @@ export default function AiPanel({
   onDiscardDraft,
   onScheduleApplied,
   onCollapse,
+  /**
+   * 'side'는 늘 있던 오른쪽 좁은 칸, 'workspace'는 상담 작업 공간의 가운데 칸이다. 같은 인스턴스가 자리만
+   * 옮긴다 — 다시 만들지 않으므로 대화·입력 중인 글·진행 중인 응답이 그대로 이어진다.
+   */
+  variant = 'side',
+  /** 상담 상태(대화 유무·방향·이해한 내용·진행 단계)를 옆 칸이 그릴 수 있게 셸로 올린다. */
+  onConsultState,
+  /** 답이 열린 초안에 영향을 줬다. draftIds가 null이면 "지금 열린 초안"을 뜻한다. */
+  onDraftStale,
+  /** 좁은 화면에서 입력창 위에 늘 보이는 한 줄(포함·빠진 프로젝트, 가정 여부). 누르면 미리보기가 열린다. */
+  draftNotice = null,
+  onOpenScopePane,
+  onOpenPreviewPane,
+  /** "AI가 이해한 내 상황" 화면을 연다. 이 대화가 들고 들어가는 나에 대한 이해를 보고 고치는 곳이다. */
+  onOpenMemory,
 }) {
   const [view, setView] = useState('chat'); // 'chat' | 'list'
   const [conversationList, setConversationList] = useState([]);
@@ -110,6 +167,14 @@ export default function AiPanel({
   const [periodPlanNotice, setPeriodPlanNotice] = useState(null);
   /** 기간 계획 생성의 진행 단계(서버가 실제로 밟은 단계). 턴이 끝나면 사라진다. */
   const [periodPlanStage, setPeriodPlanStage] = useState(null);
+  /**
+   * 상담 질문 카드와 "내가 이해한 내용". 마지막 AI 응답에 붙어 온 것만 든다 — 턴이 바뀌면 질문은 사라지고
+   * (이미 답했거나 넘어갔다), 새 응답이 새 카드를 가져온다. 입력창의 글은 이 상태와 무관하다.
+   */
+  const [consultQuestion, setConsultQuestion] = useState(null);
+  const [consultUnderstanding, setConsultUnderstanding] = useState([]);
+  /** 계획 방향. fresh면 "이번 답변으로 바뀐 방향"이고, 아니면 앞선 턴에서 정해진 지금의 방향이다. */
+  const [consultDirection, setConsultDirection] = useState(null);
   const [contextSuggestions, setContextSuggestions] = useState([]);
   /**
    * AI가 뽑은 일정 후보(약속·반복 일정). contextSuggestions와 나란히 두되 합치지 않는다 —
@@ -139,25 +204,42 @@ export default function AiPanel({
   const activeStreamConversationIdRef = useRef(null);
   const lastUserMessageIdRef = useRef(null);
   const loadTokenRef = useRef(0);
-  const draftsRef = useRef({});
   // scope가 바뀔 때마다 해당 범위의 대화를 새로 붙인다. 이 키가 같으면 다시 불러오지 않는다.
   const scopeKey = `${scope.kind}:${scope.courseId ?? ''}`;
   const loadedScopeKeyRef = useRef(null);
+  /** 지금 입력이 어느 대화의 것인가. 입력을 세션에 남길 때의 열쇠다. */
+  const inputKeyRef = useRef(inputDraftKey(null, scopeKey));
+  /** 사용자가 바닥 근처를 보고 있는가. 위로 올려 읽는 중이면 자동으로 끌어내리지 않는다. */
+  const nearBottomRef = useRef(true);
 
   useEffect(() => () => abortControllerRef.current?.abort(), []);
 
   useEffect(() => {
-    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [messages, currentOffer, contextSuggestions, scheduleSuggestions, view]);
+    const body = bodyRef.current;
+    if (body && nearBottomRef.current) body.scrollTop = body.scrollHeight;
+  }, [messages, currentOffer, contextSuggestions, scheduleSuggestions, consultQuestion, consultUnderstanding, view]);
+
+  const handleBodyScroll = useCallback(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    nearBottomRef.current = body.scrollHeight - body.scrollTop - body.clientHeight <= NEAR_BOTTOM_PX;
+  }, []);
+
+  /** 사용자가 친 글. 화면 상태와 세션 저장을 함께 바꾼다. */
+  const typeInput = useCallback((text) => {
+    setInputText(text);
+    writeInputDraft(inputKeyRef.current, text);
+  }, []);
 
   // 화면의 버튼("이어하기", "이 자료로 질문" 등)이 입력창을 대신 채운다. 바로 보내지 않는다 —
   // 무엇을 물어볼지는 사용자가 마지막으로 확인하고 고칠 수 있어야 한다.
   useEffect(() => {
-    if (!prefill?.text) return;
+    // focusOnly는 [계속 상담]처럼 대화로 돌아오기만 하는 경우다 — 쓰던 글을 덮어쓰지 않는다.
+    if (!prefill?.text && !prefill?.focusOnly) return;
     setView('chat');
-    setInputText(prefill.text);
+    if (prefill.text) typeInput(prefill.text);
     inputRef.current?.focus();
-  }, [prefill]);
+  }, [prefill, typeInput]);
 
   const resetTurnState = useCallback(() => {
     setMessages([]);
@@ -165,6 +247,10 @@ export default function AiPanel({
     setQuickReplies([]);
     setPeriodPlanNotice(null);
     setPeriodPlanStage(null);
+    setConsultQuestion(null);
+    setConsultUnderstanding([]);
+    setConsultDirection(null);
+    nearBottomRef.current = true;
     setContextSuggestions([]);
     setScheduleSuggestions([]);
     setScheduleActionState({});
@@ -183,7 +269,8 @@ export default function AiPanel({
     setView('chat');
     setActiveConversationId(conversationId);
     resetTurnState();
-    setInputText(draftsRef.current[conversationId] ?? '');
+    inputKeyRef.current = inputDraftKey(conversationId, '');
+    setInputText(readInputDraft(inputKeyRef.current));
     setLoadingHistory(true);
 
     try {
@@ -203,10 +290,36 @@ export default function AiPanel({
       if (lastUser) lastUserMessageIdRef.current = lastUser.messageId;
 
       const last = history.length > 0 ? history[history.length - 1] : null;
+      /*
+       * 새로고침 뒤에도 상담 카드를 되살린다. 질문·이해한 내용은 마지막 AI 응답의 것만 — 그 뒤에 내가 이미
+       * 답했으면 그 질문은 끝난 것이다. 방향은 가장 최근에 정해진 것을 찾되, 마지막 응답의 것이 아니면
+       * "이번 답변으로 바뀐"이라고 말하지 않는다.
+       */
       if (last?.role === 'ASSISTANT') {
-        if (last.responseType === 'OFFER') {
-          setCurrentOffer({ label: '이 내용으로 초안 만들기' });
-        } else if (last.responseType === 'PROPOSAL' && last.proposalId) {
+        const restored = consultOf(last);
+        setConsultQuestion(restored?.question ?? null);
+        setConsultUnderstanding(restored?.understanding ?? []);
+      }
+      const lastWithDirection = [...history].reverse()
+        .find((m) => m.role === 'ASSISTANT' && consultOf(m)?.direction);
+      if (lastWithDirection) {
+        setConsultDirection({ ...consultOf(lastWithDirection).direction, fresh: lastWithDirection === last });
+      }
+      /*
+       * 초안은 "마지막 메시지"가 아니라 이 대화에서 가장 최근에 만든 초안 메시지에서 되살린다. 초안을 만든 뒤에 대화를
+       * 더 이어 가는 것이 이 화면의 기본 흐름이라(답변 → 방향 변화 → 다시 만들기), 마지막 메시지만 보면 한마디만 더
+       * 해도 새로고침에 초안이 사라진다. 이미 적용·폐기한 초안은 아래 status 확인에서 걸러진다.
+       */
+      const lastDraftMessage = [...history].reverse()
+        .find((m) => m.role === 'ASSISTANT' && m.responseType === 'PROPOSAL' && m.proposalId);
+      if (last?.role === 'ASSISTANT' && last.responseType === 'OFFER') {
+        setCurrentOffer({ label: '이 내용으로 초안 만들기' });
+      }
+      // 방금 버린 초안은 되살리지 않는다. 서버에도 버렸다고 쓰지만(DISMISSED), 그 응답이 오기 전에
+      // 이 조회가 돌아올 수 있다 — 그 틈에 다시 열리면 사용자에게는 "버렸는데 또 나온다"가 된다.
+      if (lastDraftMessage && !isDismissed(lastDraftMessage.proposalId)) {
+        const last = lastDraftMessage;
+        if (last.responseType === 'PROPOSAL' && last.proposalId) {
           // 아직 적용하지 않은 초안이 있으면 화면에 다시 띄운다 — 새로고침으로 사라지지 않는다.
           try {
             /*
@@ -221,13 +334,17 @@ export default function AiPanel({
               } catch { periodDraft = null; }
             }
             if (loadTokenRef.current !== myToken) return;
+            // 대체 사슬을 따라온 초안(다른 id)도 방금 버린 것일 수 있다.
+            if (isDismissed(periodDraft?.proposalId)) return;
             if (periodDraft?.proposalId && (periodDraft.proposal?.status ?? 'PROPOSED') === 'PROPOSED') {
-              setPeriodPlanNotice(periodDraft.proposal?.items?.length ?? 0);
-              onPeriodPlan(periodDraft);
+              setPeriodPlanNotice({ count: periodDraft.proposal?.items?.length ?? 0, restored: true });
+              // 되살린 초안이라는 것을 알린다 — 셸은 지금 열려 있는 다른 초안을 이것으로 덮지 않는다.
+              onPeriodPlan(periodDraft, { restored: true });
             } else if (!periodDraft?.proposalId) {
               const proposal = await proposalAPI.get(last.proposalId);
               if (loadTokenRef.current === myToken && proposal.status === 'PROPOSED') {
-                onProposal?.(proposal);
+                // 되살린 제안이다 — 셸은 이것 때문에 사용자가 보던 탭을 옮기지 않는다.
+                onProposal?.(proposal, { restored: true });
               }
             }
           } catch { /* 제안 조회 실패해도 대화 자체는 정상 표시한다 */ }
@@ -256,8 +373,11 @@ export default function AiPanel({
     setView('chat');
     setActiveConversationId(null);
     resetTurnState();
+    // 새 대화는 빈 입력으로 시작한다 — 새 대화용으로 남겨 둔 글도 함께 지운다.
+    inputKeyRef.current = inputDraftKey(null, scopeKey);
+    writeInputDraft(inputKeyRef.current, '');
     setInputText('');
-  }, [resetTurnState]);
+  }, [resetTurnState, scopeKey]);
 
   // scope가 바뀌면(다른 프로젝트로 이동, 오늘<->일정 전환) 그 범위의 가장 최근 대화를 이어간다.
   useEffect(() => {
@@ -270,7 +390,9 @@ export default function AiPanel({
       loadTokenRef.current += 1;
       setActiveConversationId(null);
       resetTurnState();
-      setInputText('');
+      // 이 범위에서 아직 보내지 않은 새 대화의 글이 있으면 되살린다(새로고침 복구).
+      inputKeyRef.current = inputDraftKey(null, scopeKey);
+      setInputText(readInputDraft(inputKeyRef.current));
       setView('chat');
       try {
         const list = await conversationAPI.list(scope.courseId ?? null, scope.conversationScope);
@@ -309,6 +431,10 @@ export default function AiPanel({
     setPeriodPlanNotice(null);
     setPeriodPlanStage(null);
     setAppliedNotice(false);
+    // 턴이 넘어가면 앞의 질문은 끝난 것이다. 이해한 내용과 방향은 새 응답이 올 때까지 그대로 둔다.
+    setConsultQuestion(null);
+    // 내가 보낸 직후에는 바닥으로 데려간다 — 방금 보낸 말과 그 답이 보여야 한다.
+    nearBottomRef.current = true;
 
     if (optimisticUserText) {
       setMessages((prev) => [...prev, { key: `u-${Date.now()}`, role: 'USER', content: optimisticUserText, streaming: false }]);
@@ -324,6 +450,7 @@ export default function AiPanel({
         if (controller.signal.aborted) return;
         targetConversationId = created.conversationId;
         setActiveConversationId(targetConversationId);
+        inputKeyRef.current = inputDraftKey(targetConversationId, '');
       }
       activeStreamConversationIdRef.current = targetConversationId;
 
@@ -345,12 +472,12 @@ export default function AiPanel({
             onProposal?.(data);
           } else if (eventName === 'period_plan.progress') {
             // 서버가 실제로 밟은 단계만 보여 준다. 모델이 완료를 선언하는 문구가 아니다.
-            setPeriodPlanStage(data?.label ?? null);
+            setPeriodPlanStage(planStageLabel(data?.stage, data?.label));
           } else if (eventName === 'period_plan.ready') {
             // 기간 계획은 일반 제안(적용 바)이 아니라 계획 검토·확정 화면으로 간다 — 계획
             // 탭에서 만든 것과 같은 화면, 같은 확정 API다.
             setPeriodPlanStage(null);
-            setPeriodPlanNotice(data?.proposal?.items?.length ?? 0);
+            setPeriodPlanNotice({ count: data?.proposal?.items?.length ?? 0, restored: false });
             onPeriodPlan?.(data);
           } else if (eventName === 'context.suggestions.ready') {
             setContextSuggestions((prev) => [...prev, ...(data?.suggestions ?? [])]);
@@ -362,7 +489,21 @@ export default function AiPanel({
             setMessages((prev) => prev.map((m) => (m.key === streamingKey
               ? { ...m, content: data.reply ?? m.content, responseType: data.responseType, streaming: false }
               : m)));
-            setQuickReplies(Array.isArray(data?.quickReplies) ? data.quickReplies : []);
+            /*
+             * 상담 카드. 질문이 있으면 예전 quickReplies보다 그쪽이 우선이다 — 같은 질문을 두 모양으로
+             * 그리지 않는다. 입력창의 글은 건드리지 않는다: 카드가 새로 와도 쓰던 말은 그대로다.
+             */
+            const consult = consultOf(data);
+            setConsultQuestion(consult?.question ?? null);
+            setConsultUnderstanding(consult?.understanding ?? []);
+            if (consult?.direction) {
+              setConsultDirection({ ...consult.direction, fresh: true });
+              // 방향이 바뀌어 열린 초안이 낡았다. 초안을 지우지 않고 "이전 버전"으로 표시만 한다.
+              if (consult.direction.affectsDraft) onDraftStale?.(null, 'DIRECTION');
+            } else {
+              setConsultDirection((prev) => (prev ? { ...prev, fresh: false } : prev));
+            }
+            setQuickReplies(!consult?.question && Array.isArray(data?.quickReplies) ? data.quickReplies : []);
           } else if (eventName === 'message.error') {
             setPeriodPlanStage(null);
             setMessages((prev) => prev.filter((m) => m.key !== streamingKey));
@@ -387,10 +528,65 @@ export default function AiPanel({
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text || sending) return;
-    setInputText('');
-    draftsRef.current[activeConversationId ?? '__new__'] = '';
-    await runTurn({ message: text, requestedAction: 'AUTO', idempotencyKey: newIdempotencyKey() },
+    typeInput('');
+    /*
+     * 질문 카드가 떠 있을 때 직접 쓴 답도 그 질문의 답이다. 선택지를 고르지 않았다는 것만 다르다 —
+     * 같은 경로, 같은 기록이다.
+     */
+    const answer = consultQuestion?.id != null
+      ? { questionId: consultQuestion.id, choiceIds: [], skipped: false } : null;
+    await runTurn({
+      message: text, requestedAction: 'AUTO', idempotencyKey: newIdempotencyKey(), ...(answer ? { answer } : {}),
+    }, { optimisticUserText: text });
+  };
+
+  /**
+   * 질문 카드의 선택지·건너뛰기. 자유 입력과 같은 보내기 경로를 지난다 — 고른 라벨이 내 말로 기록에 남고,
+   * 어느 질문의 어떤 선택지였는지만 answer로 덧붙인다. 입력창에 쓰던 글은 그대로 둔다.
+   */
+  const handleQuestionAnswer = async ({ questionId, choiceIds, skipped, text }) => {
+    if (sending) return;
+    await runTurn({
+      message: text,
+      requestedAction: 'AUTO',
+      idempotencyKey: newIdempotencyKey(),
+      answer: { questionId, choiceIds: choiceIds ?? [], skipped: Boolean(skipped) },
+    }, { optimisticUserText: text });
+  };
+
+  /** 남은 질문은 가정으로 돌리고 지금까지 얘기로 계획을 제안받는다. 서버가 OFFER를 낸다. */
+  const handlePlanNow = async () => {
+    if (sending) return;
+    const text = '지금까지 얘기로 계획해줘';
+    await runTurn({ message: text, requestedAction: 'PLAN_NOW', idempotencyKey: newIdempotencyKey() },
       { optimisticUserText: text });
+  };
+
+  const focusInput = useCallback(() => {
+    setView('chat');
+    inputRef.current?.focus();
+  }, []);
+
+  /**
+   * "조금 달라요"로 고친 기억을 저장한다. 확인 창을 띄우지 않는다 — 고친 문장이 곧 확인이다.
+   * 응답의 staleDraftIds에 열린 초안이 있으면 그 초안을 "갱신 필요"로 표시하게 셸에 알린다.
+   */
+  const handleUnderstandingEdit = async (line, content) => {
+    try {
+      const response = await consultContextAPI.update(line.id, { content });
+      const staleIds = response?.staleDraftIds ?? [];
+      if (staleIds.length > 0) onDraftStale?.(staleIds, 'UNDERSTANDING');
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, message: err?.message || '고치지 못했어요. 다시 시도해 주세요.' };
+    }
+  };
+
+  /** 이번 대화의 합의는 따로 저장된 항목이 아니다 — 대화로 고쳐 말하게 입력창을 채워 준다. 쓰던 글은 지우지 않는다. */
+  const handleUnderstandingRestate = () => {
+    const lead = '다시 말할게요: ';
+    typeInput(inputText.trim() ? [inputText, lead].join('\n') : lead);
+    focusInput();
   };
 
   /**
@@ -463,12 +659,14 @@ export default function AiPanel({
       setSending(false);
       setActiveConversationId(null);
       resetTurnState();
+      writeInputDraft(inputDraftKey(conversationId, ''), '');
+      inputKeyRef.current = inputDraftKey(null, scopeKey);
       setInputText('');
       // 이 대화에서 나온 적용 전 초안도 함께 치운다 — 대화는 지웠는데 그 대화가 만든 ghost가
       // 오늘/일정 화면에 계속 떠 있으면 안 된다. 적용 전이므로 버려도 실제 데이터는 그대로다.
       onDiscardDraft?.();
     }
-    delete draftsRef.current[conversationId];
+    writeInputDraft(inputDraftKey(conversationId, ''), '');
     setDeletingId(null);
 
     try {
@@ -597,23 +795,65 @@ export default function AiPanel({
     }
   };
 
+  /*
+   * 옆 칸(범위·자료, 계획 방향)은 이 패널 밖에 있지만 같은 대화를 본다. 대화 상태를 두 곳에서 따로 들면
+   * 같은 질문·다른 방향이 두 군데에 보이게 되므로, 원본은 여기 하나고 셸에는 읽을 값만 올린다.
+   */
+  const workspace = variant === 'workspace';
+  const hasMessages = messages.length > 0;
+  useEffect(() => {
+    onConsultState?.({
+      conversationId: activeConversationId,
+      courseId: scope.courseId ?? null,
+      hasMessages,
+      direction: consultDirection,
+      understanding: consultUnderstanding,
+      stage: sending ? periodPlanStage : null,
+      sending,
+    });
+  }, [onConsultState, activeConversationId, scope.courseId, hasMessages, consultDirection, consultUnderstanding,
+    periodPlanStage, sending]);
+
   const prompts = SUGGESTED_PROMPTS[scope.kind] ?? SUGGESTED_PROMPTS.all;
   const visibleMessages = messages.filter((m) => m.role !== 'ASSISTANT' || m.streaming || m.content);
 
   return (
-    <aside className="ai-panel">
+    <aside className={`ai-panel${workspace ? ' ai-panel-workspace' : ''}`} aria-label={workspace ? '상담 대화' : 'AI'}>
       <header className="ai-panel-head">
-        <span className="ai-panel-title"><Sparkles size={15} /> AI</span>
+        <span className="ai-panel-title"><Sparkles size={15} /> {workspace ? '상담' : 'AI'}</span>
         <span className="ai-panel-head-actions">
+          {/*
+            좁은 화면에서는 옆 칸이 접혀 있다. 여는 버튼을 대화 머리에 둔다 — 넓은 화면에서는 두 칸이 이미
+            보이므로 CSS가 이 버튼들을 숨긴다.
+          */}
+          {workspace && onOpenScopePane && (
+            <button type="button" className="btn-ghost btn-sm consult-pane-toggle" onClick={onOpenScopePane}>
+              <FolderOpen size={14} /> 범위·자료
+            </button>
+          )}
+          {workspace && onOpenPreviewPane && (
+            <button type="button" className="btn-ghost btn-sm consult-pane-toggle" onClick={onOpenPreviewPane}>
+              <ListChecks size={14} /> 계획 미리보기
+            </button>
+          )}
+          {onOpenMemory && (
+            <button type="button" className="icon-btn" onClick={onOpenMemory}
+              title="AI가 이해한 내 상황" aria-label="AI가 이해한 내 상황">
+              <BrainCircuit size={16} />
+            </button>
+          )}
           <button type="button" className="icon-btn" onClick={openList} title="대화 목록" aria-label="대화 목록">
             <List size={16} />
           </button>
           <button type="button" className="icon-btn" onClick={startNewConversation} title="새 대화" aria-label="새 대화">
             <Plus size={16} />
           </button>
-          <button type="button" className="icon-btn" onClick={onCollapse} title="패널 접기" aria-label="패널 접기">
-            <PanelRightClose size={16} />
-          </button>
+          {/* 작업 공간에서는 이 패널이 화면의 가운데다 — 접을 곳이 없다. */}
+          {!workspace && (
+            <button type="button" className="icon-btn" onClick={onCollapse} title="패널 접기" aria-label="패널 접기">
+              <PanelRightClose size={16} />
+            </button>
+          )}
         </span>
       </header>
 
@@ -669,7 +909,7 @@ export default function AiPanel({
         </div>
       ) : (
         <>
-          <div className="ai-panel-body" ref={bodyRef}>
+          <div className="ai-panel-body" ref={bodyRef} onScroll={handleBodyScroll}>
             {loadingHistory && <p className="ai-hint"><Loader2 size={14} className="spin" /> 대화를 불러오는 중...</p>}
             {loadError && <p className="ai-error">{loadError}</p>}
 
@@ -678,7 +918,7 @@ export default function AiPanel({
                 <p className="ai-hint">{scope.emptyHint}</p>
                 <div className="ai-prompt-list">
                   {prompts.map((prompt) => (
-                    <button key={prompt} type="button" className="ai-prompt" onClick={() => setInputText(prompt)}>
+                    <button key={prompt} type="button" className="ai-prompt" onClick={() => typeInput(prompt)}>
                       {prompt}
                     </button>
                   ))}
@@ -763,6 +1003,29 @@ export default function AiPanel({
               );
             })}
 
+            {/*
+              이해한 내용이 질문보다 먼저다 — "이렇게 알아들었어요"를 보고 나서 다음 질문에 답하는 순서가 자연스럽다.
+              두 카드 모두 서버가 실어 줬을 때만 나온다.
+            */}
+            {!sending && consultUnderstanding.length > 0 && (
+              <ConsultUnderstandingCard
+                key={`u-${activeConversationId ?? 'new'}-${consultUnderstanding.map((l) => l.id).join(',')}`}
+                lines={consultUnderstanding}
+                onEdit={handleUnderstandingEdit}
+                onRestate={handleUnderstandingRestate}
+              />
+            )}
+            {consultQuestion && !sending && (
+              <ConsultQuestionCard
+                key={`q-${consultQuestion.id}`}
+                question={consultQuestion}
+                disabled={sending}
+                onAnswer={handleQuestionAnswer}
+                onPlanNow={handlePlanNow}
+                onFocusInput={focusInput}
+              />
+            )}
+
             {quickReplies.length > 0 && !sending && (
               <div className="ai-quick-replies" role="group" aria-label="빠른 답">
                 {quickReplies.map((text) => (
@@ -804,7 +1067,13 @@ export default function AiPanel({
 
             {periodPlanNotice != null && (
               <p className="ai-applied">
-                <Sparkles size={13} /> 계획 초안 {periodPlanNotice}개를 계획 화면에 표시했어요. 확인하고 확정해주세요.
+                <Sparkles size={13} />{' '}
+                {/* 되살린 초안은 화면을 옮기지 않는다 — "표시했어요"라고 말하지 않고 어디에 있는지만 알린다. */}
+                {periodPlanNotice.restored
+                  ? `아직 확정하지 않은 계획 초안 ${periodPlanNotice.count}개가 있어요. 계획 탭에서 이어서 볼 수 있어요.`
+                  : (workspace
+                    ? `계획 초안 ${periodPlanNotice.count}개를 만들었어요. 계획 미리보기에서 확인하고 적용해 주세요.`
+                    : `계획 초안 ${periodPlanNotice.count}개를 계획 화면에 표시했어요. 확인하고 확정해주세요.`)}
               </p>
             )}
 
@@ -822,6 +1091,17 @@ export default function AiPanel({
 
             {sendError && <p className="ai-error">{sendError}</p>}
           </div>
+
+          {/*
+            좁은 화면에서는 초안이 시트 안에 있다. 빠진 프로젝트나 "시간은 가정"처럼 놓치면 안 되는 사실은
+            시트를 열지 않아도 입력창 바로 위에 한 줄로 보인다. 누르면 미리보기가 열린다.
+          */}
+          {workspace && draftNotice && (
+            <button type="button" className="consult-draft-notice" onClick={onOpenPreviewPane}>
+              <ListChecks size={13} aria-hidden="true" />
+              <span>{draftNotice}</span>
+            </button>
+          )}
 
           <footer className="ai-panel-foot">
             <input
@@ -852,12 +1132,16 @@ export default function AiPanel({
               className="ai-textarea"
               placeholder={scope.placeholder}
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              onChange={(e) => typeInput(e.target.value)}
               onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
               }}
-              disabled={sending || loadingHistory}
+              /*
+                응답을 기다리는 동안에도 다음 말을 쓸 수 있다. 보내기만 막는다 — 질문 카드나 진행 표시가
+                자유 입력을 가로막지 않는다.
+              */
+              disabled={loadingHistory}
               rows={2}
             />
             <button

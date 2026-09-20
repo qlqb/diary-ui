@@ -170,7 +170,7 @@ export const EVENT_TYPE_LABEL = Object.freeze({
  * @property {string}  title
  * @property {string}  recordDate           'YYYY-MM-DD'
  * @property {string}  resultType           ExecutionResultType
- * @property {number|null} actualMinutes    실제 소요
+ * @property {number|null} actualMinutes    내가 적은 시간(분). 재서 얻은 값이 아니라 사용자가 적은 값이다
  * @property {string|null} actualAmount     실제 분량
  * @property {string|null} actualStartAt
  * @property {string|null} actualEndAt

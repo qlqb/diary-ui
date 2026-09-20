@@ -4,9 +4,9 @@
  * /api/plans/proposals/{id}/confirm(PlanVersion 확정)이다. 일반 제안의 "변경 N개 적용"
  * 바는 여기서 쓰지 않는다.
  *
- * 사용자가 조정하는 대상은 개수가 아니라 부하다. 요약 줄에 추정 남는 시간·학습 목표·선택
- * 합계·여유/휴식을 함께 보여주고, 체크를 풀면 합계와 여유가 바로 바뀐다. 목표보다 적게
- * 골라도 경고하지 않는다.
+ * 사용자가 조정하는 대상은 개수가 아니라 부하다. 맨 위 요약(PlanDraftOverview)은 실제로 고른 양(항목 수·합계)을
+ * 먼저 말하고, 예산은 "상한"이라고 작게 덧붙인다 — 예산은 채워야 하는 양이 아니라서 얼마나 덜 채웠는지는
+ * 어디에도 적지 않는다. 체크를 풀거나 시간을 고치면 합계와 여유가 바로 바뀐다.
  *
  * 정확한 시각은 확정 전에 기존 배치 미리보기(SchedulePreview, OpenAI 호출 없음)로 첫 7일만
  * 계산해 보여준다. 8일 이상 계획의 나머지는 미배치로 남고 "해당 주가 가까워지면 배치"라고
@@ -23,8 +23,13 @@ import { PLAN_INTENSITY_LABEL } from '../../types/execution.js';
 import { formatDateKo, formatMinutes } from '../../lib/planTime.js';
 import { groupItems, initialCollapsed, placementsToEditedItems } from '../../lib/planDraft.js';
 import {
-  ACTION_TYPE_LABEL, EXISTING_ACTION_LABEL, PRIORITY_LABEL, TREATMENT_LABEL, formatDeadline, formatEstimate,
+  ACTION_TYPE_LABEL, EXISTING_ACTION_LABEL, ITEM_ORIGIN_LABEL, PRIORITY_LABEL, TREATMENT_LABEL, describeDeadline,
+  formatEstimate,
 } from '../../lib/planLabels.js';
+import { buildEvidenceSummary } from '../../lib/planEvidence.js';
+import { acquirePreview, previewInputKey, replacePreview, storedOrRecompute } from '../../ai/previewSolveCache.js';
+import MaterialFileLink from '../../components/MaterialFileLink.jsx';
+import PlanDraftOverview from './PlanDraftOverview.jsx';
 import PlanStrategyPanel from './PlanStrategyPanel.jsx';
 import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
 import PlanItemDetail from './PlanItemDetail.jsx';
@@ -46,9 +51,13 @@ function restoreReview(draft, initialReview) {
   const stored = draft?.reviewState;
   if (stored) {
     const kept = (stored.excludedProposalItemIds ?? []).filter((id) => ids.has(id));
-    return { excluded: new Set(kept), title: stored.title ?? null, note: null };
+    // 직접 고친 예상 시간. 검토 상태에 저장돼 있으면 새로고침 뒤에도 그대로다.
+    const minutes = new Map((stored.editedItems ?? [])
+      .filter((e) => ids.has(e.proposalItemId) && e.expectedMinutes != null)
+      .map((e) => [e.proposalItemId, e.expectedMinutes]));
+    return { excluded: new Set(kept), title: stored.title ?? null, note: null, minutes };
   }
-  if (!initialReview) return { excluded: new Set(), title: null, note: null };
+  if (!initialReview) return { excluded: new Set(), title: null, note: null, minutes: new Map() };
   const items = draft?.proposal?.items ?? [];
   const byTarget = new Map(items.filter((i) => i.targetExecutionItemId != null).map((i) => [i.targetExecutionItemId, i.proposalItemId]));
   const excluded = new Set();
@@ -63,6 +72,7 @@ function restoreReview(draft, initialReview) {
   return {
     excluded,
     title: initialReview.title ?? null,
+    minutes: new Map(),
     note: lost > 0 ? `이전 초안에서 뺀 새 항목 ${lost}개는 다시 만든 초안에 그대로 옮기지 못했어요. 항목을 다시 확인해 주세요.` : null,
   };
 }
@@ -72,6 +82,14 @@ export default function PlanDraftReview({
   onOpenSource, onExcludeThisTime = null, onRedraft = null, onNotify = null,
   busy = false, confirmBlockedReason = null, onChooseRequestedMaterial = null, initialReview = null,
   onReviewStateChange = null,
+  /*
+   * 상담과 이어지는 부분. 전부 선택이다 — 없으면 그 조각만 안 보인다.
+   * stale/onRemake: 최신 답변을 반영하기 전 버전임을 표시하고 다시 만들게 한다(서버의 freshness도 함께 본다).
+   * remaking: 다시 만드는 중. 이 화면은 그동안 이전 버전을 그대로 보여 준다.
+   * outcome: 다시 만든 결과가 알려 준 것(무엇이 바뀌었나·옮겨 온 편집·부딪친 편집).
+   */
+  stale = false, staleReasons = [], remaking = false, remakeStageLabel = null, onRemake = null, outcome = null,
+  onAnswerQuestion = null, onContinueConsult = null,
 }) {
   /*
    * 검토 상태(제목·항목 포함/제외)는 서버 초안에 붙어 온다(draft.reviewState). 새로고침·탭 이동 뒤에도 같은 초안이면 그대로
@@ -95,6 +113,18 @@ export default function PlanDraftReview({
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
   const [previewNote, setPreviewNote] = useState(null);
+  /*
+   * 일정(배치 미리보기)을 못 읽었다. "일정이 없다"와 다른 사실이다 — 이때는 "등록된 일정이 없어 가정했다"는
+   * 문구를 띄우지 않고, 못 읽었다고 말하고 다시 시도하게 한다.
+   */
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [previewReload, setPreviewReload] = useState(0);
+  /** 직접 고친 예상 시간(proposalItemId → 분). 원래 값과 같아지면 지운다. */
+  const [minutesEdits, setMinutesEdits] = useState(() => restored.minutes ?? new Map());
+  const [minutesOpen, setMinutesOpen] = useState(() => new Set());
+  /** 다시 만든 초안에서 내 편집과 새 제안이 달랐던 값. 기본은 내 값 유지다. */
+  const [conflictChoice, setConflictChoice] = useState({});
+  const itemsRef = useRef(null);
   /*
    * 미리보기 요청 순번. 화면이 뜰 때의 요청과 확정 거절 뒤의 재계산이 겹칠 수 있는데, 늦게
    * 도착한 옛 응답이 새 응답을 덮으면 사용자는 방금 계산한 시각이 아니라 옛 시각을 확정한다.
@@ -126,25 +156,33 @@ export default function PlanDraftReview({
    * 배치 미리보기. 저장된 것이 있으면 그대로, 없으면 한 번 계산한다. OpenAI를 부르지 않는다.
    * 못 구해도 검토는 계속된다 — 그때 확정하면 롤링 배치가 나중에 시각을 정한다.
    */
+  const previewKey = useMemo(
+    () => previewInputKey(proposalId, current?.proposal?.items ?? []),
+    [proposalId, current],
+  );
   useEffect(() => {
     if (!proposalId || noAvailableTime) return undefined;
+    if (!schedulePreviewAPI?.get) return undefined;
     let cancelled = false;
     const ticket = previewRequest.current + 1;
     previewRequest.current = ticket;
-    (async () => {
-      try {
-        if (!schedulePreviewAPI?.get) return;
-        const stored = await schedulePreviewAPI.get(proposalId);
-        const result = stored ?? (await schedulePreviewAPI.recompute(proposalId, {}));
-        if (!cancelled && previewRequest.current === ticket) setPreview(result ?? null);
-      } catch {
-        if (!cancelled && previewRequest.current === ticket) {
-          setPreviewNote('정확한 시각 미리보기를 불러오지 못했어요. 확정하면 배치 때 시각이 정해져요.');
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [proposalId, noAvailableTime]);
+    /*
+     * 같은 제안·같은 입력의 미리보기는 한 번만 푼다. 셸의 초안 훅(useProposalDraft)이 이미 풀고 있으면 그
+     * 결과를 나눠 받는다 — AI 패널에서 연 기간 계획이 같은 배치를 두 번 계산하지 않게.
+     */
+    const hold = acquirePreview(proposalId, previewKey, storedOrRecompute(schedulePreviewAPI, proposalId));
+    hold.promise
+      .then((result) => {
+        if (cancelled || previewRequest.current !== ticket) return;
+        setPreview(result ?? null);
+        setPreviewFailed(false);
+      })
+      .catch(() => {
+        if (cancelled || previewRequest.current !== ticket) return;
+        setPreviewFailed(true);
+      });
+    return () => { cancelled = true; hold.release(); };
+  }, [proposalId, noAvailableTime, previewKey, previewReload]);
 
   /*
    * 재생성하면 proposalId가 바뀌고 회차도 바뀐다. 옛 스냅샷을 들고 있으면 새 항목의
@@ -238,10 +276,11 @@ export default function PlanDraftReview({
     () => items.filter((item) => !excluded.has(item.proposalItemId)),
     [items, excluded],
   );
-  const selectedMinutes = selectedItems.reduce((sum, item) => sum + (item.expectedMinutes || 0), 0);
-  const available = current?.estimatedAvailableMinutes ?? null;
-  const target = current?.targetMinutes ?? 0;
-  const buffer = available != null ? Math.max(0, available - selectedMinutes) : null;
+  const minutesOf = useCallback(
+    (item) => (minutesEdits.has(item.proposalItemId) ? minutesEdits.get(item.proposalItemId) : (item.expectedMinutes || 0)),
+    [minutesEdits],
+  );
+  const selectedMinutes = selectedItems.reduce((sum, item) => sum + minutesOf(item), 0);
   const allExcluded = items.length + adjustments.length > 0
     && items.every((i) => excluded.has(i.proposalItemId)) && adjustments.every((i) => excluded.has(i.proposalItemId));
   const longPlan = (current?.days ?? 0) > 7;
@@ -253,6 +292,10 @@ export default function PlanDraftReview({
   const reviewStateEnabled = Boolean(proposalId) && Boolean(planAPI?.saveReviewState)
     && (current?.proposal?.status ?? 'PROPOSED') === 'PROPOSED';
   const excludedKey = useMemo(() => [...excluded].sort((a, b) => a - b).join(','), [excluded]);
+  const minutesKey = useMemo(
+    () => [...minutesEdits.entries()].sort((a, b) => a[0] - b[0]).map(([id, m]) => `${id}:${m}`).join(','),
+    [minutesEdits],
+  );
   const firstReviewRender = useRef(true);
   useEffect(() => {
     if (firstReviewRender.current) { firstReviewRender.current = false; return undefined; }
@@ -267,6 +310,10 @@ export default function PlanDraftReview({
           version: reviewVersion.current,
           title: title.trim() || null,
           excludedProposalItemIds: excludedKey ? excludedKey.split(',').map(Number) : [],
+          // 고친 시간이 있을 때만 싣는다. 다시 만들 때 서버가 이 값을 새 초안으로 옮겨 준다.
+          ...(minutesEdits.size > 0
+            ? { editedItems: [...minutesEdits.entries()].map(([id, m]) => ({ proposalItemId: id, expectedMinutes: m })) }
+            : {}),
         });
         if (reviewSaveTicket.current === ticket && saved?.version != null) reviewVersion.current = saved.version;
       } catch (err) {
@@ -287,7 +334,29 @@ export default function PlanDraftReview({
     }, 700);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [excludedKey, title, proposalId, reviewStateEnabled]);
+  }, [excludedKey, minutesKey, title, proposalId, reviewStateEnabled]);
+
+  /** 예상 시간을 고친다. 5~600분 밖의 값과 원래 값은 편집으로 치지 않는다. */
+  const editMinutes = useCallback((item, value) => {
+    const minutes = Math.round(Number(value));
+    setMinutesEdits((prev) => {
+      const next = new Map(prev);
+      if (!Number.isFinite(minutes) || minutes < 5 || minutes > 600 || minutes === (item.expectedMinutes || 0)) {
+        next.delete(item.proposalItemId);
+      } else {
+        next.set(item.proposalItemId, minutes);
+      }
+      return next;
+    });
+  }, []);
+
+  /** 다시 만든 초안에서 부딪친 예상 시간. 기본은 내 값이고, 새 제안을 고르면 그 값으로 고친다. */
+  const chooseConflict = useCallback((conflict, choice) => {
+    setConflictChoice((prev) => ({ ...prev, [`${conflict.title}|${conflict.field}`]: choice }));
+    const item = (current?.proposal?.items ?? []).find((i) => i.title === conflict.title);
+    if (!item) return;
+    editMinutes(item, choice === 'suggested' ? conflict.suggested : conflict.yours);
+  }, [current, editMinutes]);
 
   const toggleItem = useCallback((proposalItemId) => {
     setExcluded((prev) => {
@@ -314,6 +383,7 @@ export default function PlanDraftReview({
       // 제외 체크는 이번 조각 목록에만 의미가 있다. 새 조각에 옛 id를 들고 있으면
       // 엉뚱한 항목이 빠진 채 확정된다.
       setExcluded(new Set());
+      setMinutesEdits(new Map());
       setPreview(null);
       if (note) setToast(note);
     } catch (err) {
@@ -388,7 +458,15 @@ export default function PlanDraftReview({
     setError(null);
     try {
       // 미리보기에서 승인한 시각을 그대로 싣는다. 배치되지 않은 항목은 원본(미배치) 그대로다.
-      const editedItems = placementsToEditedItems(selectedItems, placedById);
+      /*
+       * 시간을 고친 항목은 미리보기의 시각을 싣지 않는다 — 그 시각은 고치기 전 길이로 잡은 것이라 그대로 확정하면
+       * 끝 시각이 어긋난다. 고친 분량만 보내고, 시각은 확정 뒤 배치가 정한다.
+       */
+      const editedItems = [
+        ...placementsToEditedItems(selectedItems.filter((i) => !minutesEdits.has(i.proposalItemId)), placedById),
+        ...selectedItems.filter((i) => minutesEdits.has(i.proposalItemId))
+          .map((i) => ({ proposalItemId: i.proposalItemId, expectedMinutes: minutesEdits.get(i.proposalItemId) })),
+      ];
       const plan = await planAPI.confirm(proposalId, {
         excludedItemIds: [...excluded],
         editedItems: editedItems.length > 0 ? editedItems : null,
@@ -407,7 +485,10 @@ export default function PlanDraftReview({
         const ticket = previewRequest.current + 1;
         previewRequest.current = ticket;
         try {
-          const recomputed = await schedulePreviewAPI.recompute(proposalId, {});
+          const solving = Promise.resolve(schedulePreviewAPI.recompute(proposalId, {}));
+          // 같은 제안을 보는 다른 쪽(셸의 초안)도 새 결과를 받게 나눠 쓰는 자리를 갈아 끼운다.
+          replacePreview(proposalId, previewKey, solving);
+          const recomputed = await solving;
           if (previewRequest.current === ticket) setPreview(recomputed ?? null);
         } catch {
           if (previewRequest.current === ticket) setPreviewNote('정확한 시각 미리보기를 다시 계산하지 못했어요.');
@@ -447,17 +528,33 @@ export default function PlanDraftReview({
           <strong>{PLAN_INTENSITY_LABEL[current.intensity] ?? ''} 계획</strong>
           {' · '}기간 {formatDateKo(current.startDate)} ~ {formatDateKo(current.endDate)}
         </p>
-        <PlanSummary
-          available={available}
-          target={target}
+        <PlanDraftOverview
+          draft={current}
           selectedCount={selectedItems.length}
           selectedMinutes={selectedMinutes}
-          buffer={buffer}
-          confidence={current.availabilityConfidenceSummary}
+          projectTitles={projectTitles}
+          stale={stale || current?.freshness?.state === 'STALE'}
+          staleReasons={staleReasons.length > 0 ? staleReasons : (current?.freshness?.reasons ?? [])}
+          regenerating={remaking}
+          stageLabel={remakeStageLabel}
+          onRemake={onRemake}
+          outcome={outcome}
+          conflictChoice={conflictChoice}
+          onChooseConflict={chooseConflict}
+          scheduleLookupFailed={previewFailed}
+          onRetrySchedule={() => { setPreviewFailed(false); setPreviewReload((v) => v + 1); }}
+          onAnswerQuestion={onAnswerQuestion}
+          onReview={() => itemsRef.current?.scrollIntoView?.({ block: 'start' })}
+          onApply={handleConfirm}
+          applyDisabled={confirming || allExcluded || !!confirmBlockedReason || remaking}
+          applyLabel={confirming ? '적용하는 중…' : '적용'}
+          onContinueConsult={onContinueConsult}
+        />
+        <PlanSummary
+          confidence={previewFailed ? null : current.availabilityConfidenceSummary}
           cappedByItemLimit={current.targetCappedByItemLimit}
           uncoveredMinutes={current.uncoveredMinutes}
         />
-        <TimeGauge selectedMinutes={selectedMinutes} targetMinutes={target} intensity={current.intensity} />
         {/* 예전 서버가 이유를 보내면 그대로 보여준다. 새 서버는 예산을 직접 계산하므로 비어 있다. */}
         {current.targetMinutesReason && <p className="plan-draft-reason">{current.targetMinutesReason}</p>}
         {/*
@@ -534,6 +631,7 @@ export default function PlanDraftReview({
       </label>
       {reviewNote && <p className="hint plan-review-note" role="status">{reviewNote}</p>}
 
+      <span ref={itemsRef} />
       {previewNote && <p className="hint">{previewNote}</p>}
       {preview && longPlan && (
         <p className="hint">
@@ -585,6 +683,16 @@ export default function PlanDraftReview({
           classAtByCourse={classAtByCourse}
           onMarkKnown={markKnown}
           topicIdOf={topicIdOf}
+          minutesOf={minutesOf}
+          minutesEdits={minutesEdits}
+          minutesOpen={minutesOpen}
+          onToggleMinutes={(id) => setMinutesOpen((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          })}
+          onEditMinutes={editMinutes}
           onExcludeThisTime={onExcludeThisTime}
           detailAll={detailAll}
           detailOpen={detailOpen}
@@ -643,21 +751,18 @@ export default function PlanDraftReview({
 }
 
 /**
- * 시간 요약. 값이 없는(예전 서버) 필드는 그 조각만 뺀다 — 0으로 보여주지 않는다.
- * 목표보다 선택 합계가 적어도 경고하지 않는다.
+ * 요약 아래의 보조 설명. 실제 제안량·예산·포함 프로젝트는 PlanDraftOverview가 말한다.
+ *
+ * 예전의 목표 대비 게이지는 없앴다 — 예산은 상한이지 채울 양이 아니라서, 막대로 그리면 덜 채운 만큼이
+ * 모자란 것처럼 보인다.
  */
-function PlanSummary({
-  available, target, selectedCount, selectedMinutes, buffer, confidence, cappedByItemLimit, uncoveredMinutes,
-}) {
+function PlanSummary({ confidence, cappedByItemLimit, uncoveredMinutes }) {
   const lowConfidence = confidence != null && confidence.includes('기본 시간대');
+  if (!cappedByItemLimit && !confidence) return null;
   return (
     <div className="plan-summary">
-      <p className="plan-summary-line">
-        {available != null && <>추정 남는 시간 {formatMinutes(available)} · </>}
-        학습 목표 {formatMinutes(target)}
-      </p>
       {/*
-        한 번에 담을 수 있는 최대(항목 30개 × 120분)를 넘어 목표가 깎인 경우. 실패가 아니라
+        한 번에 담을 수 있는 최대(항목 30개 × 120분)를 넘어 예산이 깎인 경우. 잘못된 것이 아니라
         "이 기간을 한 계획에 다 담지는 못한다"는 사실이라 그대로 말한다.
       */}
       {cappedByItemLimit && (
@@ -667,10 +772,6 @@ function PlanSummary({
           주 단위로 나눠 만들면 더 담을 수 있어요.
         </p>
       )}
-      <p className="plan-summary-line">
-        선택한 항목 {selectedCount}개 · 합계 {formatMinutes(selectedMinutes)}
-        {buffer != null && <> · 여유/휴식 약 {formatMinutes(buffer)}</>}
-      </p>
       {confidence && (
         <p className={`hint${lowConfidence ? ' plan-summary-low' : ''}`}>
           {lowConfidence ? '남는 시간은 ' : ''}{confidence}
@@ -681,41 +782,17 @@ function PlanSummary({
   );
 }
 
-/**
- * 시간 예산 게이지.
- *
- * 목표를 넘어도 경고하지 않는다 — 색만 바꾸고 문구는 두지 않는다. "초과했습니다"는
- * 실패 프레이밍이고, 넘겨서 잡는 것도 사용자의 선택이다.
- */
-function TimeGauge({ selectedMinutes, targetMinutes, intensity }) {
-  const target = targetMinutes || 0;
-  const ratio = target > 0 ? Math.min(selectedMinutes / target, 1) : 0;
-  const over = target > 0 && selectedMinutes > target;
-
-  return (
-    <div className="plan-gauge">
-      <span className="plan-gauge-label">
-        {intensity ? `${PLAN_INTENSITY_LABEL[intensity]} · ` : ''}목표 {formatMinutes(target)}
-      </span>
-      <span className={`plan-gauge-bar${over ? ' is-over' : ''}`}>
-        <span className="plan-gauge-fill" style={{ width: `${ratio * 100}%` }} />
-      </span>
-      <span className="plan-gauge-value">
-        {formatMinutes(selectedMinutes)} / {formatMinutes(target)}
-      </span>
-    </div>
-  );
-}
-
 function PlanDraftGroup({
   group, excluded, collapsed, placedById, unplacedById, previewLoaded, onToggleCollapse, onToggleItem, onToggleGroup,
   treatmentByTopic, classAtByCourse, onMarkKnown, busy, provenance, provenanceLoading, provenanceError,
   onReloadProvenance, evidenceByItem, onOpenSource, projectTitles,
   onExcludeThisTime = null, detailAll = false, detailOpen = new Set(), onToggleDetail = null, topicIdOf = null,
+  minutesOf = (item) => item.expectedMinutes || 0, minutesEdits = new Map(), minutesOpen = new Set(),
+  onToggleMinutes = null, onEditMinutes = null,
 }) {
   const groupMinutes = group.items
     .filter((item) => !excluded.has(item.proposalItemId))
-    .reduce((sum, item) => sum + (item.expectedMinutes || 0), 0);
+    .reduce((sum, item) => sum + minutesOf(item), 0);
   const allOn = group.items.every((item) => !excluded.has(item.proposalItemId));
 
   return (
@@ -738,6 +815,7 @@ function PlanDraftGroup({
             const topicId = topicIdOf ? topicIdOf(item) : item.topicId;
             return (
             <li key={item.proposalItemId} className="plan-item">
+              {/* 할 일과 완료 기준이 먼저다. 분류·시간·출처는 그 다음에 읽는다. */}
               <label>
                 <input
                   type="checkbox"
@@ -745,31 +823,7 @@ function PlanDraftGroup({
                   onChange={() => onToggleItem(item.proposalItemId)}
                 />
                 <span className="plan-item-title">{item.title}</span>
-                <span className="plan-item-meta">
-                  {/*
-                    취급과 우선순위는 다른 축이다 — "꼭 하기 · 핵심만 보기"가 성립한다.
-                    한쪽으로 합치면 "중요한데 짧게 본다"를 말할 수 없다.
-                  */}
-                  {[
-                    PRIORITY_LABEL[item.priority],
-                    treatmentByTopic?.get(item.topicId) != null
-                      ? TREATMENT_LABEL[treatmentByTopic.get(item.topicId)]
-                      : null,
-                    ACTION_TYPE_LABEL[item.actionType],
-                    formatEstimate(item.expectedMinutes),
-                    formatDeadline(item.deadlineAt, classAtByCourse?.get(item.courseId), item.deadlineSource),
-                    /*
-                      targetDate가 아니라 placementType으로 판단한다. 제안의 targetDate는 서버가
-                      요청 기간의 시작일로 강제하는 값이라 미배치 항목에도 값이 들어 있다.
-                    */
-                    item.placementType === 'UNSCHEDULED' || !item.targetDate
-                      ? null
-                      : formatDateKo(item.targetDate),
-                  ].filter(Boolean).join(' · ')}
-                </span>
               </label>
-
-              {item.sourceLocator && <p className="plan-item-source">{item.sourceLocator}</p>}
 
               {item.doneCriteria && (
                 <p className="plan-item-done">
@@ -783,10 +837,52 @@ function PlanDraftGroup({
                 </p>
               )}
 
-              {item.reason && <p className="plan-item-reason">{item.reason}</p>}
-              {!item.doneCriteria && item.description && (
-                <p className="plan-item-reason">{item.description}</p>
+              <p className="plan-item-meta plan-item-meta-line">
+                {/*
+                  취급과 우선순위는 다른 축이다 — "꼭 하기 · 핵심만 보기"가 성립한다.
+                  한쪽으로 합치면 "중요한데 짧게 본다"를 말할 수 없다. 마감은 출처와 함께 아래에 따로 적는다.
+                */}
+                {[
+                  PRIORITY_LABEL[item.priority],
+                  treatmentByTopic?.get(item.topicId) != null
+                    ? TREATMENT_LABEL[treatmentByTopic.get(item.topicId)]
+                    : null,
+                  ACTION_TYPE_LABEL[item.actionType],
+                  formatEstimate(minutesOf(item)),
+                  minutesEdits.has(item.proposalItemId) ? '시간을 직접 고침' : null,
+                  /*
+                    targetDate가 아니라 placementType으로 판단한다. 제안의 targetDate는 서버가
+                    요청 기간의 시작일로 강제하는 값이라 미배치 항목에도 값이 들어 있다.
+                  */
+                  item.placementType === 'UNSCHEDULED' || !item.targetDate
+                    ? null
+                    : formatDateKo(item.targetDate),
+                ].filter(Boolean).join(' · ')}
+              </p>
+
+              {minutesOpen.has(item.proposalItemId) && onEditMinutes && (
+                <p className="plan-item-minutes">
+                  <label>
+                    예상 시간(분)
+                    <input type="number" min={5} max={600} step={5}
+                      aria-label={`${item.title} 예상 시간(분)`}
+                      defaultValue={minutesOf(item)}
+                      onChange={(e) => onEditMinutes(item, e.target.value)} />
+                  </label>
+                  {minutesEdits.has(item.proposalItemId) && (
+                    <span className="hint">시간을 바꿔서 정확한 시각은 확정한 뒤 다시 잡혀요.</span>
+                  )}
+                </p>
               )}
+
+              <ItemFacts
+                item={item}
+                evidence={evidenceByItem?.get(item.proposalItemId)}
+                provenance={provenance}
+                projectTitles={projectTitles}
+                classAt={classAtByCourse?.get(item.courseId)}
+                onMaterialOpenError={onReloadProvenance}
+              />
 
               <span className="plan-item-actions">
                 {topicId != null && onMarkKnown && (
@@ -807,6 +903,13 @@ function PlanDraftGroup({
                   <button type="button" className="btn-ghost btn-sm" disabled={busy}
                     onClick={() => onExcludeThisTime(topicId, item.title)}>
                     이번만 빼기
+                  </button>
+                )}
+                {onEditMinutes && onToggleMinutes && (
+                  <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                    aria-expanded={minutesOpen.has(item.proposalItemId)}
+                    onClick={() => onToggleMinutes(item.proposalItemId)}>
+                    시간 고치기
                   </button>
                 )}
                 {/* 항목 하나만 자세히. 전체 전환과 독립이고, 선택·시간·마감은 그대로다. */}
@@ -863,6 +966,65 @@ function PlanDraftGroup({
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * 항목이 어디서 나왔고(출처 라벨), 자료의 어디를 보면 되고(위치 + 파일 열기), 왜 중요하고, 마감이 무엇인가.
+ *
+ * ★ 위치로 곧장 데려가지 못한다 — 파일은 통째로 열리고 쪽·슬라이드·셀까지 이동시키지 않는다. 그래서
+ *   "이 위치를 열어서 확인해 주세요: p.3~4"라고 말한다. 갈 수 없는 곳을 가는 것처럼 적지 않는다.
+ * ★ 「꼭 하기」는 이유와 함께 보인다. 이유 없는 「꼭」은 사용자가 빼도 되는지 판단할 수 없다.
+ * ★ 마감은 출처와 함께 따로 적는다. AI가 잡은 목표 시각은 실제 마감이 아니다. 없으면 "마감 미확인"이다.
+ */
+function ItemFacts({ item, evidence, provenance, projectTitles, classAt, onMaterialOpenError }) {
+  const origin = ITEM_ORIGIN_LABEL[evidence?.origin ?? item.evidence?.origin ?? item.origin] ?? null;
+  const deadline = describeDeadline(item.deadlineAt, classAt, item.deadlineSource);
+  const must = item.priority === 'MUST';
+  // selectionReason: 서버가 근거 기록(evidence)에서 읽어 붙인, 모델이 쓴 선정 이유. reason은 조정 카드(줄임·이동)의 이유다.
+  const reason = item.priorityReason ?? item.selectionReason ?? item.reason ?? null;
+  // 이 항목이 실제로 인용한 자료 중 지금 열 수 있는 첫 파일. 제목이 아니라 근거의 id로 찾는다.
+  const material = evidence && provenance
+    ? buildEvidenceSummary(provenance, evidence, projectTitles).materials
+      .find((m) => m.materialId != null && m.openMode !== 'NONE')
+    : null;
+
+  return (
+    <>
+      {origin && <p className="plan-item-origin"><span className="plan-item-tag">{origin}</span></p>}
+
+      {item.sourceLocator && (
+        <p className="plan-item-source">
+          <span className="plan-item-done-label">이 위치를 열어서 확인해 주세요</span>
+          <span>{item.sourceLocator}</span>
+          {material && (
+            <MaterialFileLink
+              materialId={material.materialId}
+              filename={material.currentFilename ?? material.filename}
+              contentType={material.contentType}
+              onError={onMaterialOpenError}
+            />
+          )}
+        </p>
+      )}
+
+      {must ? (
+        <p className="plan-item-reason">
+          <span className="plan-item-done-label">꼭 하는 이유</span>
+          {reason ?? '이유가 기록되지 않았어요. 필요 없어 보이면 빼도 괜찮아요.'}
+        </p>
+      ) : (
+        reason && <p className="plan-item-reason">{reason}</p>
+      )}
+      {!item.doneCriteria && item.description && (
+        <p className="plan-item-reason">{item.description}</p>
+      )}
+
+      <p className="plan-item-deadline">
+        <span className="plan-item-done-label">마감</span>
+        {deadline ? `${deadline.when} · ${deadline.sourceLabel}` : '마감 미확인'}
+      </p>
+    </>
   );
 }
 

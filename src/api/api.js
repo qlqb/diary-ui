@@ -632,6 +632,14 @@ export const proposalAPI = {
         return request(`/ai/proposals/${proposalId}`);
     },
 
+    /**
+     * 이 제안을 버린다. 화면에서 지우는 것만으로는 부족하다 — 열린 초안이 있는지는 서버가 들고 있어서,
+     * 대화를 다시 열면 되살아난다. 이미 버렸으면 그대로 204, 이미 적용했으면 409다.
+     */
+    dismiss: (proposalId) => {
+        return request(`/ai/proposals/${proposalId}/dismiss`, { method: 'POST' });
+    },
+
     /** 편집/제외 항목을 담아 전체 적용. editedItems/excludedItemIds에 없는 항목은 원본 그대로 적용된다 */
     apply: (proposalId, editedItems = [], excludedItemIds = []) => {
         return request(`/ai/proposals/${proposalId}/apply`, {
@@ -1507,3 +1515,46 @@ export const topicChangeProposalAPI = {
         }),
     dismiss: (proposalId) => request(`/topic-change-proposals/${proposalId}/dismiss`, { method: 'POST' }),
 };
+
+// ===== consult-workspace (agent B) =====
+/**
+ * 프로젝트 전체 학습 지도. 서버가 아직 이 경로를 모르면 404가 오고, 화면이 기존 트리·변경안·자료
+ * 목록으로 같은 모양을 직접 조립한다(ProjectLearningMap의 fallback).
+ */
+export const learningMapAPI = {
+    get: (courseId) => request(`/courses/${courseId}/learning-map`),
+};
+
+/** 점검 활동(선택). 자기평가로 저장된다 — 완료·숙달이 아니다. 204. */
+export const selfCheckAPI = {
+    submit: (courseId, items) =>
+        request(`/courses/${courseId}/self-checks`, {
+            method: 'POST',
+            body: JSON.stringify({ items }),
+        }),
+};
+
+/*
+ * "AI가 이해한 내 상황"의 변경 경로. contextAPI 본체는 위에서 조회 전용으로 선언돼 있어서
+ * 여기서 메서드만 덧붙인다 — 이미 누가 붙여 뒀으면 덮어쓰지 않는다.
+ * 세 응답 모두 staleDraftIds(영향받는 열린 초안)를 실어 줄 수 있다. DELETE가 204면 null이 온다.
+ */
+contextAPI.update = contextAPI.update ?? ((contextId, content) =>
+    request(`/contexts/${contextId}`, { method: 'PATCH', body: JSON.stringify({ content }) }));
+contextAPI.confirm = contextAPI.confirm ?? ((contextId) =>
+    request(`/contexts/${contextId}/confirm`, { method: 'POST' }));
+contextAPI.remove = contextAPI.remove ?? ((contextId) =>
+    request(`/contexts/${contextId}`, { method: 'DELETE' }));
+// ===== /consult-workspace (agent B) =====
+
+// ===== consult-workspace (agent A) =====
+/**
+ * 상담 화면의 "내가 이해한 내용" 고치기. 경로는 contextAPI와 같지만(PATCH /contexts/{id}) 본문을
+ * 객체({ content })로 받는다 — 상담 패널은 응답의 staleDraftIds(영향받는 열린 초안)를 읽어 초안을
+ * "갱신 필요"로 표시해야 해서, 호출 모양을 이쪽에서 고정해 둔다.
+ */
+export const consultContextAPI = {
+    update: (contextId, { content }) =>
+        request(`/contexts/${contextId}`, { method: 'PATCH', body: JSON.stringify({ content }) }),
+};
+// ===== /consult-workspace (agent A) =====

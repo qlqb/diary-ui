@@ -99,13 +99,13 @@ beforeEach(() => {
 });
 
 describe('판단 근거 표시', () => {
-  it('목표와 과목 순서를 보여준다 — 왜 이 순서인지 모르면 고칠 수도 없다', async () => {
+  it('목표와 프로젝트 순서를 보여준다 — 왜 이 순서인지 모르면 고칠 수도 없다', async () => {
     await openDraft();
 
     expect(await screen.findByText('다음 주 수업을 알아들을 정도로 따라잡기')).toBeInTheDocument();
     expect(screen.getByText('수업 전에 필요한 것만 고른다')).toBeInTheDocument();
-    // 과목 순서는 판단 영역 안에서 찾는다 — 같은 이름이 조각 그룹 머리에도 있다.
-    const order = screen.getByText('과목 순서').closest('div');
+    // 프로젝트 순서는 판단 영역 안에서 찾는다 — 같은 이름이 조각 그룹 머리에도 있다.
+    const order = screen.getByText('프로젝트 순서').closest('div');
     expect(within(order).getByText('자료구조')).toBeInTheDocument();
     expect(within(order).getByText('화요일 수업 전까지')).toBeInTheDocument();
     expect(within(order).getByText('빅데이터분석')).toBeInTheDocument();
@@ -141,9 +141,9 @@ describe('판단 근거 표시', () => {
   it('취급과 우선순위를 함께, 그러나 따로 보여준다', async () => {
     await openDraft();
 
-    // "꼭 하기 · 충분히 보기 · 문제 풀기 · 약 45분 · 화요일 수업 전"
-    expect(screen.getByText(/꼭 하기 · 충분히 보기 · 문제 풀기 · 약 45분 · 화요일 수업 전/))
-      .toBeInTheDocument();
+    // "꼭 하기 · 충분히 보기 · 문제 풀기 · 약 45분" — 마감은 출처와 함께 따로 적는다.
+    expect(screen.getByText(/꼭 하기 · 충분히 보기 · 문제 풀기 · 약 45분/)).toBeInTheDocument();
+    expect(screen.getAllByText(/화요일 수업 전 \(9\/8 14:00\) · 수업 시각/).length).toBeGreaterThan(0);
     expect(screen.getByText(/권장 · 핵심만 보기 · 읽기 · 약 30분/)).toBeInTheDocument();
   });
 });

@@ -9,6 +9,8 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, CircleSlash, MinusCircle } from 'lucide-react';
 import { executionItemAPI } from '../api/api.js';
 import { formatDateKo, formatMinutes, shiftDate, todayString } from '../lib/datetime.js';
+import { BLOCKER_LABEL } from '../lib/recordLabels.js';
+import '../styles/records.css';
 
 const RANGES = [
   { key: 7, label: '최근 7일' },
@@ -20,6 +22,11 @@ const OUTCOME = {
   PARTIAL: { label: '일부 했음', icon: MinusCircle, className: 'outcome-partial' },
   NOT_DONE: { label: '못 했음', icon: CircleSlash, className: 'outcome-none' },
 };
+
+/** 계획 시간. 서버 필드 이름이 아직 확정 전이라 있을 법한 둘을 본다. 없으면 표시하지 않는다. */
+function plannedMinutesOf(record) {
+  return record.plannedMinutes ?? record.estimatedMinutes ?? null;
+}
 
 export default function RecordView({ projectTitles, refreshToken }) {
   const [days, setDays] = useState(7);
@@ -53,7 +60,7 @@ export default function RecordView({ projectTitles, refreshToken }) {
           <h1 className="view-title">기록</h1>
           <p className="view-sub">
             실제로 무슨 일이 있었을까? · {records.length}건
-            {totalMinutes > 0 && ` · 기록된 시간 ${formatMinutes(totalMinutes)}`}
+            {totalMinutes > 0 && ` · 내가 적은 시간 ${formatMinutes(totalMinutes)}`}
           </p>
         </div>
         <div className="week-nav">
@@ -97,7 +104,20 @@ export default function RecordView({ projectTitles, refreshToken }) {
                       {record.completionPercent != null && record.outcome === 'PARTIAL' && (
                         <span className="chip">{record.completionPercent}%</span>
                       )}
-                      {record.actualMinutes != null && <span className="chip">{formatMinutes(record.actualMinutes)}</span>}
+                      {/*
+                        세 가지를 섞지 않는다: 계획 시간(예상) / 내가 적은 시간 / 시간 미기록.
+                        적지 않았다고 계획 시간을 대신 보여 주면, 계획대로 했다는 거짓 기록이 된다.
+                        계획 시간은 서버가 실어 줄 때만 보인다.
+                      */}
+                      {plannedMinutesOf(record) != null && (
+                        <span className="chip">계획 시간 {formatMinutes(plannedMinutesOf(record))}</span>
+                      )}
+                      {record.actualMinutes != null
+                        ? <span className="chip">내가 적은 시간 {formatMinutes(record.actualMinutes)}</span>
+                        : <span className="chip record-chip-missing">시간 미기록</span>}
+                      {BLOCKER_LABEL[record.blockerKind] && (
+                        <span className="chip record-chip-blocker">걸린 점: {BLOCKER_LABEL[record.blockerKind]}</span>
+                      )}
                       {record.courseId && projectTitles?.[record.courseId] && (
                         <span className="chip chip-project">{projectTitles[record.courseId]}</span>
                       )}

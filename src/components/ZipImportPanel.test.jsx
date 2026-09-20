@@ -181,4 +181,43 @@ describe('압축 가져오기 패널', () => {
     // 목록과 바닥글이 형제다 — 목록이 길어져도 바닥글은 패널 안에 남는다.
     expect(within(foot).getByRole('button', { name: /2개 가져오기/ })).toBeInTheDocument();
   });
+  it('성공한 파일과 실패·미지원 파일을 함께 보여 주고, 미지원은 가져오기 전체의 오류로 다루지 않는다', () => {
+    render(<ZipImportPanel onChanged={vi.fn()} onClose={vi.fn()} zipImport={{
+      ...READY,
+      status: 'PARTIAL',
+      doneCount: 1,
+      failedCount: 1,
+      entries: [
+        { ...READY.entries[0], status: 'DONE', materialId: 77 },
+        { ...READY.entries[1], status: 'FAILED', errorMessage: '파일이 손상됐어요' },
+        READY.entries[2], READY.entries[3],
+      ],
+    }} />);
+
+    expect(screen.getByText('1개 올림 · 1개 실패 · 2개 미지원')).toBeInTheDocument();
+    expect(screen.getByText('가져올 수 있는 파일 1개')).toBeInTheDocument();
+    expect(screen.getByText(/가져오지 못한 파일 3개/)).toBeInTheDocument();
+    // 성공한 항목도 같은 패널에 그대로 있다.
+    expect(screen.getByText('자료 등록 완료')).toBeInTheDocument();
+    // 안 된 파일마다 영향이 붙는다.
+    expect(screen.getAllByText('이 파일 내용은 상담·계획에 쓰이지 않아요')).toHaveLength(3);
+  });
+
+  it('미지원만 있고 실패가 없으면 완료로 끝난다 — 오류 문구가 없다', () => {
+    const { container } = render(<ZipImportPanel onChanged={vi.fn()} onClose={vi.fn()} zipImport={{
+      ...READY,
+      status: 'COMPLETED',
+      doneCount: 2,
+      entries: [
+        { ...READY.entries[0], status: 'DONE', materialId: 77 },
+        { ...READY.entries[1], status: 'DONE', materialId: 78 },
+        READY.entries[2], READY.entries[3],
+      ],
+    }} />);
+
+    expect(screen.getByText(/자료 2개 등록 완료/)).toBeInTheDocument();
+    expect(screen.getByText('2개 올림 · 0개 실패 · 2개 미지원')).toBeInTheDocument();
+    expect(container.querySelector('.view-error')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /실패한/ })).not.toBeInTheDocument();
+  });
 });

@@ -10,9 +10,11 @@
  * 이 훅은 apply()가 호출되기 전까지 어떤 서버 상태도 바꾸지 않는다.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { proposalAPI, schedulePreviewAPI } from '../api/api.js';
 import { toHHmm } from '../lib/datetime.js';
+import { acquirePreview, previewInputKey, storedOrRecompute } from './previewSolveCache.js';
+import { dismissDraft } from './dismissedDrafts.js';
 
 /** 서버 제안 항목 -> 화면에서 다루는 초안 카드. */
 function toCard(item) {
@@ -48,6 +50,16 @@ export function useProposalDraft({ onApplied } = {}) {
   const [placing, setPlacing] = useState(false);
   // 자동 배치 요청이 겹치지 않게 한다. state는 비동기라 클릭이 겹치는 순간을 못 잡는다.
   const placingRef = useRef(false);
+  /*
+   * 배치 미리보기는 계획 검토 화면(PlanDraftReview)과 나눠 쓴다(previewSolveCache). 초안이 열려 있는 동안
+   * 이 훅이 그 결과를 쥐고 있어서, 같은 제안을 검토 화면이 뒤늦게 열어도 같은 입력을 다시 풀지 않는다.
+   */
+  const previewHold = useRef(null);
+  const releasePreview = useCallback(() => {
+    previewHold.current?.release();
+    previewHold.current = null;
+  }, []);
+  useEffect(() => releasePreview, [releasePreview]);
 
   /**
    * 날짜·시각이 정해지지 않은(UNSCHEDULED) 후보가 있으면 서버에 배치를 계산시킨다.
@@ -61,8 +73,11 @@ export function useProposalDraft({ onApplied } = {}) {
     placingRef.current = true;
     setPlacing(true);
     try {
-      const stored = await schedulePreviewAPI.get(proposalId);
-      const preview = stored ?? (await schedulePreviewAPI.recompute(proposalId, {}));
+      releasePreview();
+      const hold = acquirePreview(proposalId, previewInputKey(proposalId, cards),
+        storedOrRecompute(schedulePreviewAPI, proposalId));
+      previewHold.current = hold;
+      const preview = await hold.promise;
       const placedById = new Map((preview?.placedItems ?? []).map((p) => [p.proposalItemId, p]));
       const unplacedById = new Map((preview?.unplacedItems ?? []).map((p) => [p.proposalItemId, p]));
 
@@ -89,7 +104,7 @@ export function useProposalDraft({ onApplied } = {}) {
       placingRef.current = false;
       setPlacing(false);
     }
-  }, []);
+  }, [releasePreview]);
 
   /** AI가 새 제안을 만들었을 때(SSE) 또는 저장된 제안을 복원할 때 호출한다. */
   const openDraft = useCallback(async (proposal, meta = {}) => {
@@ -118,10 +133,22 @@ export function useProposalDraft({ onApplied } = {}) {
     }));
   }, []);
 
+  /**
+   * 초안을 버린다. 화면에서 지우고 **서버에도 버렸다고 쓴다**(status DISMISSED).
+   *
+   * 화면에서만 지우면 서버에는 PROPOSED가 그대로 남고, 탭을 옮기거나 새로고침해 대화를 다시 읽는 순간
+   * 같은 초안이 되살아난다 — 사용자에게는 "버렸는데 다시 나온다"로 보인다. 열린 초안이 있는지는 서버가
+   * 들고 있으므로, 그 상태를 바꾸는 행동(만들기·적용·다시 만들기·버리기)은 모두 서버에 쓴다.
+   *
+   * 서버에 쓰지 못해도 이 세션에서는 되살리지 않는다(dismissedDrafts). 새로고침하면 서버 상태가 이긴다.
+   */
   const discardDraft = useCallback(() => {
+    const proposalId = draft?.proposalId ?? null;
+    releasePreview();
     setDraft(null);
     setApplyError(null);
-  }, []);
+    dismissDraft(proposalId);
+  }, [draft, releasePreview]);
 
   const apply = useCallback(async () => {
     if (!draft || applying) return false;
@@ -165,6 +192,7 @@ export function useProposalDraft({ onApplied } = {}) {
     setApplyError(null);
     try {
       await proposalAPI.apply(draft.proposalId, editedItems, excludedItemIds);
+      releasePreview();
       setDraft(null);
       await onApplied?.();
       return true;
@@ -174,7 +202,7 @@ export function useProposalDraft({ onApplied } = {}) {
     } finally {
       setApplying(false);
     }
-  }, [draft, applying, onApplied]);
+  }, [draft, applying, onApplied, releasePreview]);
 
   return { draft, openDraft, patchCard, toggleExclude, discardDraft, apply, applying, applyError, placing };
 }

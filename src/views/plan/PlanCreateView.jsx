@@ -52,6 +52,14 @@ export default function PlanCreateView({
   projectTitles = {}, scopeCourseId = null, onClearScope, onConfirmed, onCancel,
   initialDraft = null, onInitialDraftCleared, onOpenSchedule, onOpenSource,
   requestedMaterials = [], onClearRequestedMaterial,
+  /** 상담 작업 공간으로 돌아가기. 이 화면은 "직접 조건 정해서 만들기"이고, 기본 진입은 상담이다. */
+  onOpenConsult = null,
+  /** AI 입력창을 채워 준다(열린 질문에 [답하기], [계속 상담]). 바로 보내지는 않는다. */
+  onAsk = null,
+  /** 입력창을 채우지 않고 대화로 초점만 옮긴다([계속 상담]). 쓰던 글은 그대로다. */
+  onFocusChat = null,
+  /** 상담 초안을 버렸다고 셸에 알린다(서버에도 DISMISSED로 쓴다). */
+  onDiscardDraft = null,
 }) {
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const presets = useMemo(() => periodPresets(todayIso), [todayIso]);
@@ -370,6 +378,9 @@ export default function PlanCreateView({
             ? `${projectTitles[headerCourseId]} 계획 만들기`
             : ' 계획 만들기'}
         </h1>
+        {onOpenConsult && (
+          <button type="button" className="btn-ghost btn-sm" onClick={onOpenConsult}>상담으로 계획하기</button>
+        )}
         {onCancel && (
           <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>그만두기</button>
         )}
@@ -527,7 +538,16 @@ export default function PlanCreateView({
           projectTitles={projectTitles}
           todayIso={todayIso}
           onConfirmed={(plan) => { rememberDraft(null); if (initialDraft) onInitialDraftCleared?.(); onConfirmed?.(plan); }}
-          onDiscard={() => clearDraft({ keepFlow: true })}
+          /*
+           * 상담에서 온 초안의 [이 초안 버리기]는 서버에도 버렸다고 써야 한다 — 화면에서만 지우면
+           * 대화를 다시 읽을 때 되살아난다. 직접 만들기의 [다시 만들기]는 조건을 고쳐 새로 만드는
+           * 길이라 서버 초안을 버리지 않는다(곧 새 초안이 그것을 대체한다).
+           */
+          onDiscard={() => {
+            const discarded = draftRef.current?.proposalId ?? null;
+            clearDraft({ keepFlow: true });
+            if (fromConversation && discarded != null) onDiscardDraft?.(discarded);
+          }}
           discardLabel={fromConversation ? '이 초안 버리기' : '다시 만들기'}
           onOpenSchedule={onOpenSchedule}
           onOpenSource={onOpenSource}
@@ -540,6 +560,12 @@ export default function PlanCreateView({
           confirmBlockedReason={blocked ? '방금 표시한 내용이 초안에 반영될 때까지 확정할 수 없어요'
             : (loading ? '초안을 다시 만드는 중이에요' : null)}
           onChooseRequestedMaterial={redraftable ? chooseRequestedMaterial : null}
+          /* 최신 답변을 반영하기 전 버전이면(서버의 freshness) 같은 조건으로 다시 만들 수 있게 한다. */
+          onRemake={redraftable ? () => redraft({}) : null}
+          remaking={loading}
+          remakeStageLabel={stageLabel}
+          onAnswerQuestion={onAsk ? (question) => onAsk(`「${question}」에 답할게요: `) : null}
+          onContinueConsult={onFocusChat}
         />
       )}
     </section>
@@ -549,8 +575,8 @@ export default function PlanCreateView({
 /**
  * 강도 선택. 평소에는 한 줄로 접혀 있고 [강도 바꾸기]를 눌러야 펼쳐진다.
  *
- * 강도는 "남는 시간의 몇 %를 공부로 채울지"다. 초안이 있으면 그 기간의 실제 숫자
- * (추정 남는 시간 중 학습 목표)를 함께 보여준다 — 라벨만으로는 `집중`이 얼마나 집중인지 모른다.
+ * 강도는 "남는 시간의 몇 %까지를 공부 예산(상한)으로 잡을지"다. 초안이 있으면 그 기간의 실제 숫자
+ * (추정 남는 시간 중 예산)를 함께 보여준다 — 라벨만으로는 `집중`이 얼마나 집중인지 모른다.
  */
 function IntensityPicker({ intensity, draft, open, onToggle, onSelect, firstPlan }) {
   const shown = intensity ?? draft?.intensity;
@@ -574,8 +600,8 @@ function IntensityPicker({ intensity, draft, open, onToggle, onSelect, firstPlan
             <>
               {' · '}
               {draft.estimatedAvailableMinutes != null
-                ? `남는 시간 약 ${formatMinutes(draft.estimatedAvailableMinutes)} 중 ${formatMinutes(draft.targetMinutes)}`
-                : `약 ${formatMinutes(draft.targetMinutes)}`}
+                ? `남는 시간 약 ${formatMinutes(draft.estimatedAvailableMinutes)} 중 예산(상한) ${formatMinutes(draft.targetMinutes)}`
+                : `예산(상한) 약 ${formatMinutes(draft.targetMinutes)}`}
             </>
           )}
         </span>
@@ -599,7 +625,7 @@ function IntensityPicker({ intensity, draft, open, onToggle, onSelect, firstPlan
               <span className="plan-intensity-hint">{PLAN_INTENSITY_HINT[value]}</span>
             </label>
           ))}
-          <p className="hint">이번 기간의 남는 시간 중 어느 정도를 공부로 채울까요? 나중에 조정할 수 있어요.</p>
+          <p className="hint">이번 기간의 남는 시간 중 어느 정도까지 공부에 쓸까요? 상한이라 다 채우지 않아도 되고, 나중에 조정할 수 있어요.</p>
           {firstPlan && <p className="hint">처음이라면 보통으로 그냥 넘어가도 괜찮아요.</p>}
         </div>
       )}

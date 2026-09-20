@@ -110,7 +110,8 @@ describe('구조 분석 초안 복원', () => {
 
     renderWorkspace();
 
-    expect(await screen.findByRole('button', { name: /구조 분석 결과/ })).toBeInTheDocument();
+    // 역할 조회는 jsdom에서 느리다 — 전체 스위트(49개 파일 병렬)에서는 기본 1초를 넘긴다. 동작이 아니라 대기 시간 문제다.
+    expect(await screen.findByRole('button', { name: /구조 분석 결과/ }, { timeout: 8000 })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '구조 분석' })).not.toBeInTheDocument();
   });
 

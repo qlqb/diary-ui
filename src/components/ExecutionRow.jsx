@@ -15,6 +15,8 @@ import {
   ceilToStep, clampToDay, formatDateShort, formatMinutes, hhmmOf, minutesOf, nowMinutes, shiftDate, todayString,
 } from '../lib/datetime.js';
 import ExecutionItemEvidence from '../views/plan/ExecutionItemEvidence.jsx';
+import { BLOCKER_OPTIONS } from '../lib/recordLabels.js';
+import '../styles/records.css';
 
 const PRIORITY_LABEL = { MUST: '꼭', SHOULD: '하면 좋음', OPTIONAL: '여유 있으면' };
 const STATUS_LABEL = { PLANNED: '', DONE: '완료', HOLD: '보류', CANCELLED: '취소', PARTIAL: '일부' };
@@ -65,7 +67,7 @@ const VERSION_CONFLICT = 'E409_004';
 /**
  * 실제 소요시간 입력을 읽는다.
  *
- * 빈 값은 0이 아니라 "안 쟀다"(null)이다. 관찰 데이터에 계획값이나 추론값을 채우지 않는
+ * 빈 값은 0이 아니라 "안 적었다"(null)이다. 이 값은 측정값이 아니라 사용자가 적은 값이다. 관찰 데이터에 계획값이나 추론값을 채우지 않는
  * 것이 이 입력의 전부이므로, 비어 있음과 0을 섞으면 나중에 "0분 만에 끝냈다"와
  * "재지 않았다"를 구분할 수 없게 된다.
  *
@@ -82,6 +84,40 @@ function readMinutes(raw) {
 /** 값이 있을 때만 actualMinutes를 싣는다 — 없으면 필드 자체를 보내지 않는다. */
 function withActualMinutes(base, input) {
   return input.value == null ? base : { ...base, actualMinutes: input.value };
+}
+
+/** 고른 것만 싣는다. 안 골랐으면 필드를 보내지 않는다 — null을 보내 "이유 없음"으로 단정하지 않는다. */
+function withBlocker(base, blockerKind, note) {
+  const next = { ...base };
+  if (blockerKind) next.blockerKind = blockerKind;
+  const text = String(note ?? '').trim();
+  if (text) next.note = text;
+  return next;
+}
+
+/**
+ * 걸린 점 고르기. 토글 버튼 묶음이다 — 다시 누르면 풀린다(필수가 아니므로 "선택 안 함"으로 돌아갈 길이 있어야 한다).
+ * 선택 여부는 색이 아니라 aria-pressed와 체크 표시로 전한다.
+ */
+function BlockerPicker({ value, onChange, note, onNoteChange, disabled }) {
+  return (
+    <fieldset className="exec-blocker" disabled={disabled}>
+      <legend className="exec-blocker-legend">걸린 점이 있었다면 (선택)</legend>
+      <div className="exec-blocker-options">
+        {BLOCKER_OPTIONS.map((o) => (
+          <button key={o.kind} type="button"
+            className={`btn-ghost btn-sm exec-blocker-option${value === o.kind ? ' is-active' : ''}`}
+            aria-pressed={value === o.kind}
+            onClick={() => onChange(value === o.kind ? null : o.kind)}>
+            {value === o.kind && <Check size={12} aria-hidden="true" />} {o.label}
+          </button>
+        ))}
+      </div>
+      <input type="text" className="exec-blocker-note" aria-label="메모 (선택)" placeholder="메모 (선택)"
+        maxLength={300} value={note} onChange={(e) => onNoteChange(e.target.value)} />
+      <p className="exec-blocker-hint">고르지 않아도 기록돼요. 다음 상담에서 분량을 다시 잡을 때만 참고해요.</p>
+    </fieldset>
+  );
 }
 
 /**
@@ -140,6 +176,10 @@ export default function ExecutionRow({
   const [completeMinutes, setCompleteMinutes] = useState('');
   const [partialMinutes, setPartialMinutes] = useState('');
   const [trayError, setTrayError] = useState(null);
+  /* 걸린 점·메모. 완료에서는 접혀 있고(대부분 필요 없다), 일부 수행에서는 바로 보인다. */
+  const [blockerKind, setBlockerKind] = useState(null);
+  const [blockerNote, setBlockerNote] = useState('');
+  const [completeBlockerOpen, setCompleteBlockerOpen] = useState(false);
 
   const isDone = item.status === 'DONE';
   const isHold = item.status === 'HOLD';
@@ -184,6 +224,9 @@ export default function ExecutionRow({
     setTray(null);
     setCompleteMinutes('');
     setPartialMinutes('');
+    setBlockerKind(null);
+    setBlockerNote('');
+    setCompleteBlockerOpen(false);
     return true;
   };
 
@@ -332,17 +375,28 @@ export default function ExecutionRow({
                 <span>분</span>
               </label>
               <button type="button" className="btn-primary btn-sm" disabled={busy || !completeInput.valid}
-                onClick={() => run('complete', withActualMinutes({}, completeInput))}>
+                onClick={() => run('complete', withBlocker(withActualMinutes({}, completeInput), blockerKind, blockerNote))}>
                 <Check size={13} /> 완료 기록
               </button>
-              {/* 모른다고 하면 그대로 미측정이다. 예상값을 대신 채워 넣지 않는다. */}
+              {/* 모른다고 하면 그대로 "시간 미기록"이다. 예상값을 대신 채워 넣지 않는다. */}
               <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                onClick={() => run('complete', {})}>
+                onClick={() => run('complete', withBlocker({}, blockerKind, blockerNote))}>
                 모르겠어요
               </button>
               <button type="button" className="btn-ghost btn-sm" onClick={closeTray} aria-label="완료 기록 취소">
                 <X size={13} />
               </button>
+              <p className="exec-tray-note">내가 적은 시간으로 남아요. 비워 두면 &quot;시간 미기록&quot;이에요.</p>
+              {/* 끝냈어도 힘들었던 점은 있을 수 있다. 다만 대부분은 필요 없으니 접어 둔다. */}
+              {completeBlockerOpen ? (
+                <BlockerPicker value={blockerKind} onChange={setBlockerKind}
+                  note={blockerNote} onNoteChange={setBlockerNote} disabled={busy} />
+              ) : (
+                <button type="button" className="btn-ghost btn-sm" aria-expanded={false}
+                  onClick={() => setCompleteBlockerOpen(true)}>
+                  걸린 점 남기기 (선택)
+                </button>
+              )}
               {trayError && <p className="exec-tray-error">{trayError}</p>}
             </div>
           )}
@@ -359,7 +413,7 @@ export default function ExecutionRow({
               </label>
               {/* 시간은 곁들이는 값이다. 없다고 PARTIAL 기록 자체를 막지 않는다. */}
               <label className="inline-field">
-                <span>실제 시간</span>
+                <span>내가 적은 시간</span>
                 <input type="number" min="1" step="1" inputMode="numeric"
                   aria-label="실제 걸린 시간(분)"
                   value={partialMinutes}
@@ -367,16 +421,19 @@ export default function ExecutionRow({
                 <span>분</span>
               </label>
               <button type="button" className="btn-primary btn-sm" disabled={busy || !partialInput.valid}
-                onClick={() => run('partial', withActualMinutes({ completionPercent: partialPercent }, partialInput))}>
+                onClick={() => run('partial', withBlocker(
+                  withActualMinutes({ completionPercent: partialPercent }, partialInput), blockerKind, blockerNote))}>
                 <Check size={13} /> 기록
               </button>
               <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                onClick={() => run('partial', { completionPercent: partialPercent })}>
+                onClick={() => run('partial', withBlocker({ completionPercent: partialPercent }, blockerKind, blockerNote))}>
                 시간은 모르겠어요
               </button>
               <button type="button" className="btn-ghost btn-sm" onClick={closeTray} aria-label="일부 수행 기록 취소">
                 <X size={13} />
               </button>
+              <BlockerPicker value={blockerKind} onChange={setBlockerKind}
+                note={blockerNote} onNoteChange={setBlockerNote} disabled={busy} />
               {trayError && <p className="exec-tray-error">{trayError}</p>}
             </div>
           )}

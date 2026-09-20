@@ -15,18 +15,32 @@
  * 게 적용된 것인지"가 흐려진다. 일정 화면 하나에서 확정된 배치와 적용 전 초안을 함께 본다.
  * "학습"도 최상위에서 사라졌다 — 학습은 별도 활동이 아니라 프로젝트의 한 종류다.
  *
+ * 계획 탭의 기본 화면은 "상담으로 계획하기"다(왼쪽 범위·자료 · 가운데 대화 · 오른쪽 계획 방향/초안). 가운데 대화는
+ * 새로 만든 것이 아니라 늘 있던 AI 패널 그 하나다 — 자리만 가운데로 옮긴다. 그래서 오른쪽 좁은 AI 칸과 작업 공간이
+ * 같은 대화·같은 초안을 보고, 같은 질문이나 서로 다른 초안이 두 군데에 뜨지 않는다. 조건을 직접 정해 만드는 기존
+ * 화면은 "직접 조건 정해서 만들기"로 그대로 남아 있다.
+ *
  * AI 초안(제안) 상태는 이 셸이 소유한다. AI 패널은 초안을 만들기만 하고, 실제로 보여주고
  * 고치고 적용하는 일은 각 화면이 한다 — "AI에서 생각하고, 결과는 실제 화면에 나타난다".
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sparkles, CalendarCheck2, FolderKanban, CalendarDays, CalendarRange, NotebookPen, FileText,
-  LogOut, PanelRightOpen,
+  LogOut, PanelRightOpen, BrainCircuit,
 } from 'lucide-react';
 
 import AiPanel from '../ai/AiPanel.jsx';
 import { useProposalDraft } from '../ai/useProposalDraft.js';
+import { useConsultDraft } from '../ai/useConsultDraft.js';
+import { dismissDraft } from '../ai/dismissedDrafts.js';
+import { useViewportLayout } from '../ai/useViewportLayout.js';
+import ConsultPaneFrame from '../views/plan/ConsultPaneFrame.jsx';
+import ConsultScopePane from '../views/plan/ConsultScopePane.jsx';
+import ConsultPlanPane from '../views/plan/ConsultPlanPane.jsx';
+import { draftCoverageNotice } from '../lib/planLabels.js';
+import { formatMinutes } from '../lib/planTime.js';
+import '../styles/consult.css';
 import ApplyBar from '../components/ApplyBar.jsx';
 import TodayView from '../views/TodayView.jsx';
 import MaterialsView from '../views/materials/MaterialsView.jsx';
@@ -36,7 +50,8 @@ import ScheduleView from '../views/schedule/ScheduleView.jsx';
 import PlanCreateView from '../views/plan/PlanCreateView.jsx';
 import PlanView from '../views/plan/PlanView.jsx';
 import RecordView from '../views/RecordView.jsx';
-import { commitmentAPI, courseAPI, executionItemAPI, routineAPI } from '../api/api.js';
+import MemoryView from '../views/memory/MemoryView.jsx';
+import { commitmentAPI, courseAPI, executionItemAPI, planAPI, routineAPI } from '../api/api.js';
 import useUndoDelete from './useUndoDelete.js';
 import UndoToast from '../components/UndoToast.jsx';
 import { todayString } from '../lib/datetime.js';
@@ -55,15 +70,33 @@ const TABS = [
  * 지금 화면에 맞는 AI 참고 범위. 사용자에게는 내부 Agent 이름을 노출하지 않고
  * "지금 참고: 자료구조"처럼 무엇을 보고 있는지만 알려준다.
  */
-function resolveScope(tab, openProject) {
-  if (tab === 'projects' && openProject) {
+function projectScope(project) {
+  return {
+    kind: 'project',
+    courseId: project.courseId,
+    conversationScope: 'PLAN',
+    label: project.title,
+    placeholder: `${project.title}에 대해 물어보거나, 계획을 부탁해보세요`,
+    emptyHint: `${project.title}에 대해 편하게 이야기해보세요. 자료가 없어도 괜찮아요.`,
+  };
+}
+
+function resolveScope(tab, openProject, consultProject = null) {
+  if (tab === 'projects' && openProject) return projectScope(openProject);
+  /*
+   * 계획 탭의 대화는 상담이다. 프로젝트에서 [상담으로 계획하기]로 들어왔으면 그 프로젝트의 대화 범위를 그대로
+   * 쓴다 — 프로젝트 화면에서 하던 이야기가 끊기지 않고 가운데 칸에서 이어진다(범위 열쇠가 같아 다시 읽지도 않는다).
+   * 상담 ↔ 직접 만들기 ↔ 계획 보기를 오가도 범위가 같아서 대화가 새로 붙지 않는다.
+   */
+  if (tab === 'plan') {
+    if (consultProject) return projectScope(consultProject);
     return {
-      kind: 'project',
-      courseId: openProject.courseId,
+      kind: 'consult',
+      courseId: null,
       conversationScope: 'PLAN',
-      label: openProject.title,
-      placeholder: `${openProject.title}에 대해 물어보거나, 계획을 부탁해보세요`,
-      emptyHint: `${openProject.title}에 대해 편하게 이야기해보세요. 자료가 없어도 괜찮아요.`,
+      label: '전체 프로젝트 계획 상담',
+      placeholder: '예: 이번 주에 뭘 어떻게 하면 좋을지 같이 정하고 싶어',
+      emptyHint: '요즘 상황을 편하게 이야기해 주세요. 답에 따라 계획 방향이 오른쪽에 바로 보이고, 초안은 확인한 뒤에만 적용돼요.',
     };
   }
   if (tab === 'schedule') {
@@ -107,16 +140,43 @@ export default function MainShell({ user, onLogout }) {
    */
   const [planScopeCourseId, setPlanScopeCourseId] = useState(null);
   /**
+   * 계획 탭의 방식. 'consult'는 상담 작업 공간(기본), 'manual'은 기간·강도를 직접 정해 만드는 기존 화면이다.
+   */
+  const [planMode, setPlanMode] = useState('consult');
+  /** 상담의 대화 범위. null이면 전체 프로젝트, 값이 있으면 그 프로젝트의 대화다. 사용자가 고를 때만 바뀐다. */
+  const [consultCourseId, setConsultCourseId] = useState(null);
+  /** AI 패널이 올려 준 상담 상태(대화 유무·방향·이해한 내용·진행 단계). 옆 칸은 이것을 읽기만 한다. */
+  const [consultState, setConsultState] = useState(null);
+  /** 좁은 화면에서 열려 있는 옆 칸. 'scope' | 'preview' | null */
+  const [openPane, setOpenPane] = useState(null);
+  /** 프로젝트를 열 때 먼저 보여 줄 구역(학습 지도로 바로 가기). 프로젝트 화면이 읽는다. */
+  const [projectInitialSection, setProjectInitialSection] = useState(null);
+  const layout = useViewportLayout();
+  /**
+   * "AI가 이해한 내 상황" 화면. 탭이 아니라 어느 탭에서든 여는 보기다 — AI가 나에 대해 들고 있는 이해는
+   * 특정 탭의 것이 아니다. 탭을 누르면 닫힌다.
+   */
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  /**
    * 이번 계획에서 중심으로 볼 자료(자료함의 [이 자료로 계획]). 이번 요청의 지정일 뿐 영구 연결이 아니다.
    */
   const [planRequestedMaterials, setPlanRequestedMaterials] = useState([]);
   /**
    * AI 패널에서 만든 기간 계획 초안(PlanDraftResponse). 어느 탭에서 만들었든 계획 탭의 같은
    * 검토·확정 화면으로 데려간다 — 일반 제안의 ghost·적용 바가 아니라 PlanVersion 확정이다.
+   * 상담 작업 공간의 오른쪽 칸과 직접 만들기 화면이 이 하나를 본다(초안을 둘로 들지 않는다).
    */
-  const [aiPeriodDraft, setAiPeriodDraft] = useState(null);
+  const consultDraft = useConsultDraft();
+  const aiPeriodDraft = consultDraft.draft;
   const [openProjectId, setOpenProjectId] = useState(null);
-  const [aiOpen, setAiOpen] = useState(true);
+  /*
+   * 넓은 화면에서는 AI 칸이 늘 열려 있다. 좁은 화면에서는 AI가 화면을 덮는 보기라서 닫힌 채로 시작한다 —
+   * 안 그러면 앱을 열자마자 본문이 가려진다.
+   */
+  const [aiOpen, setAiOpen] = useState(() => (
+    typeof window === 'undefined' || typeof window.matchMedia !== 'function'
+      ? true : window.matchMedia('(min-width: 1100px)').matches
+  ));
   const [prefill, setPrefill] = useState(null);
 
   const [projects, setProjects] = useState([]);
@@ -225,7 +285,13 @@ export default function MainShell({ user, onLogout }) {
     () => Object.fromEntries(projects.map((p) => [p.courseId, p.title])),
     [projects],
   );
-  const scope = resolveScope(tab, openProject);
+  const consultProject = useMemo(
+    () => (consultCourseId != null ? projects.find((p) => p.courseId === consultCourseId) ?? null : null),
+    [projects, consultCourseId],
+  );
+  const scope = resolveScope(tab, openProject, consultProject);
+  /** 상담 작업 공간이 화면에 떠 있는가. 이때 AI 패널은 오른쪽 칸이 아니라 가운데 칸이다. */
+  const consultActive = !memoryOpen && tab === 'plan' && !openPlanId && planMode === 'consult';
 
   /**
    * 근거 화면에서 "지금 원본 보기"를 눌렀을 때 어디로 갈 것인가.
@@ -253,7 +319,38 @@ export default function MainShell({ user, onLogout }) {
 
   const ask = useCallback((text) => {
     setAiOpen(true);
+    // 좁은 화면에서는 옆 칸(시트)이 대화를 가리고 있다 — 닫아야 채워진 입력창이 보인다.
+    setOpenPane(null);
     setPrefill({ text, nonce: Date.now() });
+  }, []);
+
+  /** 입력창을 채우지 않고 대화로 돌아오기만 한다([계속 상담]). 쓰던 글은 그대로다. */
+  const focusChat = useCallback(() => {
+    setAiOpen(true);
+    setOpenPane(null);
+    setPrefill({ text: '', focusOnly: true, nonce: Date.now() });
+  }, []);
+
+  /**
+   * 상담 작업 공간 열기. 프로젝트 화면이 부르면(courseId) 같은 대화를 그 프로젝트 범위로 이어 간다.
+   */
+  const openConsult = useCallback((courseId = null) => {
+    setMemoryOpen(false);
+    setTab('plan');
+    setOpenPlanId(null);
+    setPlanMode('consult');
+    setConsultCourseId(courseId ?? null);
+    setOpenPane(null);
+  }, []);
+
+  /** 프로젝트의 학습 지도로 간다. 지도 자체는 프로젝트 화면이 그린다 — 여기서는 어느 구역을 먼저 열지만 알린다. */
+  const openLearningMap = useCallback((courseId) => {
+    if (courseId == null) return;
+    setOpenPane(null);
+    setMemoryOpen(false);
+    setProjectInitialSection('map');
+    setOpenProjectId(courseId);
+    setTab('projects');
   }, []);
 
   /**
@@ -261,25 +358,68 @@ export default function MainShell({ user, onLogout }) {
    * 사용자가 그것을 못 보는 상태를 만들지 않는다. 프로젝트 안에서 만든 초안은 그 프로젝트
    * 화면에 이미 보이므로 그대로 둔다.
    */
-  const handleProposal = useCallback(async (proposal) => {
+  const handleProposal = useCallback(async (proposal, { restored = false } = {}) => {
     await openDraft(proposal, { courseId: scope.courseId ?? null });
     if (tab === 'projects') return;
-    setTab(tabForProposal(proposal.items, today));
+    // 되살린 제안은 화면을 옮기지 않는다(null) — 그 규칙은 tabForProposal에 적어 두었다.
+    const next = tabForProposal(proposal.items, today, { restored });
+    if (next) setTab(next);
   }, [openDraft, scope.courseId, tab, today]);
 
   /**
    * 기간 계획 초안은 탭과 무관하게 계획 화면의 검토로 간다. 오늘·일정·프로젝트 탭에서 시작해도
    * 같은 컴포넌트, 같은 confirm API, 같은 PlanVersion 기록이다.
    */
-  const handlePeriodPlan = useCallback((periodDraft) => {
+  const placeRef = useRef({ tab, planMode, openProjectId, openDraftId: null });
+  useEffect(() => {
+    placeRef.current = { tab, planMode, openProjectId, openDraftId: consultDraft.draft?.proposalId ?? null };
+  });
+  const acceptConsultDraft = consultDraft.accept;
+  const handlePeriodPlan = useCallback((periodDraft, { restored = false } = {}) => {
     if (!periodDraft) return;
+    const at = placeRef.current;
+    /*
+     * 대화를 다시 열면서 되살린 초안(restored)은 지금 열려 있는 다른 초안을 밀어내지 않는다. 오늘 탭에서 방금 만든
+     * 초안을 보러 계획 탭에 왔는데, 계획 탭의 옛 대화가 자기 옛 초안을 되살려 그것을 덮으면 안 된다.
+     */
+    if (restored && at.openDraftId != null && at.openDraftId !== periodDraft.proposalId) return;
     // 상담 초안은 자기 요청 맥락(기간·범위·지정 자료)을 들고 온다. 계획 화면에 남아 있던 범위·지정 자료를 섞지 않는다.
     setPlanScopeCourseId(null);
     setPlanRequestedMaterials([]);
-    setAiPeriodDraft(periodDraft);
+    acceptConsultDraft(periodDraft);
+    setMemoryOpen(false);
+    /*
+     * 되살린 초안은 여기서 끝이다 — 들고만 있고 화면은 사용자가 보던 그대로 둔다. 탭을 옮길 때마다
+     * 그 탭의 대화가 옛 초안을 되살려 계획 탭으로 끌고 가면, 사용자는 다른 탭에 들어갈 수 없다.
+     * 초안이 있다는 것은 AI 패널이 한 줄로 말한다.
+     */
+    if (restored) return;
     setOpenPlanId(null);
+    if (at.tab === 'plan') {
+      // 계획 탭 안에서는 보고 있던 방식(상담 / 직접 만들기)을 그대로 둔다.
+    } else if (at.tab === 'projects' && at.openProjectId != null) {
+      // 프로젝트에서 만든 초안은 그 프로젝트 범위의 상담으로 간다 — 범위가 같아 대화가 끊기지 않는다.
+      setConsultCourseId(at.openProjectId);
+      setPlanMode('consult');
+    } else {
+      // 오늘·일정에서 만든 초안은 예전처럼 검토 화면으로 간다. 그 탭의 대화는 계획 탭의 대화와 다른 범위다.
+      setPlanMode('manual');
+    }
     setTab('plan');
-  }, []);
+    // 좁은 화면에서는 초안이 시트 안에 있다. 새 초안이 왔으면 열어서 보여 준다.
+    setOpenPane('preview');
+  }, [acceptConsultDraft]);
+
+  /**
+   * "AI가 이해한 내 상황"에서 고친 내용이 열린 초안을 낡게 했을 때, 그 초안을 열어 준다. 저장된 초안을 서버에서
+   * 다시 읽는다(모델 호출 없음) — 낡았다는 표시(freshness)도 그 응답에 실려 온다.
+   */
+  const openDraftById = useCallback(async (proposalId) => {
+    try {
+      const stored = await planAPI.loadDraft(proposalId);
+      if (stored?.proposalId != null) handlePeriodPlan(stored);
+    } catch { /* 못 읽으면 그대로 둔다 — 이해한 내용 화면은 계속 쓸 수 있다 */ }
+  }, [handlePeriodPlan]);
 
   const focusDraft = useCallback(() => {
     if (!draft) return;
@@ -290,8 +430,20 @@ export default function MainShell({ user, onLogout }) {
 
   const nickname = user?.nickname || user?.email?.split('@')[0] || '사용자';
 
+  const aiVisible = aiOpen || consultActive;
+  /*
+   * 좁은 화면에서 입력창 위에 늘 보이는 한 줄. 빠진 프로젝트·가정한 시간·낡은 초안은 시트를 열지 않아도 보인다.
+   */
+  const draftNotice = useMemo(() => {
+    const base = draftCoverageNotice(consultDraft.draft, formatMinutes);
+    if (!base) return null;
+    const alreadySaid = consultDraft.draft?.freshness?.state === 'STALE';
+    return consultDraft.stale && !alreadySaid ? `${base} · 최신 답변 반영 전` : base;
+  }, [consultDraft.draft, consultDraft.stale]);
+  const paneOpenOf = (name) => layout !== 'inline' && openPane === name;
+
   return (
-    <div className={`shell${aiOpen ? '' : ' ai-collapsed'}`}>
+    <div className={`shell${aiVisible ? '' : ' ai-collapsed'}${consultActive ? ' is-consult' : ''}${aiVisible && !consultActive ? ' ai-open' : ''}`}>
       <aside className="nav">
         <div className="nav-logo">
           <span className="nav-logo-icon"><Sparkles size={17} /></span>
@@ -305,13 +457,18 @@ export default function MainShell({ user, onLogout }) {
               <button
                 key={t.key}
                 type="button"
-                className={`nav-item${tab === t.key ? ' is-active' : ''}`}
+                className={`nav-item${tab === t.key && !memoryOpen ? ' is-active' : ''}`}
                 onClick={() => {
                   setTab(t.key);
-                  if (t.key === 'projects') setOpenProjectId(null);
-                  if (t.key === 'plan') { setOpenPlanId(null); setPlanScopeCourseId(null); }
+                  setMemoryOpen(false);
+                  setOpenPane(null);
+                  if (t.key === 'projects') { setOpenProjectId(null); setProjectInitialSection(null); }
+                  // 계획 탭의 기본 화면은 상담이다. 직접 만들기는 그 안에서 고른다.
+                  if (t.key === 'plan') {
+                    setOpenPlanId(null); setPlanScopeCourseId(null); setPlanMode('consult'); setConsultCourseId(null);
+                  }
                 }}
-                aria-current={tab === t.key ? 'page' : undefined}
+                aria-current={tab === t.key && !memoryOpen ? 'page' : undefined}
               >
                 <Icon size={17} />
                 <span>{t.label}</span>
@@ -328,7 +485,9 @@ export default function MainShell({ user, onLogout }) {
                 key={project.courseId}
                 type="button"
                 className={`nav-project${openProjectId === project.courseId && tab === 'projects' ? ' is-active' : ''}`}
-                onClick={() => { setTab('projects'); setOpenProjectId(project.courseId); }}
+                onClick={() => {
+                  setMemoryOpen(false); setTab('projects'); setProjectInitialSection(null); setOpenProjectId(project.courseId);
+                }}
                 title={project.title}
               >
                 {project.title}
@@ -338,6 +497,11 @@ export default function MainShell({ user, onLogout }) {
         )}
 
         <div className="nav-foot">
+          <button type="button" className={`nav-item nav-memory${memoryOpen ? ' is-active' : ''}`}
+            aria-current={memoryOpen ? 'page' : undefined}
+            onClick={() => { setMemoryOpen(true); setOpenPane(null); }}>
+            <BrainCircuit size={16} /><span>AI가 이해한 내 상황</span>
+          </button>
           <span className="nav-user">{nickname}님</span>
           <button type="button" className="nav-item" onClick={onLogout}>
             <LogOut size={16} /><span>로그아웃</span>
@@ -346,6 +510,13 @@ export default function MainShell({ user, onLogout }) {
       </aside>
 
       <main className="workspace">
+        {/* 상담 작업 공간에서는 본문 자리를 세 칸(범위·대화·초안)이 쓴다. 이 main에는 되돌리기·적용 바만 남는다. */}
+        {!consultActive && memoryOpen && (
+          <div className="workspace-scroll">
+            <MemoryView onOpenDraft={openDraftById} />
+          </div>
+        )}
+        {!consultActive && !memoryOpen && (
         <div className="workspace-scroll">
           {tab === 'today' && (
             <TodayView
@@ -374,8 +545,10 @@ export default function MainShell({ user, onLogout }) {
                 const links = material.links ?? [];
                 setPlanScopeCourseId(links.length === 1 ? links[0].courseId : null);
                 setPlanRequestedMaterials([{ materialId: material.materialId, filename: material.originalFilename }]);
-                setAiPeriodDraft(null);
+                consultDraft.clear();
                 setOpenPlanId(null);
+                // 자료를 지정해 만드는 것은 조건을 직접 정하는 길이다.
+                setPlanMode('manual');
                 setTab('plan');
               }} />
           )}
@@ -386,7 +559,7 @@ export default function MainShell({ user, onLogout }) {
               loading={projectsLoading}
               error={projectsError}
               onReload={loadProjects}
-              onOpen={(courseId) => setOpenProjectId(courseId)}
+              onOpen={(courseId) => { setProjectInitialSection(null); setOpenProjectId(courseId); }}
             />
           )}
 
@@ -400,11 +573,16 @@ export default function MainShell({ user, onLogout }) {
               onClearRequestedMaterial={(materialId) =>
                 setPlanRequestedMaterials((prev) => prev.filter((m) => m.materialId !== materialId))}
               initialDraft={aiPeriodDraft}
-              onInitialDraftCleared={() => setAiPeriodDraft(null)}
+              onInitialDraftCleared={consultDraft.clear}
+              /* [이 초안 버리기] — 화면에서 지우는 것으로 끝내지 않고 서버에도 버렸다고 쓴다. */
+              onDiscardDraft={dismissDraft}
               onOpenSchedule={() => setTab('schedule')}
+              onOpenConsult={() => openConsult(planScopeCourseId)}
+              onAsk={ask}
+              onFocusChat={focusChat}
               onConfirmed={(plan) => {
                 // 확정하면 바로 그 계획으로 들어간다 — 확정 직후 할 일은 "이번 주 배치하기"다.
-                setAiPeriodDraft(null);
+                consultDraft.clear();
                 setOpenPlanId(plan.planVersionId);
                 refreshAll();
               }}
@@ -423,13 +601,20 @@ export default function MainShell({ user, onLogout }) {
 
           {tab === 'projects' && openProjectId && (
             <ProjectWorkspace
+              /* initialSection은 처음 뜰 때만 읽힌다 — 같은 프로젝트에서 학습 지도로 바로 가려면 새로 떠야 한다. */
+              key={`${openProjectId}:${projectInitialSection ?? ''}`}
               courseId={openProjectId}
               onCreatePlan={(courseId) => {
                 setTab('plan');
                 setOpenPlanId(null);
+                setPlanMode('manual');
                 setPlanRequestedMaterials([]);
                 setPlanScopeCourseId(courseId ?? null);
               }}
+              /* 같은 대화를 이 프로젝트 범위로 이어 가는 상담 작업 공간. */
+              onOpenConsult={openConsult}
+              /* 'map'이면 학습 지도를 먼저 연다(상담의 [학습 지도] 버튼). */
+              initialSection={projectInitialSection ?? undefined}
               onOpenPlan={(planVersionId) => { setTab('plan'); setOpenPlanId(planVersionId); }}
               onBack={() => setOpenProjectId(null)}
               onAsk={ask}
@@ -457,6 +642,7 @@ export default function MainShell({ user, onLogout }) {
 
           {tab === 'record' && <RecordView projectTitles={projectTitles} refreshToken={refreshToken} />}
         </div>
+        )}
 
         {/*
           삭제 확인을 없앤 대신 여기서 되돌릴 수 있다고 말한다. 이 안내가 곧 되돌릴 수 있는
@@ -476,8 +662,36 @@ export default function MainShell({ user, onLogout }) {
         />
       </main>
 
-      {aiOpen ? (
+      {consultActive && (
+        <ConsultPaneFrame side="left" title="범위·자료" layout={layout}
+          open={paneOpenOf('scope')} onClose={() => setOpenPane(null)}>
+          <ConsultScopePane
+            projects={projects}
+            scopeCourseId={consultCourseId}
+            onSelectScope={(courseId) => { setConsultCourseId(courseId); setOpenPane(null); }}
+            consultState={consultState}
+            draft={consultDraft.draft}
+            onOpenLearningMap={openLearningMap}
+            onOpenSource={openSource}
+            onOpenManual={() => { setPlanMode('manual'); setPlanScopeCourseId(consultCourseId); setOpenPane(null); }}
+          />
+        </ConsultPaneFrame>
+      )}
+
+      {/*
+        AI 패널은 하나뿐이다. 상담 작업 공간에서는 같은 인스턴스가 가운데 칸으로 자리만 옮긴다(variant) —
+        다시 만들지 않으므로 대화·입력 중인 글·진행 중인 응답이 그대로 이어진다.
+      */}
+      {aiVisible ? (
         <AiPanel
+          variant={consultActive ? 'workspace' : 'side'}
+          onConsultState={setConsultState}
+          onDraftStale={consultDraft.markStale}
+          draftNotice={consultActive && layout !== 'inline' ? draftNotice : null}
+          onOpenScopePane={consultActive && layout !== 'inline' ? () => setOpenPane('scope') : undefined}
+          onOpenPreviewPane={consultActive && layout !== 'inline' ? () => setOpenPane('preview') : undefined}
+          /* 좁은 화면에서는 AI가 본문을 덮고 있다 — 닫아야 방금 연 화면이 보인다. */
+          onOpenMemory={() => { setMemoryOpen(true); setOpenPane(null); if (layout !== 'inline') setAiOpen(false); }}
           scope={scope}
           draft={draft}
           prefill={prefill}
@@ -493,6 +707,23 @@ export default function MainShell({ user, onLogout }) {
         <button type="button" className="ai-reopen" onClick={() => setAiOpen(true)} title="AI 열기">
           <PanelRightOpen size={16} /> AI
         </button>
+      )}
+
+      {consultActive && (
+        <ConsultPaneFrame side="right" title="계획 미리보기" layout={layout}
+          open={paneOpenOf('preview')} onClose={() => setOpenPane(null)}>
+          <ConsultPlanPane
+            consultState={consultState}
+            consultDraft={consultDraft}
+            projectTitles={projectTitles}
+            onOpenSource={openSource}
+            onOpenSchedule={() => setTab('schedule')}
+            onOpenPlan={(planVersionId) => setOpenPlanId(planVersionId)}
+            onConfirmed={() => refreshAll()}
+            onAsk={ask}
+            onFocusChat={focusChat}
+          />
+        </ConsultPaneFrame>
       )}
     </div>
   );

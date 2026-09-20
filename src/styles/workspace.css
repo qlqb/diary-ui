@@ -2131,3 +2131,101 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .topic-detail-linked-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 .topic-detail-review-note { margin: 4px 0; padding: 6px 8px; border-radius: 7px; background: var(--ws-warn-soft); color: var(--ws-warn); font-size: 13.5px; }
 .today-assignments .assignment-row { padding: 6px 10px; }
+
+/* ===================== 좁은 화면의 셸 ===================== */
+
+/*
+ * 이 셸은 원래 넓은 화면 하나만 가정했다(탐색 208px + 본문 + AI 348px). 좁아지면 본문이 남는 폭이 없어진다.
+ *
+ * - 1100px 미만: AI 칸을 격자에서 빼고, 열면 오른쪽에서 본문 위로 덮는 칸이 된다. 본문은 남은 폭을 다 쓴다.
+ * - 700px 미만: 탐색은 아래 탭 바가 되고, 본문은 화면 폭 전체, AI는 열면 화면 전체를 쓰는 보기다.
+ *   높이는 100dvh로 잡는다 — 100vh는 모바일 브라우저의 주소창 높이만큼 아래가 잘린다.
+ *   입력창은 고정 오버레이가 아니라 세로 flex의 맨 아래 칸이다. 키보드가 올라오면 탭 바를 치워 그만큼 자리를 낸다.
+ * - 아이폰의 홈 막대 영역(env(safe-area-inset-bottom))만큼 탭 바와 입력 칸 아래를 띄운다.
+ *
+ * 상담 작업 공간(.is-consult)의 배치는 consult.css가 맡는다.
+ */
+
+@supports (height: 100dvh) {
+  .shell,
+  .workspace,
+  .ai-panel { height: 100dvh; }
+}
+
+@media (max-width: 1099px) {
+  .shell,
+  .shell.ai-collapsed { grid-template-columns: var(--nav-w) minmax(0, 1fr); }
+
+  .shell.ai-open > .ai-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(400px, 100vw);
+    z-index: 300;
+    box-shadow: -8px 0 28px rgba(17, 24, 39, 0.14);
+  }
+}
+
+@media (max-width: 699px) {
+  .shell,
+  .shell.ai-collapsed {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .shell > .workspace { order: 1; flex: 1 1 auto; min-height: 0; height: auto; }
+  .workspace-scroll { padding: 14px 16px 20px; }
+  .apply-bar { padding: 10px 16px; }
+
+  /* 탐색 → 아래 탭 바. 로고·프로젝트 바로가기·이름은 접고, 여섯 탭과 로그아웃만 남긴다. */
+  .shell > .nav {
+    order: 3;
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    border-right: none;
+    border-top: 1px solid var(--ws-border);
+    overflow: visible;
+  }
+  /* "AI가 이해한 내 상황"은 좁은 화면에서 AI 패널 머리의 버튼으로 연다 — 탭 바에 여덟 칸은 들어가지 않는다. */
+  .nav-logo,
+  .nav-projects,
+  .nav-memory,
+  .nav-user { display: none; }
+  .nav-menu { flex: 1 1 auto; flex-direction: row; gap: 0; min-width: 0; }
+  .nav-foot { margin: 0; padding: 0; border: none; flex: 0 0 auto; display: flex; }
+  .shell > .nav .nav-item {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 48px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 5px 2px;
+    font-size: 12px;
+    text-align: center;
+  }
+  .nav-foot .nav-item { flex: 0 0 auto; padding: 5px 8px; }
+
+  /* 글을 쓰는 동안에는 탭 바를 치운다 — 키보드 위에 입력창·빠른 답·경고가 남을 자리를 낸다. */
+  .shell:has(.ai-textarea:focus) > .nav { display: none; }
+
+  /* AI는 열면 화면 전체를 쓴다. 세로 flex라 입력 칸은 늘 맨 아래 칸이고, 덮어 가리는 것이 없다. */
+  .shell.ai-open > .ai-panel {
+    position: fixed;
+    inset: 0;
+    width: auto;
+    height: 100vh;
+    height: 100dvh;
+    border-left: none;
+    box-shadow: none;
+  }
+  .shell.ai-open > .ai-panel .ai-panel-foot,
+  .shell:has(.ai-textarea:focus) .ai-panel-foot { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+  .ai-reopen { bottom: calc(68px + env(safe-area-inset-bottom)); }
+  .undo-toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}

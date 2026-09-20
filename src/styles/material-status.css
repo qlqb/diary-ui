@@ -1,0 +1,56 @@
+/*
+ * 자료 업로드·분석 상태. 단계와 대기 이유는 글자로 전하고, 색은 거드는 역할만 한다.
+ * 대기(한도·차례·일시중지·연결)는 경고색을 쓰지 않는다 — 실패처럼 보이면 안 된다.
+ */
+.material-stages { flex-basis: 100%; min-width: 0; }
+.material-stage-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.material-stage {
+  display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px; min-width: 0;
+  padding: 2px 8px; border: 1px solid var(--ws-border); border-radius: 999px;
+  font-size: 12px; color: var(--ws-text-dim); background: var(--ws-surface);
+}
+.material-stage-title { font-weight: 600; color: var(--ws-text); }
+.material-stage.is-done { border-color: var(--ws-ok); }
+.material-stage.is-running { border-color: var(--ws-accent); }
+.material-stage.is-problem { border-color: var(--ws-warn); background: var(--ws-warn-soft); }
+.material-stage.is-waiting,
+.material-stage.is-paused,
+.material-stage.is-skipped,
+.material-stage.is-unknown { border-style: dashed; }
+.material-stage-waiting,
+.analysis-waiting-note {
+  margin: 4px 0 0; padding: 4px 8px; border-left: 3px solid var(--ws-accent); border-radius: 4px;
+  font-size: 12px; color: var(--ws-text-dim); background: var(--ws-accent-soft);
+  overflow-wrap: anywhere;
+}
+.analysis-overview-limit { flex-basis: 100%; }
+.analysis-overview-consult { flex-basis: 100%; margin: 2px 0 0; font-size: 12px; color: var(--ws-text-dim); }
+
+.upload-summary {
+  margin: 8px 0; padding: 10px 12px; border: 1px solid var(--ws-border); border-radius: 8px; background: var(--ws-surface);
+}
+.upload-summary.has-problem { border-left: 3px solid var(--ws-warn); }
+.upload-summary-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.upload-summary-title { margin: 0; font-size: 14px; font-weight: 600; }
+.upload-summary-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.upload-summary-item { padding: 4px 0; border-top: 1px solid var(--ws-border); font-size: 13px; overflow-wrap: anywhere; }
+.upload-summary-kind { font-weight: 600; margin-right: 6px; }
+.upload-summary-impact { display: block; font-size: 12px; color: var(--ws-text-dim); }
+.upload-format-note { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; color: var(--ws-text-dim); }
+
+.zip-import-group-title { margin: 8px 0 2px; font-size: 12px; font-weight: 600; color: var(--ws-text-dim); }
+.zip-import-impact { flex-basis: 100%; font-size: 12px; color: var(--ws-text-dim); }
+.zip-import-summary { margin: 4px 0; font-size: 13px; }
+
+.material-unheld-note { font-size: 12px; color: var(--ws-text-dim); }
+
+/* 390px: 자료 행의 오른쪽 묶음(칩·버튼)이 줄바꿈되지 않으면 화면 밖으로 밀린다. */
+@media (max-width: 640px) {
+  .materials-view .material-row { flex-wrap: wrap; }
+  .materials-view .material-row-side { flex-wrap: wrap; flex-shrink: 1; min-width: 0; }
+  .analysis-status { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .material-stages *, .upload-summary * { transition: none !important; animation: none !important; }
+}

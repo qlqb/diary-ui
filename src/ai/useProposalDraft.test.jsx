@@ -12,7 +12,7 @@ import { useProposalDraft, adjustmentFor, cardsForDate } from './useProposalDraf
 import { proposalAPI, schedulePreviewAPI } from '../api/api.js';
 
 vi.mock('../api/api.js', () => ({
-  proposalAPI: { apply: vi.fn() },
+  proposalAPI: { apply: vi.fn(), dismiss: vi.fn() },
   schedulePreviewAPI: { get: vi.fn(), recompute: vi.fn() },
 }));
 
@@ -186,5 +186,28 @@ describe('useProposalDraft', () => {
 
     expect(cardsForDate(result.current.draft, '2026-08-15')).toHaveLength(1);
     expect(cardsForDate(result.current.draft, '2026-08-16')).toHaveLength(0);
+  });
+});
+
+describe('초안 버리기', () => {
+  it('서버에도 버렸다고 쓴다 — 화면에서만 지우면 대화를 다시 열 때 되살아난다', async () => {
+    proposalAPI.dismiss.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useProposalDraft());
+    await act(async () => { await result.current.openDraft(createProposal); });
+
+    act(() => result.current.discardDraft());
+
+    expect(result.current.draft).toBeNull();
+    await waitFor(() => expect(proposalAPI.dismiss).toHaveBeenCalledWith(7));
+  });
+
+  it('서버에 못 써도 화면은 버린 상태 그대로다', async () => {
+    proposalAPI.dismiss.mockRejectedValue(new Error('offline'));
+    const { result } = renderHook(() => useProposalDraft());
+    await act(async () => { await result.current.openDraft(createProposal); });
+
+    await act(async () => { result.current.discardDraft(); });
+
+    expect(result.current.draft).toBeNull();
   });
 });
