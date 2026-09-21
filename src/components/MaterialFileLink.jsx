@@ -36,9 +36,11 @@ function isPdfMaterial(filename, contentType) {
  * @param label   버튼 문구를 바꿀 때. 기본은 "PDF 열기" / "파일 내려받기"다. 바꿔 쓰는 쪽도
  *                실제로 일어나는 일(열기 / 내려받기)과 어긋나지 않게 고른다
  * @param onError 파일을 열지 못했을 때. 근거 화면이 캐시를 비우고 상태를 다시 읽는 데 쓴다
+ * @param page    PDF를 이 쪽에서 연다(#page=N). PDF가 아니면 무시한다 — 다른 형식에는 쪽으로
+ *                뛸 방법이 없으니, 부르는 쪽이 위치를 글로 보여 줘야 한다
  */
 export default function MaterialFileLink({
-  materialId, filename, contentType, disabled = false, label = null, onError = null,
+  materialId, filename, contentType, disabled = false, label = null, onError = null, page = null,
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -56,7 +58,8 @@ export default function MaterialFileLink({
       const url = URL.createObjectURL(blob);
       if (tab) {
         tab.opener = null;
-        tab.location = url;
+        // 브라우저 PDF 보기는 #page=N을 따른다(blob 주소에서도). 형식이 PDF일 때만 붙인다.
+        tab.location = pdf && Number.isInteger(page) && page > 0 ? `${url}#page=${page}` : url;
       } else {
         const anchor = document.createElement('a');
         anchor.href = url;

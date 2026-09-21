@@ -14,6 +14,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/api.js', () => ({
+  materialStoreAPI: { file: vi.fn() },
   projectTidyAPI: {
     get: vi.fn(), request: vi.fn(), retry: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
   },
@@ -431,5 +432,69 @@ describe('실패한 정리', () => {
     await user.click(screen.getByRole('button', { name: '지금 자료로 새로 정리' }));
 
     expect(projectTidyAPI.request).toHaveBeenCalledWith(6, { refresh: true });
+  });
+});
+
+describe('근거 원문 열기', () => {
+  const withEvidence = (sections) => view({
+    groups: [{ key: 't1', kind: 'EXISTING', topicId: 1, title: '스택', parentTitle: null, changeIds: ['c1'] }],
+    changes: [change('c1', 'LINK', '「스택」에 근거를 연결해요', { sections })],
+  });
+
+  async function openEvidence(user) {
+    await user.click(await screen.findByRole('button', { name: /스택.*변경 1/ }));
+    await user.click(screen.getByRole('button', { name: /근거 1곳 보기/ }));
+  }
+
+  it('지금 파일의 PDF 쪽이면 그 쪽으로 여는 버튼을 준다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(withEvidence([{
+      sectionId: 9, materialId: 21, materialFilename: '강의.pdf', locator: 'p.3', title: '스택 정의',
+      availability: 'OK', page: 3,
+    }]));
+    render(<ProjectTidyPanel courseId={6} />);
+    await openEvidence(user);
+
+    expect(screen.getByRole('button', { name: /PDF p.3 열기/ })).toBeInTheDocument();
+  });
+
+  it('쪽으로 뛸 수 없는 형식은 여는 버튼과 위치를 글로 준다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(withEvidence([{
+      sectionId: 9, materialId: 21, materialFilename: '실습.ipynb', locator: '셀 12', title: '스택 구현',
+      availability: 'OK', page: null,
+    }]));
+    render(<ProjectTidyPanel courseId={6} />);
+    await openEvidence(user);
+
+    expect(screen.getByRole('button', { name: /파일 내려받기/ })).toBeInTheDocument();
+    expect(screen.getByText(/위치로 바로 가지 못해요 — 위치: 셀 12/)).toBeInTheDocument();
+  });
+
+  it('예전 파일의 발췌면 그렇다고 말하고 지금 파일을 연다고 밝힌다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(withEvidence([{
+      sectionId: 9, materialId: 21, materialFilename: '강의.pdf', locator: 'p.3', title: '스택 정의',
+      excerpt: '옛 발췌', availability: 'OUTDATED', page: null,
+    }]));
+    render(<ProjectTidyPanel courseId={6} />);
+    await openEvidence(user);
+
+    expect(screen.getByText(/예전 파일\(또는 예전 분석\)에서 나왔어요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /지금 파일 열기/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /PDF p.3 열기/ })).not.toBeInTheDocument();
+  });
+
+  it('자료가 지워졌으면 여는 버튼을 두지 않는다 — 다른 파일을 열지 않게', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(withEvidence([{
+      sectionId: 9, materialId: 21, materialFilename: '강의.pdf', locator: 'p.3', title: '스택 정의',
+      availability: 'MATERIAL_DELETED', page: null,
+    }]));
+    render(<ProjectTidyPanel courseId={6} />);
+    await openEvidence(user);
+
+    expect(screen.getByText('자료가 지워져 원본을 열 수 없어요.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /열기|내려받기/ })).not.toBeInTheDocument();
   });
 });

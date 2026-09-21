@@ -24,6 +24,7 @@ import {
   describeJob, describeReadiness, describeScope, partialNote, saveStateText,
 } from '../../lib/tidyLabels.js';
 import * as tidyEdits from '../../lib/tidyEditStore.js';
+import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 
 export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied = null, onOpenMaterials = null }) {
   const [view, setView] = useState(null);
@@ -496,13 +497,7 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarr
           {showEvidence && (
             <ul className="project-tidy-evidence">
               {change.sections.map((section) => (
-                <li key={section.sectionId}>
-                  <span className="project-tidy-evidence-source">
-                    {section.materialFilename ?? '자료'} · {section.locator}
-                  </span>
-                  <span className="project-tidy-evidence-title">{section.title}</span>
-                  {section.excerpt && <p className="project-tidy-evidence-excerpt">{section.excerpt}</p>}
-                </li>
+                <EvidenceItem key={section.sectionId} section={section} />
               ))}
             </ul>
           )}
@@ -519,4 +514,64 @@ function describeEditValue(value) {
   if (value.title) parts.push(`제목 「${value.title}」`);
   parts.push(value.excluded ? '이 변경 빼기' : '이 변경 적용');
   return parts.join(' · ');
+}
+
+function isPdfName(name) {
+  return String(name ?? '').toLowerCase().endsWith('.pdf');
+}
+
+/**
+ * 근거 하나. 무엇을 근거로 삼았는지 읽고, 원본을 그 자리에서 열 수 있게 한다.
+ *
+ * 되는 것만 되는 것처럼 보인다:
+ *  - PDF이고 지금 파일의 쪽이면 [PDF p.N 열기] — 그 쪽에서 열린다.
+ *  - 다른 형식은 쪽으로 뛸 수 없다. 파일을 여는 버튼과 위치를 글로 준다("열어서 찾아 주세요").
+ *  - 발췌가 예전 파일의 것이면 그렇다고 말하고, 원본 버튼은 "지금 파일"을 연다고 밝힌다.
+ *  - 자료가 지워졌거나 구간 기록이 없으면 버튼을 두지 않는다 — 다른 파일을 여는 일이 없게.
+ * 원본은 새 탭(또는 내려받기)으로 열리므로 이 화면의 검토 편집은 그대로 남는다.
+ */
+function EvidenceItem({ section }) {
+  const availability = section.availability ?? 'OK';
+  if (availability === 'MISSING') {
+    return (
+      <li className="is-unavailable">
+        <span className="project-tidy-evidence-source">근거 구간을 찾을 수 없어요</span>
+        <span className="view-sub-dim"> — 이 근거는 확인할 수 없어요. 다시 정리하면 지금 자료로 새로 찾아요</span>
+      </li>
+    );
+  }
+  const name = section.materialFilename ?? '자료';
+  const pdf = isPdfName(section.materialFilename);
+  return (
+    <li className={availability === 'OK' ? '' : 'is-unavailable'}>
+      <span className="project-tidy-evidence-source">{name} · {section.locator}</span>
+      <span className="project-tidy-evidence-title">{section.title}</span>
+      {section.excerpt && <p className="project-tidy-evidence-excerpt">{section.excerpt}</p>}
+
+      {availability === 'MATERIAL_DELETED' && (
+        <p className="project-tidy-evidence-note">자료가 지워져 원본을 열 수 없어요.</p>
+      )}
+      {availability === 'OUTDATED' && (
+        <p className="project-tidy-evidence-note">
+          이 발췌는 예전 파일(또는 예전 분석)에서 나왔어요. 원본을 열면 지금 파일이 열려요 — 내용이 다를 수 있어요.
+        </p>
+      )}
+      {availability !== 'MATERIAL_DELETED' && section.materialId && (
+        <div className="project-tidy-evidence-open">
+          <MaterialFileLink
+            materialId={section.materialId}
+            filename={section.materialFilename}
+            page={availability === 'OK' ? section.page : null}
+            label={availability === 'OUTDATED'
+              ? (pdf ? '지금 파일 열기' : '지금 파일 내려받기')
+              : (pdf && section.page ? `PDF ${section.locator} 열기` : null)} />
+          {!(pdf && availability === 'OK' && section.page) && (
+            <span className="view-sub-dim">
+              {pdf ? ' 첫 쪽부터 열려요' : ' 이 형식은 위치로 바로 가지 못해요'} — 위치: {section.locator}
+            </span>
+          )}
+        </div>
+      )}
+    </li>
+  );
 }
