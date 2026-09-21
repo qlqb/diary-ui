@@ -28,7 +28,7 @@ vi.mock('../../api/api.js', () => ({
     retryEntry: vi.fn(), cancel: vi.fn(),
   },
   analysisBatchAPI: {
-    estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn(),
+    estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn(), listOpenPage: vi.fn(),
   },
   materialStoreAPI: {
     list: vi.fn(), retryExtraction: vi.fn(), get: vi.fn(), upload: vi.fn(), delete: vi.fn(), addLink: vi.fn(),
@@ -49,6 +49,7 @@ beforeEach(() => {
   analysisBatchAPI.create.mockImplementation(fakeBatch.create);
   analysisBatchAPI.get.mockImplementation(fakeBatch.get);
   analysisBatchAPI.listOpen.mockImplementation(fakeBatch.listOpen);
+  analysisBatchAPI.listOpenPage.mockImplementation(fakeBatch.listOpenPage);
   materialStoreAPI.list.mockResolvedValue([]);
   materialStoreAPI.proposeLinks.mockResolvedValue({ status: 'NO_CANDIDATES', groups: [] });
   materialAnalysisStatusAPI.overview.mockResolvedValue(EMPTY_OVERVIEW);

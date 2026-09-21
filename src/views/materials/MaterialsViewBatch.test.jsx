@@ -20,7 +20,7 @@ vi.mock('../../api/api.js', () => ({
     create: vi.fn(), listRecent: vi.fn().mockResolvedValue([]), get: vi.fn(), confirm: vi.fn(),
     retryEntry: vi.fn(), cancel: vi.fn(),
   },
-  analysisBatchAPI: { estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn() },
+  analysisBatchAPI: { estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn(), listOpenPage: vi.fn() },
   materialStoreAPI: {
     list: vi.fn(), retryExtraction: vi.fn(), get: vi.fn(), upload: vi.fn(), delete: vi.fn(),
     addLink: vi.fn(), updateLinkType: vi.fn(), removeLink: vi.fn(), proposeLinks: vi.fn(),
@@ -44,6 +44,7 @@ beforeEach(() => {
   analysisBatchAPI.create.mockImplementation(fake.create);
   analysisBatchAPI.get.mockImplementation(fake.get);
   analysisBatchAPI.listOpen.mockImplementation(fake.listOpen);
+  analysisBatchAPI.listOpenPage.mockImplementation(fake.listOpenPage);
   materialStoreAPI.list.mockResolvedValue([]);
   materialStoreAPI.proposeLinks.mockResolvedValue({ status: 'NO_CANDIDATES', groups: [] });
   materialStoreAPI.upload.mockImplementation(async (file) => ({
@@ -108,7 +109,7 @@ describe('화면 복원', () => {
 
     render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
 
-    await waitFor(() => expect(analysisBatchAPI.listOpen).toHaveBeenCalled());
+    await waitFor(() => expect(analysisBatchAPI.listOpenPage).toHaveBeenCalled());
     expect(screen.queryByRole('region', { name: /자료 분석/ })).not.toBeInTheDocument();
   });
 });

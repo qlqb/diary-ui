@@ -632,17 +632,21 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
     }
   }, [load]);
 
+  const { refresh: refreshBatches } = batches;
   const retryExtraction = useCallback(async (materialId) => {
     setReExtractingId(materialId);
     try {
       await materialStoreAPI.retryExtraction(materialId);
       await load();
+      // 다시 읽는 데 성공하면 서버가 그 자료가 든 끝난 묶음을 다시 연다. 여기서 묶음을 읽어야
+      // 진행 카드가 다시 나타나고 폴링이 이어진다 — 도는 묶음이 없으면 폴링이 멈춰 있기 때문이다.
+      await refreshBatches();
     } catch (err) {
       setError(err.message || '본문을 다시 읽지 못했습니다.');
     } finally {
       setReExtractingId(null);
     }
-  }, [load]);
+  }, [load, refreshBatches]);
 
   /** 고른 파일을 갈라 보낸다: 압축은 가져오기로, 나머지는 업로드 대기열로. */
   const addFiles = useCallback((fileList) => {
