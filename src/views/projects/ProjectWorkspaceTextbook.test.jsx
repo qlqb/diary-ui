@@ -12,7 +12,14 @@ vi.mock('../../api/api.js', () => ({
     overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true }),
     retry: vi.fn(), section: vi.fn(), sections: vi.fn().mockResolvedValue([]), status: vi.fn(),
   },
-  topicChangeProposalAPI: { listByCourse: vi.fn().mockResolvedValue([]), apply: vi.fn(), dismiss: vi.fn() },
+  projectTidyAPI: {
+    get: vi.fn().mockResolvedValue({ courseId: 6, readyMaterialCount: 0, analyzingMaterialCount: 0, groups: [] }),
+    request: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
+  },
+  analysisBatchAPI: {
+    estimate: vi.fn().mockResolvedValue(null), create: vi.fn(), get: vi.fn(),
+    listOpen: vi.fn().mockResolvedValue([]),
+  },
   assignmentAPI: {
     listByCourse: vi.fn().mockResolvedValue([]), listOpen: vi.fn().mockResolvedValue([]),
     answer: vi.fn(), setDue: vi.fn(), setCompleted: vi.fn(), rename: vi.fn(), create: vi.fn(),

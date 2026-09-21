@@ -22,13 +22,16 @@ import DraftRow from '../../components/DraftRow.jsx';
 import ProjectLearningMap from '../learning/ProjectLearningMap.jsx';
 import MaterialReview from '../learning/MaterialReview.jsx';
 import AssignmentSection from './AssignmentSection.jsx';
-import TopicChangeProposalCard from './TopicChangeProposalCard.jsx';
+import ProjectTidyPanel from './ProjectTidyPanel.jsx';
+import AnalysisBatchCard from '../materials/AnalysisBatchCard.jsx';
+import { useAnalysisBatches } from '../materials/useAnalysisBatches.js';
+import { useUploadEstimate } from '../materials/useUploadEstimate.js';
 import AnalysisStatusChip from '../../components/AnalysisStatusChip.jsx';
 import { isAnalysisInProgress } from '../../lib/analysisLabels.js';
 import { adjustmentFor } from '../../ai/useProposalDraft.js';
 import {
   courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialAnalysisAPI,
-  materialAnalysisStatusAPI, topicChangeProposalAPI, materialStoreAPI,
+  materialAnalysisStatusAPI, materialStoreAPI,
   planAPI, topicAPI, zipImportAPI } from '../../api/api.js';
 import {
   MaterialType, MATERIAL_TYPE_HINT, EXTRACTION_STATUS_LABEL, ExtractionStatus,
@@ -41,7 +44,9 @@ import { CONSULT_BEFORE_APPROVAL, dailyLimitCopy } from '../../lib/materialStage
 import ZipImportPanel from '../../components/ZipImportPanel.jsx';
 import { todayString } from '../../lib/datetime.js';
 import { formatDateKo, toIsoDate } from '../../lib/planTime.js';
+import { describeEstimate, estimateBasisNote, formatBytes, UPLOAD_TIME_NOTE } from '../../lib/analysisBatch.js';
 import '../../styles/learning-map.css';
+import '../../styles/project-tidy.css';
 
 /**
  * 교재 정보 한 줄.
@@ -412,8 +417,8 @@ export default function ProjectWorkspace({
             />
           </div>
 
-          <TopicChangeProposalsSection courseId={courseId} refreshToken={proposalRefresh + refreshToken}
-            onApplied={load} />
+          <ProjectTidyPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken}
+            onApplied={load} onOpenMaterials={() => revealIn('work', materialsRef)} />
 
           <AssignmentSection courseId={courseId} todayIso={todayString()} refreshToken={refreshToken + proposalRefresh} />
         </div>
@@ -434,8 +439,9 @@ export default function ProjectWorkspace({
           />
           {/* 지도의 "승인 전 제안"을 적용하는 곳. 같은 카드를 지도 바로 아래에 둬서 구역을 오가지 않게 한다. */}
           <div ref={proposalsRef} tabIndex={-1} className="project-anchor">
-            <TopicChangeProposalsSection courseId={courseId} refreshToken={proposalRefresh + refreshToken}
-              onApplied={async () => { setProposalRefresh((v) => v + 1); await load(); }} />
+            <ProjectTidyPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken}
+              onApplied={async () => { setProposalRefresh((v) => v + 1); await load(); }}
+              onOpenMaterials={() => revealIn('work', materialsRef)} />
           </div>
         </div>
       )}
@@ -598,6 +604,17 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
   const [analyses, setAnalyses] = useState({});
   /** materialId -> 'loading' | 'ready' | 'error'. 초안 조회가 끝났는지 자료마다 따로 안다. */
   const [draftStatus, setDraftStatus] = useState({});
+
+  /*
+   * 이 프로젝트에서 시작한 업로드·분석 묶음. 진행 상태의 원본은 서버라, 화면을 떠났다
+   * 돌아와도 도는 묶음이 그대로 복원된다. 분석 중에 파일을 더 올리면 <새 묶음>이 생기고
+   * 기존 묶음의 진행률은 움직이지 않는다.
+   */
+  const batches = useAnalysisBatches({
+    courseId,
+    onUploaded: async () => { await onChanged(); },
+    onBatchFinished: () => onProposalsChanged?.(),
+  });
   const [analyzingId, setAnalyzingId] = useState(null);
   const [picking, setPicking] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -758,6 +775,15 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
         </p>
       )}
 
+      {batches.batches.map((batch) => (
+        <AnalysisBatchCard key={batch.batchId} batch={batch}
+          onRefresh={() => batches.refreshOne(batch.batchId)}
+          onDismiss={batches.dismissBatch}
+          onAddMore={() => setUploadOpen(true)}
+          onBack={null} />
+      ))}
+      {batches.error && <p className="view-error">{batches.error}</p>}
+
       {materials.length === 0 ? (
         <p className="view-dim">아직 연결된 자료가 없어요. 없어도 AI와 이야기할 수 있어요.</p>
       ) : (
@@ -859,10 +885,12 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
       {uploadOpen && (
         <UploadForm
           courseId={courseId}
+          startBatch={batches.startBatch}
+          starting={batches.starting}
           onCancel={() => setUploadOpen(false)}
           /*
             keepOpen: 압축 가져오기는 파일 하나가 끝날 때마다 목록을 새로 읽는데, 그때마다 폼을 닫으면
-            남은 파일의 진행이 화면에서 사라진다. 자료 하나짜리 업로드는 예전처럼 닫는다.
+            남은 파일의 진행이 화면에서 사라진다. 분석 시작은 진행 카드가 위에 뜨므로 닫는다.
           */
           onUploaded={async ({ keepOpen } = {}) => {
             if (!keepOpen) setUploadOpen(false);
@@ -884,45 +912,51 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
 }
 
 /**
- * 새 자료를 올리면서 이 프로젝트에 바로 연결한다. 역할을 여기서 고를 수 있게 한 이유는
- * 예전 경로가 사용자에게 묻지도 않고 OTHER로 확정한 뒤 "성격은 자료 상세에서 바꾼다"고만
- * 적어뒀는데, 그 기능이 실제로는 없었기 때문이다.
+ * 새 자료를 올리면서 이 프로젝트에 바로 연결한다.
  *
- * 다만 필수 입력으로 만들지는 않는다 — 파일 하나 올리는 데 선택을 강제하면 마찰이 크다.
- * 기본값 OTHER로 두고 그대로 올려도 되고, 나중에 목록에서 바꿔도 된다.
+ * 여러 개를 한 번에 고를 수 있다. 고르면 바로 올리지 않고 <목록·지원 여부·예상 분석 시간>을
+ * 먼저 보여준 뒤 [분석 시작]을 기다린다 — 몇 분 걸릴지 모르는 채로 시작하게 하지 않는다.
+ * 예상 시간은 서버가 지난 실행에서 계산한 값이고, 업로드 전송 시간은 거기 들어 있지 않다.
+ *
+ * 역할(materialType)을 여기서 고를 수 있게 한 이유는 예전 경로가 사용자에게 묻지도 않고
+ * OTHER로 확정한 뒤 "성격은 자료 상세에서 바꾼다"고만 적어뒀는데, 그 기능이 실제로는
+ * 없었기 때문이다. 필수로 만들지는 않는다 — 기본값 OTHER로 두고 나중에 목록에서 바꿔도 된다.
  */
-function UploadForm({ courseId, onCancel, onUploaded }) {
-  const [file, setFile] = useState(null);
+function UploadForm({ courseId, startBatch, starting, onCancel, onUploaded }) {
+  const [files, setFiles] = useState([]);
   const [materialType, setMaterialType] = useState(MaterialType.OTHER);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   /**
    * 압축은 업로드가 아니라 가져오기다. 여기서 고르면 자료 하나가 되는 대신 안의 파일 목록이 뜨고,
-   * 고른 것만 각각 이 프로젝트에 연결된 자료가 된다. 자료함에서 고를 때와 다른 점은 courseId뿐이다.
+   * 고른 것만 각각 이 프로젝트에 연결된 자료가 된다. 열어 봐야 몇 개인지 알기 때문에 예상 시간을
+   * 함께 세지 않는다 — 가져오기가 끝나 자료가 생기면 그때 각자 분석 대기에 들어간다.
    */
   const [zipImport, setZipImport] = useState(null);
   const importedRef = useRef(0);
 
-  const handleSubmit = async (e) => {
+  const plain = files.filter((f) => !isArchiveFile(f.name));
+  const archives = files.filter((f) => isArchiveFile(f.name));
+  const { estimate, loading: estimating } = useUploadEstimate(plain);
+
+  const start = async (e) => {
     e.preventDefault();
-    if (!file || uploading) return;
-    setUploading(true);
+    if (files.length === 0 || starting) return;
     setError(null);
     try {
-      if (isArchiveFile(file.name)) {
-        // 압축은 업로드가 아니라 가져오기다. 폼은 열린 채로 두고 목록을 패널이 보여준다.
-        const created = await zipImportAPI.create(file, courseId, materialType);
+      for (const archive of archives) {
+        const created = await zipImportAPI.create(archive, courseId, materialType);
         importedRef.current = created.doneCount ?? 0;
         setZipImport(created);
-        setFile(null);
-        setUploading(false);
+      }
+      if (plain.length > 0) {
+        await startBatch(plain, null, { materialType });
+        setFiles(archives.length > 0 ? archives : []);
+        await onUploaded({ keepOpen: archives.length > 0 });
         return;
       }
-      await materialAPI.upload(courseId, materialType, file);
-      await onUploaded();
+      setFiles([]);
     } catch (err) {
-      setError(err.message || '업로드하지 못했습니다.');
-      setUploading(false);
+      setError(err.message || '분석을 시작하지 못했습니다.');
     }
   };
 
@@ -935,14 +969,45 @@ function UploadForm({ courseId, onCancel, onUploaded }) {
   };
 
   return (
-    <form className="material-link-form" onSubmit={handleSubmit}>
-      <input type="file" accept={MATERIAL_ACCEPT} aria-label="새 자료 파일" disabled={uploading}
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={uploading} />
-      <button type="submit" className="btn-ghost btn-sm" disabled={!file || uploading}>
-        {uploading ? <><Loader2 size={13} className="spin" /> 올리는 중</> : '업로드'}
+    <form className="material-link-form" onSubmit={start}>
+      <input type="file" accept={MATERIAL_ACCEPT} multiple aria-label="새 자료 파일" disabled={starting}
+        onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
+      <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={starting} />
+      <button type="submit" className="btn-primary btn-sm" disabled={files.length === 0 || starting}>
+        {starting ? <><Loader2 size={13} className="spin" /> 시작하는 중</> : '분석 시작'}
       </button>
-      <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={uploading}>취소</button>
+      <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={starting}>취소</button>
+
+      {files.length > 0 && (
+        <ul className="upload-picked">
+          {files.map((file) => {
+            const row = (estimate?.files ?? []).find((f) => f.filename === file.name);
+            return (
+              <li key={`${file.name}:${file.size}`} className={row && !row.supported ? 'is-problem' : ''}>
+                <span className="upload-picked-name" title={file.name}>{file.name}</span>
+                <span className="upload-picked-size">{formatBytes(file.size)}</span>
+                <span className="upload-picked-est">
+                  {isArchiveFile(file.name) ? '압축 · 열어 본 뒤 각각 분석'
+                    : row == null ? (estimating ? '예상 계산 중' : '')
+                      : !row.supported ? (row.reason ?? '분석할 수 없는 형식')
+                        : row.estimable ? (describeEstimate({
+                          estimableCount: 1, unestimableCount: 0,
+                          minSeconds: row.minSeconds, maxSeconds: row.maxSeconds,
+                        }) ?? '').replace('자료 1개 · ', '') : (row.reason ?? '')}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {plain.length > 0 && (
+        <p className="upload-estimate">
+          <span className="upload-estimate-strong">{describeEstimate(estimate) ?? '예상 시간을 계산하는 중이에요'}</span>
+          {estimateBasisNote(estimate?.basis) && <> · {estimateBasisNote(estimate.basis)}</>}
+          {' · '}{UPLOAD_TIME_NOTE}
+        </p>
+      )}
+
       <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
       <p className="material-form-hint">{SHELL_SCRIPT_HINT}</p>
       {error && <p className="view-error">{error}</p>}
@@ -1024,53 +1089,3 @@ function MaterialPicker({ courseId, linkedIds, onCancel, onLinked }) {
 }
 
 
-/**
- * 자료 정리 변경안 목록. 분석이 끝난 자료마다 열린 변경안이 하나씩 있을 수 있다.
- * 비어 있으면 아무것도 그리지 않는다 — 없는 것을 "없어요"라고 매번 말하면 화면이 시끄럽다.
- */
-function TopicChangeProposalsSection({ courseId, refreshToken = 0, onApplied = null }) {
-  const [proposals, setProposals] = useState([]);
-  const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
-  const ticket = useRef(0);
-
-  const load = useCallback(async () => {
-    if (courseId == null || !topicChangeProposalAPI?.listByCourse) return;
-    const mine = ticket.current + 1;
-    ticket.current = mine;
-    try {
-      const next = await topicChangeProposalAPI.listByCourse(courseId, false);
-      if (ticket.current === mine) { setProposals(next ?? []); setError(null); }
-    } catch (err) {
-      if (ticket.current === mine) setError(err.message || '변경안을 불러오지 못했어요.');
-    }
-  }, [courseId]);
-
-  useEffect(() => {
-    (async () => { await load(); })();
-  }, [load, refreshToken]);
-
-  if (proposals.length === 0 && !error) return null;
-  return (
-    <section className="view-section change-proposals">
-      <h2 className="section-title">자료 정리 변경안 {proposals.length}</h2>
-      <p className="section-desc">새 자료를 기존 학습 구조에 어떻게 이을지 제안이에요. 적용하기 전에는 아무것도 바뀌지 않아요.</p>
-      {error && <p className="view-error">{error}</p>}
-      {proposals.map((p) => (
-        <TopicChangeProposalCard key={p.proposalId} proposal={p}
-          onResolved={async () => { await load(); await onApplied?.(); }}
-          onReanalyze={async () => {
-            try {
-              await materialAnalysisStatusAPI.retryLink(p.materialId, courseId);
-              setError(null);
-              setNotice('다시 분석을 시작했어요. 잠시 뒤 새 변경안이 나타나요.');
-              await load();
-            } catch (err) {
-              setError(err.message || '다시 분석을 시작하지 못했어요.');
-            }
-          }} />
-      ))}
-      {notice && <p className="hint">{notice}</p>}
-    </section>
-  );
-}

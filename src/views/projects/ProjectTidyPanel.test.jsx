@@ -1,0 +1,382 @@
+/**
+ * 프로젝트 자료 정리 화면.
+ *
+ * 고정하는 것:
+ *  - 정리는 누를 때만 시작된다. 쓸 수 있는 자료가 없으면 버튼이 열리지 않고 이유를 말한다.
+ *  - 변경은 <영향을 받는 항목>으로 묶여 보인다. 파일별 카드가 아니다.
+ *  - 체크를 풀면 딸린 변경도 함께 풀린다 — 반쪽 적용을 만들지 않는다.
+ *  - 편집은 자동 저장되지만 트리는 바뀌지 않는다. 저장 실패를 삼키지 않는다.
+ *  - 새 자료가 끝나도 지금 보는 안은 그대로다. 다시 만드는 것은 사용자가 누를 때다.
+ *  - 트리가 바뀌었으면 적용을 막고 이유를 말한다(정리안을 숨기지 않는다).
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+vi.mock('../../api/api.js', () => ({
+  projectTidyAPI: {
+    get: vi.fn(), request: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
+  },
+}));
+
+import ProjectTidyPanel from './ProjectTidyPanel.jsx';
+import { projectTidyAPI } from '../../api/api.js';
+
+const change = (changeId, op, text, extra = {}) => ({
+  changeId, op, label: op, text, reason: null, titleEditable: op === 'ADD' || op === 'RENAME',
+  title: null, structural: ['MOVE', 'MERGE', 'SPLIT'].includes(op), dependsOn: [], caution: null,
+  sections: [], ...extra,
+});
+
+function view(overrides = {}) {
+  return {
+    courseId: 6,
+    proposalId: 11,
+    status: 'PROPOSED',
+    revision: 1,
+    baseTreeVersion: 3,
+    currentTreeVersion: 3,
+    treeChanged: false,
+    job: null,
+    summary: { headline: '자료 연결 2곳 · 새 항목 1개', structural: false, total: 3 },
+    groups: [
+      { key: 't1', kind: 'EXISTING', topicId: 1, title: '스택', parentTitle: null, changeIds: ['c1'] },
+      { key: 'nc2', kind: 'NEW', topicId: null, title: '원형 큐', parentTitle: null, changeIds: ['c2'] },
+    ],
+    changes: [
+      change('c1', 'LINK', '「스택」에 강의슬라이드.pdf p.3, 교재.pdf p.30을(를) 연결해요', {
+        sections: [
+          { sectionId: 9, materialId: 21, materialFilename: '강의슬라이드.pdf', locator: 'p.3', title: '스택 정의' },
+          { sectionId: 10, materialId: 22, materialFilename: '교재.pdf', locator: 'p.30', title: '3장 스택' },
+        ],
+      }),
+      change('c2', 'ADD', '맨 위에 「원형 큐」을(를) 새로 만들어요', { title: '원형 큐' }),
+    ],
+    dependsOn: {},
+    edits: {},
+    editRevision: 0,
+    scope: {
+      courseId: 6, treeVersion: 3, topicCount: 5, treeLinesShown: 5,
+      reviewed: [
+        { materialId: 21, filename: '강의슬라이드.pdf', sectionCount: 4, reviewedCount: 4 },
+        { materialId: 22, filename: '교재.pdf', sectionCount: 6, reviewedCount: 6 },
+      ],
+      excluded: [],
+      truncated: false, sectionsTotal: 10, sectionsReviewed: 10,
+    },
+    newMaterialCount: 0,
+    readyMaterialCount: 2,
+    analyzingMaterialCount: 0,
+    firstTime: false,
+    legacyProposalCount: 0,
+    ...overrides,
+  };
+}
+
+const empty = (overrides = {}) => ({
+  courseId: 6, proposalId: null, status: null, job: null, groups: [], changes: [], dependsOn: {},
+  edits: {}, editRevision: 0, scope: null, readyMaterialCount: 0, analyzingMaterialCount: 0,
+  newMaterialCount: 0, firstTime: true, legacyProposalCount: 0, ...overrides,
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('정리를 시작하기 전', () => {
+  it('쓸 수 있는 자료가 없으면 버튼이 열리지 않고 이유를 말한다', async () => {
+    projectTidyAPI.get.mockResolvedValue(empty({ analyzingMaterialCount: 2 }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/아직 분석 중인 자료 2개뿐이에요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /이 프로젝트 자료 정리/ })).toBeDisabled();
+  });
+
+  it('무엇으로 정리하고 무엇이 빠지는지 먼저 말한다', async () => {
+    projectTidyAPI.get.mockResolvedValue(empty({ readyMaterialCount: 5, analyzingMaterialCount: 2 }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText('분석 완료 5개로 정리 · 분석 중 2개 제외')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /이 프로젝트 자료 정리/ })).toBeEnabled();
+  });
+
+  it('누르면 정리 요청이 나가고 만드는 중임을 알린다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(empty({ readyMaterialCount: 3 }));
+    projectTidyAPI.request.mockResolvedValue(empty({
+      readyMaterialCount: 3, job: { jobId: 1, status: 'RUNNING' },
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /이 프로젝트 자료 정리/ }));
+
+    expect(projectTidyAPI.request).toHaveBeenCalledWith(6, { refresh: false });
+    expect(await screen.findByText(/정리안을 만드는 중이에요/)).toBeInTheDocument();
+  });
+
+  it('만들다 실패하면 이유와 다시 시도를 준다', async () => {
+    projectTidyAPI.get.mockResolvedValue(empty({
+      readyMaterialCount: 3,
+      job: { jobId: 1, status: 'FAILED', message: '정리안을 만들지 못했어요', retryable: true },
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/정리안을 만들지 못했어요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument();
+  });
+
+  it('예전 방식의 변경안이 남아 있으면 이력으로 뒀다고 알린다', async () => {
+    projectTidyAPI.get.mockResolvedValue(empty({ readyMaterialCount: 1, legacyProposalCount: 4 }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/예전 방식\(자료 하나씩\)으로 만든 변경안 4개는 이력으로 남겨 뒀어요/))
+      .toBeInTheDocument();
+  });
+});
+
+describe('정리안 검토', () => {
+  it('변경을 영향을 받는 항목으로 묶어 보여 준다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view());
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText('자료 연결 2곳 · 새 항목 1개')).toBeInTheDocument();
+    // 파일 이름이 아니라 항목 이름이 묶음의 머리다.
+    expect(screen.getByRole('button', { name: /스택/ })).toBeInTheDocument();
+    expect(screen.getByText('자료 2개 검토')).toBeInTheDocument();
+  });
+
+  it('여러 자료의 근거를 한 변경 아래에서 펼쳐 볼 수 있다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view());
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /스택.*변경 1/ }));
+    await user.click(screen.getByRole('button', { name: /근거 2곳 보기/ }));
+
+    expect(screen.getByText('강의슬라이드.pdf · p.3')).toBeInTheDocument();
+    expect(screen.getByText('교재.pdf · p.30')).toBeInTheDocument();
+  });
+
+  it('입력 한도로 일부만 봤으면 부분 정리라고 말한다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({
+      scope: { ...view().scope, truncated: true, sectionsTotal: 40, sectionsReviewed: 10 },
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/자료 구간 40개 중 10개만 보고 정리했어요/)).toBeInTheDocument();
+  });
+
+  it('제외된 자료와 사유를 숨기지 않는다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({
+      scope: {
+        ...view().scope,
+        excluded: [{ materialId: 30, filename: '실습.pdf', reason: 'ANALYZING', reasonLabel: '분석 중' }],
+      },
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText('분석 중')).toBeInTheDocument();
+    expect(screen.getByText(/실습\.pdf/)).toBeInTheDocument();
+  });
+});
+
+describe('검토 중 편집', () => {
+  it('체크를 풀면 딸린 변경도 함께 풀린다', async () => {
+    const user = userEvent.setup();
+    const base = view({
+      groups: [{ key: 'nc1', kind: 'NEW', topicId: null, title: '부모', changeIds: ['p1', 'p2'] }],
+      changes: [
+        change('p1', 'ADD', '「부모」을(를) 새로 만들어요', { title: '부모' }),
+        change('p2', 'ADD', '「자식」을(를) 새로 만들어요', { title: '자식', dependsOn: ['p1'] }),
+      ],
+      dependsOn: { p2: ['p1'] },
+    });
+    projectTidyAPI.get.mockResolvedValue(base);
+    projectTidyAPI.saveEdits.mockImplementation(async (id, body) => ({
+      ...base, edits: body.edits, editRevision: 1,
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /부모.*변경 2/ }));
+    const boxes = screen.getAllByRole('checkbox');
+    await user.click(boxes[0]); // 부모를 뺀다
+
+    await waitFor(() => expect(projectTidyAPI.saveEdits).toHaveBeenCalled());
+    const saved = projectTidyAPI.saveEdits.mock.calls.at(-1)[1].edits;
+    expect(saved.p1.excluded).toBe(true);
+    expect(saved.p2.excluded).toBe(true);
+  });
+
+  it('제목을 고치면 자동 저장되고 저장됨을 알린다 — 트리는 바뀌지 않는다', async () => {
+    const user = userEvent.setup();
+    const base = view();
+    projectTidyAPI.get.mockResolvedValue(base);
+    projectTidyAPI.saveEdits.mockImplementation(async (id, body) => ({
+      ...base, edits: body.edits, editRevision: 1,
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
+    await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
+
+    await waitFor(() => expect(screen.getByText('저장됨')).toBeInTheDocument());
+    expect(projectTidyAPI.saveEdits.mock.calls.at(-1)[1].edits.c2.title).toBe('원형 큐!');
+    // 저장은 검토 초안일 뿐이다 — 적용은 따로 눌러야 한다.
+    expect(projectTidyAPI.apply).not.toHaveBeenCalled();
+  });
+
+  it('저장이 아직 서버에 닿지 않았으면 적용을 막는다 — 이유 없는 409를 만들지 않는다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view());
+    // 저장이 끝나지 않은 상태를 만든다.
+    projectTidyAPI.saveEdits.mockReturnValue(new Promise(() => {}));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
+    await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /선택한 변경 적용/ })).toBeDisabled());
+  });
+
+  it('저장에 실패하면 알리고 적용을 막는다 — 조용히 넘기지 않는다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view());
+    projectTidyAPI.saveEdits.mockRejectedValue(new Error('서버 오류'));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
+    await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
+
+    expect(await screen.findByText(/저장하지 못했어요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /선택한 변경 적용/ })).toBeDisabled();
+  });
+
+  it('다른 곳에서 먼저 고쳤으면 최신을 다시 읽고 그 사실을 알린다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view());
+    projectTidyAPI.saveEdits.mockRejectedValue(Object.assign(new Error('stale'), { code: 'E409_029' }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
+    await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
+
+    expect(await screen.findByText(/다른 곳에서 먼저 고쳤어요/)).toBeInTheDocument();
+    await waitFor(() => expect(projectTidyAPI.get).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('새 자료와 트리 변경', () => {
+  it('그 사이 끝난 자료는 섞지 않고 알리기만 한다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({ newMaterialCount: 2 }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/그 사이 분석이 끝난 자료 2개가 있어요/)).toBeInTheDocument();
+    expect(screen.getByText(/지금 보는 정리안에는 들어 있지 않아요/)).toBeInTheDocument();
+    // 다시 만드는 것은 사용자가 누를 때다.
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+  });
+
+  it('새 자료 반영해 다시 정리를 누르면 refresh로 요청한다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view({ newMaterialCount: 1 }));
+    projectTidyAPI.request.mockResolvedValue(view({ job: { jobId: 2, status: 'RUNNING' } }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /새 자료 반영해 다시 정리/ }));
+
+    expect(projectTidyAPI.request).toHaveBeenCalledWith(6, { refresh: true });
+  });
+
+  it('트리가 바뀌었으면 정리안을 숨기지 않고 적용만 막는다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({ treeChanged: true, currentTreeVersion: 4 }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/학습 구조가 바뀌었어요/)).toBeInTheDocument();
+    // 내용은 그대로 보인다.
+    expect(screen.getByText('자료 연결 2곳 · 새 항목 1개')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /선택한 변경 적용/ })).toBeDisabled();
+  });
+});
+
+describe('적용과 버리기', () => {
+  it('고른 변경만 실어 보내고 판 번호를 함께 보낸다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view());
+    projectTidyAPI.apply.mockResolvedValue(view({ status: 'APPLIED' }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /선택한 변경 적용/ }));
+
+    expect(projectTidyAPI.apply).toHaveBeenCalledWith(11, {
+      revision: 1,
+      editRevision: 0,
+      baseTreeVersion: 3,
+      selectedChangeIds: ['c1', 'c2'],
+      titleOverrides: {},
+    });
+  });
+
+  it('일부만 골랐으면 버튼이 몇 개인지 말한다', async () => {
+    const user = userEvent.setup();
+    const base = view();
+    projectTidyAPI.get.mockResolvedValue(base);
+    projectTidyAPI.saveEdits.mockImplementation(async (id, body) => ({
+      ...base, edits: body.edits, editRevision: 1,
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /스택.*변경 1/ }));
+    await user.click(screen.getAllByRole('checkbox')[0]);
+
+    expect(await screen.findByRole('button', { name: /선택한 1개 적용/ })).toBeInTheDocument();
+  });
+
+  it('버리기는 서버에 알리고 화면을 비운다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view());
+    projectTidyAPI.dismiss.mockResolvedValue(empty({ readyMaterialCount: 2, firstTime: false }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: '버리기' }));
+
+    expect(projectTidyAPI.dismiss).toHaveBeenCalledWith(6);
+    await waitFor(() =>
+      expect(screen.queryByText('자료 연결 2곳 · 새 항목 1개')).not.toBeInTheDocument());
+  });
+
+  it('나중에는 검토 내용을 그대로 두고 화면만 옮긴다', async () => {
+    const user = userEvent.setup();
+    const onOpenMaterials = vi.fn();
+    projectTidyAPI.get.mockResolvedValue(view());
+    render(<ProjectTidyPanel courseId={6} onOpenMaterials={onOpenMaterials} />);
+
+    await user.click(await screen.findByRole('button', { name: '나중에' }));
+
+    expect(onOpenMaterials).toHaveBeenCalled();
+    expect(projectTidyAPI.dismiss).not.toHaveBeenCalled();
+  });
+
+  it('바꿀 것이 없었으면 그렇게 말하고 트리는 그대로다', async () => {
+    projectTidyAPI.get.mockResolvedValue(empty({
+      proposalId: 12, status: 'EMPTY', readyMaterialCount: 3, firstTime: false,
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/바꿀 것이 없었어요/)).toBeInTheDocument();
+  });
+
+  it('병합·분할은 학습 기록이 어떻게 되는지 미리 말한다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view({
+      groups: [{ key: 't1', kind: 'EXISTING', topicId: 1, title: '스택', changeIds: ['m1'] }],
+      changes: [change('m1', 'MERGE', '「큐」을(를) 「스택」에 합쳐요', {
+        caution: '흡수되는 항목은 보관돼요. 학습 기록은 복제하지 않고, 승계가 애매하면 안내가 남아요',
+      })],
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /스택.*변경 1/ }));
+    expect(screen.getByText(/흡수되는 항목은 보관돼요/)).toBeInTheDocument();
+  });
+});

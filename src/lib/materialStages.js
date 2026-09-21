@@ -1,11 +1,15 @@
 /**
- * 자료 하나가 지나가는 네 단계와, 끝나지 않은 작업이 왜 기다리는지의 문구.
+ * 자료 하나가 지나가는 세 단계와, 끝나지 않은 작업이 왜 기다리는지의 문구.
  *
- *   등록 → 텍스트 추출 → 내용 분석 → 구조 제안(연결)
+ *   등록 → 텍스트 추출 → 내용 분석
  *
  * 단계를 나눠 보여 주는 이유: "올렸는데 왜 아직이지"의 답이 단계마다 다르다. 등록은 끝났는데 본문을 못
- * 읽은 것과, 본문은 읽었는데 분석 차례를 기다리는 것과, 분석은 끝났는데 구조 제안이 승인을 기다리는 것은
- * 사용자가 할 일이 전부 다르다.
+ * 읽은 것과, 본문은 읽었는데 분석 차례를 기다리는 것은 사용자가 할 일이 다르다.
+ *
+ * ★ (2026-09-21) 네 번째 단계였던 "구조 제안(연결)"을 뺐다. 학습 구조 정리는 이제 자료마다 자동으로
+ *   도는 것이 아니라 <프로젝트 화면에서 사용자가 [이 프로젝트 자료 정리]를 누를 때> 그 프로젝트의
+ *   자료를 함께 보고 한 번에 한다. 자료 줄에 "구조 제안 대기"를 계속 띄우면 누르지도 않은 일이
+ *   밀린 것처럼 보인다.
  *
  * ★ 기다림은 실패가 아니다. 한도·차례·일시중지·서비스 연결은 각자 다른 말을 하고, 어느 것도 "실패"나
  *   "중단"이라는 단어를 쓰지 않는다 — 대기 목록은 그대로 있고 이어서 처리된다.
@@ -23,7 +27,7 @@ export const STAGE_STATE_LABEL = Object.freeze({
   unknown: '확인 중',
 });
 
-export const STAGE_TITLES = Object.freeze(['등록', '텍스트 추출', '내용 분석', '구조 제안(연결)']);
+export const STAGE_TITLES = Object.freeze(['등록', '텍스트 추출', '내용 분석']);
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -84,7 +88,7 @@ function stageOfAnalysisState(state) {
 }
 
 /**
- * 네 단계의 상태.
+ * 세 단계의 상태.
  *   material: { extractionStatus }  ('SUCCESS'가 아니면 본문을 못 읽은 것)
  *   status:   MaterialAnalysisStatusResponse | null  (없으면 아직 못 읽은 것 — "확인 중")
  */
@@ -100,32 +104,23 @@ export function materialStages(material, status) {
   ];
   if (!extracted) {
     stages.push({ title: STAGE_TITLES[2], state: 'skipped', note: '본문을 읽은 뒤에 할 수 있어요' });
-    stages.push({ title: STAGE_TITLES[3], state: 'skipped', note: null });
     return stages;
   }
   const content = status ? stageOfAnalysisState(status.state) : 'unknown';
   const progress = status?.state === 'RUNNING' && status.totalChunks
     ? `${status.completedChunks ?? 0}/${status.totalChunks}` : null;
   stages.push({ title: STAGE_TITLES[2], state: content, note: progress });
-
-  let link;
-  if (!status) link = { state: 'unknown', note: null };
-  else if (status.linkState == null) {
-    link = content === 'done' || content === 'partial'
-      ? { state: 'skipped', note: '프로젝트에 연결하면 시작해요' }
-      : { state: 'waiting', note: '내용 분석 뒤에 시작해요' };
-  } else {
-    link = { state: stageOfAnalysisState(status.linkState), note: null };
-  }
-  stages.push({ title: STAGE_TITLES[3], ...link });
   return stages;
 }
+
+/** 내용 분석이 끝난 자료에 붙는 다음 걸음. 자동으로 도는 일이 아니라 사용자가 고르는 일이다. */
+export const TIDY_IS_OPTIONAL = '학습 구조 정리는 프로젝트 화면에서 원할 때 한 번에 해요';
 
 /** 이 파일 내용이 쓰이지 않는다는 말. 실패·미지원 파일마다 붙는다. */
 export const NOT_USED_IMPACT = '이 파일 내용은 상담·계획에 쓰이지 않아요';
 
-/** 구조 제안을 승인하지 않아도 된다는 말. 분석 상태가 보이는 곳마다 같은 문장을 쓴다. */
-export const CONSULT_BEFORE_APPROVAL = '구조 제안을 승인하기 전에도 상담과 계획은 할 수 있어요';
+/** 학습 구조를 정리하지 않아도 된다는 말. 분석 상태가 보이는 곳마다 같은 문장을 쓴다. */
+export const CONSULT_BEFORE_APPROVAL = '학습 구조를 정리하기 전에도 상담과 계획은 할 수 있어요';
 
 /**
  * 자료·구간이 "앱에 없는 첨부"를 언급한다는 표시를 읽는다. 서버가 실어 줄 때만 값이 있다.

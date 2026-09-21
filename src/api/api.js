@@ -71,9 +71,16 @@ async function request(url, options = {}) {
 
     // response가 200~299일때 통과하고 아니라면 에러를 발생시킨다
     if (!response.ok) {
+        /*
+         * details가 문자열이면 그것이 이 상황을 설명하는 문장이다 — 서버가 ErrorCode의 일반 문구
+         * 대신 "「강의슬라이드.pdf」이(가) 지워졌어요"처럼 구체적으로 말할 때 그 자리에 담긴다.
+         * 구조화된 details(목록·객체)는 예전대로 err.details로만 간다.
+         */
+        const specific = typeof data?.details === 'string' ? data.details : null;
         const error = new Error(
             //data가 null일 경우 에러가 생기기 때문에 옵셔널 체이닝 기법을 활용
             //null일때 undefined 반환
+            specific ||
             data?.message ||
             data?.error ||
             `요청 실패: ${response.status}`
@@ -946,11 +953,13 @@ export const materialAPI = {
      * 이 프로젝트에서 맡는 역할이고, 만들어지는 material_links 행에 붙는다.
      * SYLLABUS|TEXTBOOK_TOC|PROFESSOR_SLIDE|OTHER
      */
-    upload: (courseId, materialType, file) => {
+    upload: (courseId, materialType, file, batchItemId = null) => {
         const formData = new FormData();
         formData.append('materialType', materialType);
         formData.append('file', file);
-        return requestMultipart(`/courses/${courseId}/materials?materialType=${materialType}`, formData);
+        const batch = batchItemId == null ? '' : `&batchItemId=${batchItemId}`;
+        return requestMultipart(
+            `/courses/${courseId}/materials?materialType=${materialType}${batch}`, formData);
     },
 
     /** 과목의 업로드 자료 목록 */
@@ -972,11 +981,17 @@ export const materialStoreAPI = {
         return request('/materials');
     },
 
-    /** 프로젝트 없이 업로드. materialType을 보내지 않는다 */
-    upload: (file) => {
+    /**
+     * 프로젝트 없이 업로드. materialType을 보내지 않는다.
+     *
+     * batchItemId를 주면 그 묶음 자리에 결과가 적힌다 — 진행 상태의 원본이 서버에 생겨
+     * 탭을 닫았다 돌아와도 어디까지 됐는지 복원된다.
+     */
+    upload: (file, batchItemId = null) => {
         const formData = new FormData();
         formData.append('file', file);
-        return requestMultipart('/materials', formData);
+        const query = batchItemId == null ? '' : `?batchItemId=${batchItemId}`;
+        return requestMultipart(`/materials${query}`, formData);
     },
 
     /** 단건 + 연결 목록 + 분석 이력 */
@@ -1503,6 +1518,70 @@ export const assignmentAPI = {
  * 자료 정리 변경안. 분석이 만들고 사용자가 적용한다. 적용은 전부 아니면 전무이고,
  * 변경안을 만든 뒤 학습 구조가 바뀌었으면 409(TOPIC_TREE_CONFLICT)다.
  */
+/**
+ * 업로드·분석 묶음.
+ *
+ * 흐름: estimate(고르는 동안 미리보기) → create(구성원 고정) → 자리마다 upload → get(진행률).
+ * 진행 상태의 원본은 서버다. 브라우저 타이머로 진행률을 만들지 않는다.
+ */
+export const analysisBatchAPI = {
+    /** 저장하지 않고 예상 시간만. files: [{ filename, sizeBytes }] */
+    estimate: (files) =>
+        request('/materials/analysis/estimate', {
+            method: 'POST',
+            body: JSON.stringify({ files }),
+        }),
+
+    /** 묶음을 연다. 여기서 구성원이 고정된다 — 분석 중 추가 업로드는 새 묶음이 된다. */
+    create: ({ courseId = null, files }) =>
+        request('/materials/analysis/batches', {
+            method: 'POST',
+            body: JSON.stringify({ courseId, files }),
+        }),
+
+    get: (batchId) => request(`/materials/analysis/batches/${batchId}`),
+
+    /** 아직 도는 묶음. 화면에 다시 들어왔을 때 복원한다. */
+    listOpen: (courseId = null) =>
+        request(`/materials/analysis/batches${courseId == null ? '' : `?courseId=${courseId}`}`),
+};
+
+/**
+ * 프로젝트 단위 자료 정리.
+ *
+ * 자료별 변경안(topicChangeProposalAPI)을 대신한다. 한 프로젝트에 연결된 분석 완료 자료를
+ * 함께 보고 정리안 하나를 만든다 — 자료별로 만들면 같은 개념을 건드리는 제안끼리 충돌한다.
+ */
+export const projectTidyAPI = {
+    get: (courseId) => request(`/courses/${courseId}/tidy`),
+
+    /** [이 프로젝트 자료 정리]. refresh=true면 [새 자료 반영해 다시 정리]. */
+    request: (courseId, { refresh = false } = {}) =>
+        request(`/courses/${courseId}/tidy?refresh=${refresh ? 'true' : 'false'}`, { method: 'POST' }),
+
+    /**
+     * 검토 중 고친 것 저장(자동 저장). 트리는 바뀌지 않는다.
+     * body: { editRevision, edits: { [changeId]: { excluded, title } } }
+     */
+    saveEdits: (proposalId, body) =>
+        request(`/project-tidy/${proposalId}/edits`, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+        }),
+
+    /** body: { revision, editRevision, baseTreeVersion, selectedChangeIds, titleOverrides } */
+    apply: (proposalId, body) =>
+        request(`/project-tidy/${proposalId}/apply`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+
+    dismiss: (courseId) => request(`/courses/${courseId}/tidy/dismiss`, { method: 'POST' }),
+
+    history: (courseId) => request(`/courses/${courseId}/tidy/history`),
+};
+
+/** @deprecated 자료별 변경안. 2026-09-21에 프로젝트 단위 정리(projectTidyAPI)로 옮겼다. 이력 조회만 남는다. */
 export const topicChangeProposalAPI = {
     listByCourse: (courseId, includeResolved = false) =>
         request(`/courses/${courseId}/topic-change-proposals?includeResolved=${includeResolved ? 'true' : 'false'}`),
