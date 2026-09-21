@@ -147,6 +147,13 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
     }
   };
 
+  /** 같은 입력으로 한 번 더. 새 자료는 섞지 않는다. */
+  const retryTidy = () => run(async () => {
+    const result = await projectTidyAPI.retry(courseId);
+    invalidate();
+    setView(result);
+  }, '다시 시도하지 못했어요.');
+
   const requestTidy = (refresh = false) => run(async () => {
     // 다시 만들기 전에 남은 편집을 먼저 확정한다. 아직 서버에 없는 편집은 새 판으로
     // 승계될 수 없다 — 승계는 저장된 것만 옮긴다.
@@ -231,9 +238,17 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
         <p className={jobNote.tone === 'problem' ? 'view-error' : 'view-dim'}>
           {jobNote.tone === 'busy' ? <Loader2 size={13} className="spin" /> : <AlertCircle size={13} />}
           {' '}{jobNote.text}
+          {/*
+            [다시 시도]는 요청 때의 입력 그대로 한 번 더 한다. 입력이 바뀌어 멈춘 실패는 같은 입력으로
+            다시 해도 또 멈추므로 [새로 정리]를 준다 — 지금 자료와 구조로 새로 만든다.
+          */}
           {view?.job?.retryable && (
             <button type="button" className="btn-ghost btn-sm" disabled={busy}
-              onClick={() => requestTidy(false)}>다시 시도</button>
+              onClick={retryTidy}>다시 시도</button>
+          )}
+          {view?.job?.needsNewRequest && (
+            <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              onClick={() => requestTidy(true)}>지금 자료로 새로 정리</button>
           )}
         </p>
       )}

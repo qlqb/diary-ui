@@ -15,7 +15,7 @@ import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/api.js', () => ({
   projectTidyAPI: {
-    get: vi.fn(), request: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
+    get: vi.fn(), request: vi.fn(), retry: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
   },
 }));
 

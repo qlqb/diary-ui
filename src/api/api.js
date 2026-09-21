@@ -1590,6 +1590,12 @@ export const projectTidyAPI = {
             body: JSON.stringify(body),
         }),
 
+    /**
+     * 실패한 정리를 <요청 때의 입력 그대로> 다시 한다. 그 사이 끝난 자료는 섞지 않는다 —
+     * 최신을 반영하려면 request(courseId, { refresh: true }).
+     */
+    retry: (courseId) => request(`/courses/${courseId}/tidy/retry`, { method: 'POST' }),
+
     dismiss: (courseId) => request(`/courses/${courseId}/tidy/dismiss`, { method: 'POST' }),
 
     history: (courseId) => request(`/courses/${courseId}/tidy/history`),

@@ -15,7 +15,7 @@ import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/api.js', () => ({
   projectTidyAPI: {
-    get: vi.fn(), request: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
+    get: vi.fn(), request: vi.fn(), retry: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
   },
 }));
 
@@ -395,5 +395,41 @@ describe('적용과 버리기', () => {
 
     await user.click(await screen.findByRole('button', { name: /스택.*변경 1/ }));
     expect(screen.getByText(/흡수되는 항목은 보관돼요/)).toBeInTheDocument();
+  });
+});
+
+describe('실패한 정리', () => {
+  it('다시 시도는 요청 때의 입력으로 한다 — 새 요청이 아니다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(empty({
+      readyMaterialCount: 3,
+      job: { jobId: 5, status: 'FAILED', retryable: true, needsNewRequest: false, message: '정리안을 만들지 못했어요' },
+    }));
+    projectTidyAPI.retry.mockResolvedValue(empty({ readyMaterialCount: 3, job: { jobId: 6, status: 'QUEUED' } }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: '다시 시도' }));
+
+    expect(projectTidyAPI.retry).toHaveBeenCalledWith(6);
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+  });
+
+  it('입력이 바뀌어 멈췄으면 다시 시도 대신 새로 정리를 준다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(empty({
+      readyMaterialCount: 3,
+      job: {
+        jobId: 5, status: 'FAILED', retryable: false, needsNewRequest: true, errorCode: 'STALE_INPUT',
+        message: '요청한 뒤 자료가 바뀌었어요: 「강의.pdf」 다시 분석됨. 지금 자료로 다시 정리해 주세요',
+      },
+    }));
+    projectTidyAPI.request.mockResolvedValue(empty({ readyMaterialCount: 3, job: { jobId: 7, status: 'QUEUED' } }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/「강의.pdf」 다시 분석됨/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '지금 자료로 새로 정리' }));
+
+    expect(projectTidyAPI.request).toHaveBeenCalledWith(6, { refresh: true });
   });
 });
