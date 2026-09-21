@@ -11,11 +11,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MaterialsView from './MaterialsView.jsx';
+import { createFakeBatchApi } from '../../testing/fakeAnalysisBatch.js';
 import AnalysisStatusChip from '../../components/AnalysisStatusChip.jsx';
 import AnalysisOverviewBar from './AnalysisOverviewBar.jsx';
 import MaterialStages from './MaterialStages.jsx';
 import { dailyLimitCopy, formatResumeTime, materialStages, waitingCopy } from '../../lib/materialStages.js';
-import { materialAnalysisStatusAPI, materialStoreAPI } from '../../api/api.js';
+import { analysisBatchAPI, materialAnalysisStatusAPI, materialStoreAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
   materialAnalysisStatusAPI: {
@@ -25,6 +26,9 @@ vi.mock('../../api/api.js', () => ({
   zipImportAPI: {
     create: vi.fn(), listRecent: vi.fn().mockResolvedValue([]), get: vi.fn(), confirm: vi.fn(),
     retryEntry: vi.fn(), cancel: vi.fn(),
+  },
+  analysisBatchAPI: {
+    estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn(),
   },
   materialStoreAPI: {
     list: vi.fn(), retryExtraction: vi.fn(), get: vi.fn(), upload: vi.fn(), delete: vi.fn(), addLink: vi.fn(),
@@ -36,6 +40,15 @@ const EMPTY_OVERVIEW = { materials: [], paused: false, serviceAvailable: true, q
 
 beforeEach(() => {
   vi.clearAllMocks();
+  /*
+   * 업로드는 이제 서버 묶음을 먼저 열고 그 자리마다 올린다. 화면 테스트는 그 계약만 흉내 낸다 —
+   * 진행률·예상 시간의 실제 계산은 서버 몫이고 서버 테스트가 본다.
+   */
+  const fakeBatch = createFakeBatchApi();
+  analysisBatchAPI.estimate.mockImplementation(fakeBatch.estimate);
+  analysisBatchAPI.create.mockImplementation(fakeBatch.create);
+  analysisBatchAPI.get.mockImplementation(fakeBatch.get);
+  analysisBatchAPI.listOpen.mockImplementation(fakeBatch.listOpen);
   materialStoreAPI.list.mockResolvedValue([]);
   materialStoreAPI.proposeLinks.mockResolvedValue({ status: 'NO_CANDIDATES', groups: [] });
   materialAnalysisStatusAPI.overview.mockResolvedValue(EMPTY_OVERVIEW);
@@ -63,7 +76,7 @@ describe('업로드 결과 요약', () => {
     ]);
 
     // .sh는 담긴다 — 올릴 대상이 셋이다.
-    await user.click(screen.getByRole('button', { name: /3개 올리기/ }));
+    await user.click(screen.getByRole('button', { name: /3개 분석 시작/ }));
 
     const summary = await screen.findByRole('status', { name: '업로드 결과' });
     expect(within(summary).getByText('2개 올림 · 1개 실패 · 1개 미지원')).toBeInTheDocument();
@@ -79,7 +92,7 @@ describe('업로드 결과 요약', () => {
     materialStoreAPI.upload.mockResolvedValue({ materialId: 1, extractionStatus: 'SUCCESS' });
     const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
     await pick(container, [new File(['x'], '1주차.pdf', { type: 'application/pdf' })]);
-    await user.click(screen.getByRole('button', { name: /1개 올리기/ }));
+    await user.click(screen.getByRole('button', { name: /1개 분석 시작/ }));
 
     const summary = await screen.findByRole('status', { name: '업로드 결과' });
     expect(within(summary).getByText('1개 올림')).toBeInTheDocument();
@@ -91,7 +104,7 @@ describe('업로드 결과 요약', () => {
     materialStoreAPI.upload.mockResolvedValue({ materialId: 1, extractionStatus: 'FAILED_NO_TEXT' });
     const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
     await pick(container, [new File(['x'], '스캔본.pdf', { type: 'application/pdf' })]);
-    await user.click(screen.getByRole('button', { name: /1개 올리기/ }));
+    await user.click(screen.getByRole('button', { name: /1개 분석 시작/ }));
 
     const summary = await screen.findByRole('status', { name: '업로드 결과' });
     expect(within(summary).getByText('1개 올림 · 1개 본문 못 읽음')).toBeInTheDocument();
@@ -141,7 +154,7 @@ describe('분석 대기 문구', () => {
     }} />);
     expect(screen.getByText(/오늘 분석 한도에 닿아 대기 중이에요 · 1월 1일 00:00부터 이어서 처리해요/)).toBeInTheDocument();
     expect(screen.getByText(/오늘 20\/20개 분석/)).toBeInTheDocument();
-    expect(screen.getByText('구조 제안을 승인하기 전에도 상담과 계획은 할 수 있어요')).toBeInTheDocument();
+    expect(screen.getByText('학습 구조를 정리하기 전에도 상담과 계획은 할 수 있어요')).toBeInTheDocument();
   });
 
   it('limit 필드가 없는 예전 서버 응답에서는 한도 문구를 그리지 않는다', () => {
@@ -150,24 +163,35 @@ describe('분석 대기 문구', () => {
   });
 });
 
-describe('자료별 네 단계', () => {
-  it('등록 / 텍스트 추출 / 내용 분석 / 구조 제안(연결)을 각각 글자 상태로 보여 준다', () => {
+/*
+ * (2026-09-21) 단계가 셋으로 줄었다. 네 번째였던 "구조 제안(연결)"은 자료마다 자동으로 돌던 일인데,
+ * 이제 학습 구조 정리는 프로젝트 화면에서 사용자가 누를 때 한 번에 한다 — 자료 줄에 계속 띄우면
+ * 누르지도 않은 일이 밀린 것처럼 보인다.
+ */
+describe('자료별 세 단계', () => {
+  it('등록 / 텍스트 추출 / 내용 분석을 각각 글자 상태로 보여 준다', () => {
     render(<MaterialStages material={{ originalFilename: 'a.pdf', extractionStatus: 'SUCCESS' }}
-      status={{ state: 'DONE', linkState: 'QUEUED', waitingReason: 'DAILY_LIMIT' }}
+      status={{ state: 'QUEUED', waitingReason: 'DAILY_LIMIT' }}
       limit={{ reached: true, resumesAt: null }} />);
     const list = screen.getByRole('list', { name: 'a.pdf 처리 단계' });
     const items = within(list).getAllByRole('listitem').map((li) => li.textContent);
-    expect(items).toEqual(['등록완료', '텍스트 추출완료', '내용 분석완료', '구조 제안(연결)대기']);
+    expect(items).toEqual(['등록완료', '텍스트 추출완료', '내용 분석대기']);
     expect(screen.getByText(/한도가 풀리면 이어서 처리해요/)).toBeInTheDocument();
+  });
+
+  it('구조 제안 단계는 더 이상 자료 줄에 없다 — 정리는 프로젝트에서 누를 때 한다', () => {
+    render(<MaterialStages material={{ originalFilename: 'a.pdf', extractionStatus: 'SUCCESS' }}
+      status={{ state: 'DONE' }} limit={null} />);
+    expect(screen.queryByText(/구조 제안/)).not.toBeInTheDocument();
   });
 
   it('본문을 못 읽었으면 뒤 단계는 "해당 없음"이다', () => {
     const stages = materialStages({ extractionStatus: 'FAILED_NO_TEXT' }, null);
-    expect(stages.map((s) => s.state)).toEqual(['done', 'problem', 'skipped', 'skipped']);
+    expect(stages.map((s) => s.state)).toEqual(['done', 'problem', 'skipped']);
   });
 
   it('상태를 아직 못 읽었으면 단정하지 않고 "확인 중"이다', () => {
     const stages = materialStages({ extractionStatus: 'SUCCESS' }, null);
-    expect(stages.map((s) => s.state)).toEqual(['done', 'done', 'unknown', 'unknown']);
+    expect(stages.map((s) => s.state)).toEqual(['done', 'done', 'unknown']);
   });
 });

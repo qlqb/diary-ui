@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MaterialsView from './MaterialsView.jsx';
+import { createFakeBatchApi } from '../../testing/fakeAnalysisBatch.js';
 import { PENDING_DELETE_WINDOW_MS } from './usePendingDelete.js';
-import { materialAnalysisStatusAPI, materialStoreAPI, zipImportAPI } from '../../api/api.js';
+import { analysisBatchAPI, materialAnalysisStatusAPI, materialStoreAPI, zipImportAPI } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
   materialAnalysisStatusAPI: {
@@ -17,6 +18,9 @@ vi.mock('../../api/api.js', () => ({
     confirm: vi.fn(),
     retryEntry: vi.fn(),
     cancel: vi.fn(),
+  },
+  analysisBatchAPI: {
+    estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn(),
   },
   materialStoreAPI: {
     list: vi.fn(),
@@ -72,9 +76,25 @@ async function openDetail() {
   return user;
 }
 
+/*
+ * 업로드는 이제 서버 묶음을 먼저 열고 그 자리마다 올린다. 화면 테스트는 그 계약만 흉내 낸다 —
+ * 진행률·예상 시간의 실제 계산은 서버 몫이고 서버 테스트가 본다.
+ *
+ * vi.clearAllMocks()는 구현까지 지우므로, 그것을 부르는 beforeEach마다 이것도 다시 건다.
+ */
+function installFakeBatchApi() {
+  const fake = createFakeBatchApi();
+  analysisBatchAPI.estimate.mockImplementation(fake.estimate);
+  analysisBatchAPI.create.mockImplementation(fake.create);
+  analysisBatchAPI.get.mockImplementation(fake.get);
+  analysisBatchAPI.listOpen.mockImplementation(fake.listOpen);
+  return fake;
+}
+
 describe('자료 상세', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     materialStoreAPI.list.mockResolvedValue([MATERIAL]);
     materialStoreAPI.get.mockResolvedValue(DETAIL);
     materialStoreAPI.updateLinkType.mockResolvedValue({});
@@ -111,6 +131,7 @@ describe('프로젝트로 정리하기 버튼', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     materialStoreAPI.get.mockResolvedValue(DETAIL);
   });
 
@@ -160,6 +181,7 @@ describe('자료 목록에서 바로 프로젝트 연결', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     onProjectsChanged = vi.fn();
     materialStoreAPI.list.mockResolvedValue([LINKED, UNLINKED]);
     materialStoreAPI.get.mockResolvedValue(DETAIL);
@@ -299,6 +321,7 @@ describe('자료 목록에서 바로 삭제', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     onProjectsChanged = vi.fn();
     materialStoreAPI.list.mockResolvedValue([MATERIAL, UNLINKED]);
@@ -454,6 +477,7 @@ describe('자료 목록에서 바로 삭제', () => {
 describe('업로드 직후 대기열 정리', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     materialStoreAPI.list.mockResolvedValue([]);
     materialStoreAPI.get.mockResolvedValue(DETAIL);
     materialStoreAPI.upload.mockImplementation((file) => Promise.resolve({
@@ -475,12 +499,19 @@ describe('업로드 직후 대기열 정리', () => {
     await act(async () => {
       fireEvent.change(input, { target: { files: [pdf('가.pdf'), pdf('나.pdf')] } });
     });
-    await user.click(screen.getByRole('button', { name: /2개 올리기/ }));
+    await user.click(screen.getByRole('button', { name: /2개 분석 시작/ }));
 
     await waitFor(() => expect(materialStoreAPI.upload).toHaveBeenCalledTimes(2));
-    // 대기열이 비워졌다 = 올린 파일 줄이 남아 있지 않다.
-    await waitFor(() => expect(screen.queryByText('가.pdf')).not.toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /개 올리기/ })).not.toBeInTheDocument();
+    /*
+     * 대기열이 비워졌다 = [N개 분석 시작]이 사라졌다.
+     *
+     * 파일 이름 자체는 화면에 남는다 — 이제 분석 진행 카드가 같은 파일을 "서버가 읽는 중"으로
+     * 보여주기 때문이다. 대기열("보내는 중")과 진행 카드("읽는 중")는 다른 것이라, 이름이
+     * 사라졌는지가 아니라 대기열이 사라졌는지를 본다.
+     */
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /개 분석 시작/ })).not.toBeInTheDocument());
+    expect(await screen.findByRole('region', { name: /자료 분석/ })).toBeInTheDocument();
 
     // 제안은 여전히 도는 중이다 — 기다리지 않았을 뿐 부르지 않은 것은 아니다.
     expect(materialStoreAPI.proposeLinks).toHaveBeenCalled();
@@ -497,7 +528,7 @@ describe('업로드 직후 대기열 정리', () => {
     await act(async () => {
       fireEvent.change(input, { target: { files: [pdf('가.pdf'), pdf('나.pdf')] } });
     });
-    await user.click(screen.getByRole('button', { name: /2개 올리기/ }));
+    await user.click(screen.getByRole('button', { name: /2개 분석 시작/ }));
 
     await waitFor(() => expect(materialStoreAPI.list).toHaveBeenCalledTimes(2));
   });
@@ -532,6 +563,7 @@ describe('연결 제안 배너', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     materialStoreAPI.list.mockResolvedValue([UNLINKED]);
     materialStoreAPI.get.mockResolvedValue(DETAIL);
     materialStoreAPI.proposeLinks.mockResolvedValue(generated());
@@ -587,7 +619,7 @@ describe('연결 제안 배너', () => {
         new File(['x'], '나.pdf', { type: 'application/pdf' }),
       ] } });
     });
-    await user.click(screen.getByRole('button', { name: /2개 올리기/ }));
+    await user.click(screen.getByRole('button', { name: /2개 분석 시작/ }));
 
     expect(await screen.findByText('자료를 살펴보는 중')).toBeInTheDocument();
   });
@@ -596,6 +628,7 @@ describe('연결 제안 배너', () => {
 describe('올릴 수 있는 형식', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     materialStoreAPI.list.mockResolvedValue([]);
   });
 
@@ -616,7 +649,7 @@ describe('올릴 수 있는 형식', () => {
       fireEvent.change(input, { target: { files } });
     });
 
-    expect(screen.getByRole('button', { name: /3개 올리기/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /3개 분석 시작/ })).toBeInTheDocument();
     expect(screen.getByText('PDF·PPTX·HWP·HWPX·IPYNB·SH·ZIP만 올릴 수 있어요')).toBeInTheDocument();
   });
 });
@@ -624,6 +657,7 @@ describe('올릴 수 있는 형식', () => {
 describe('드롭 영역', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     materialStoreAPI.get.mockResolvedValue(DETAIL);
   });
 
@@ -658,6 +692,7 @@ describe('드롭 영역', () => {
 describe('압축 파일과 본문 재추출', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    installFakeBatchApi();
     zipImportAPI.listRecent.mockResolvedValue([]);
   });
 
@@ -690,7 +725,7 @@ describe('압축 파일과 본문 재추출', () => {
     expect(zipImportAPI.create.mock.calls[0][0].name).toBe('3주차.zip');
     expect(await screen.findByText('3주차/강의.pdf')).toBeInTheDocument();
     expect(screen.getByText('지원하지 않는 형식이에요')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /1개 올리기/ })).toBeInTheDocument(); // pdf만 대기열에
+    expect(screen.getByRole('button', { name: /1개 분석 시작/ })).toBeInTheDocument(); // pdf만 대기열에
   });
 
   it('끝났어도 고르지 않고 남겨 둔 파일이 있으면 되살린다', async () => {

@@ -54,3 +54,6 @@
 @media (prefers-reduced-motion: reduce) {
   .material-stages *, .upload-summary * { transition: none !important; animation: none !important; }
 }
+
+/* 내용 분석이 끝난 자료에 붙는 다음 걸음 안내. 대기가 아니라 선택이라 경고색을 쓰지 않는다. */
+.material-stage-next { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; color: var(--ws-text-dim); }

@@ -10,7 +10,7 @@
  */
 
 import {
-  learningMapAPI, materialAPI, materialAnalysisStatusAPI, topicAPI, topicChangeProposalAPI,
+  learningMapAPI, materialAPI, materialAnalysisStatusAPI, projectTidyAPI, topicAPI,
 } from '../../api/api.js';
 
 const EMPTY_STATE = Object.freeze({
@@ -54,59 +54,44 @@ export function normalizeLearningMap(raw, courseId) {
 }
 
 /**
- * 기존 변경안(ops)을 계약의 proposed.nodes 모양으로 바꾼다. 트리 안에서 "어디에 붙는가"만 뽑는다 —
- * 세부 diff와 적용은 TopicChangeProposalCard가 그대로 맡는다.
+ * 프로젝트 정리안을 지도 위의 "승인 전" 미리보기 묶음으로. 0개나 1개다.
+ *
+ * 서버가 이미 사람이 읽을 문장(change.text)과 근거 구간을 만들어 주므로 여기서는 트리 자리만
+ * 정한다 — 같은 문장을 두 곳에서 다르게 만들지 않는다.
  */
-export function proposalToOverlay(proposal) {
-  const titles = proposal?.topicTitles ?? {};
-  const sectionsById = {};
-  (proposal?.sections ?? []).forEach((s) => { sectionsById[s.sectionId] = s; });
-  const sectionsOf = (ids) => (ids ?? []).map((id) => sectionsById[id]).filter(Boolean)
-    .map((s) => ({ sectionId: s.sectionId, title: s.title, locator: s.locator ?? null }));
-  const titleOf = (id) => titles[id] ?? '기존 항목';
+export function tidyToOverlayList(view) {
+  if (!view?.proposalId || view.status !== 'PROPOSED') return [];
+  const changeById = {};
+  (view.changes ?? []).forEach((c) => { changeById[c.changeId] = c; });
 
   const nodes = [];
-  (proposal?.ops ?? []).forEach((op, i) => {
-    const tempId = op.tempId ?? `p${proposal.proposalId}-${i}`;
-    switch (op?.op) {
-      case 'ADD':
-        nodes.push({ tempId, title: op.title, parentTempId: op.parentTempId ?? null,
-          parentTopicId: op.parentTopicId ?? null, op: 'ADD', sections: sectionsOf(op.sectionIds) });
-        break;
-      case 'LINK':
-        nodes.push({ tempId, title: '이 항목에 자료 연결', parentTempId: null,
-          parentTopicId: op.topicId ?? null, op: 'LINK', sections: sectionsOf(op.sectionIds) });
-        break;
-      case 'RENAME':
-        nodes.push({ tempId, title: `이름을 「${op.title}」(으)로`, parentTempId: null,
-          parentTopicId: op.topicId ?? null, op: 'RENAME', sections: [] });
-        break;
-      case 'MOVE':
-        nodes.push({ tempId, title: `「${titleOf(op.topicId)}」이(가) 여기로 이동`, parentTempId: null,
-          parentTopicId: op.parentTopicId ?? null, op: 'MOVE', sections: [] });
-        break;
-      case 'MERGE':
-        nodes.push({ tempId,
-          title: `「${(op.absorbedTopicIds ?? []).map(titleOf).join('」, 「')}」이(가) 이 항목으로 합쳐짐`,
-          parentTempId: null, parentTopicId: op.survivingTopicId ?? null, op: 'MERGE', sections: [] });
-        break;
-      case 'SPLIT':
-        (op.children ?? []).forEach((child, j) => {
-          nodes.push({ tempId: `${tempId}-${j}`, title: child.title, parentTempId: null,
-            parentTopicId: op.topicId ?? null, op: 'SPLIT', sections: sectionsOf(child.sectionIds) });
-        });
-        break;
-      default:
-        break;
-    }
+  // 트리 자리는 묶음(영향을 받는 항목)이 알고 있다 — 변경 하나하나가 아니라.
+  (view.groups ?? []).forEach((group) => {
+    (group.changeIds ?? []).forEach((changeId) => {
+      const change = changeById[changeId];
+      if (!change) return;
+      nodes.push({
+        tempId: `p${view.proposalId}:${changeId}`,
+        title: change.op === 'ADD' ? (change.title ?? change.text) : change.text,
+        parentTempId: null,
+        parentTopicId: group.topicId ?? null,
+        op: change.op,
+        sections: (change.sections ?? []).map((s) => ({
+          sectionId: s.sectionId, title: s.title, locator: s.locator ?? null,
+        })),
+      });
+    });
   });
-  return {
-    proposalId: proposal.proposalId,
-    materialId: proposal.materialId ?? null,
-    filename: proposal.materialFilename ?? null,
-    summary: proposal.summary ?? null,
+  if (nodes.length === 0) return [];
+  return [{
+    proposalId: view.proposalId,
+    materialId: null,
+    filename: (view.scope?.reviewed ?? []).length === 1
+      ? view.scope.reviewed[0].filename
+      : `자료 ${(view.scope?.reviewed ?? []).length}개`,
+    summary: view.summary ?? null,
     nodes,
-  };
+  }];
 }
 
 const PENDING_STATES = new Set(['NONE', 'QUEUED', 'RUNNING', 'PAUSED']);
@@ -114,21 +99,23 @@ const FAILED_STATES = new Set(['FAILED', 'UNAVAILABLE']);
 
 /** 404일 때의 조립. 부분 실패는 그 부분만 비운다 — 트리를 못 읽은 것만 전체 실패다. */
 async function buildFallback(courseId) {
-  const [topics, proposalsResult, materialsResult, overviewResult] = await Promise.all([
+  const [topics, tidyResult, materialsResult, overviewResult] = await Promise.all([
     topicAPI.getTree(courseId),
-    Promise.resolve().then(() => topicChangeProposalAPI.listByCourse(courseId, false)).catch(() => []),
+    // 검토 중인 정리안은 프로젝트당 하나다(예전에는 자료마다 하나였다).
+    Promise.resolve().then(() => projectTidyAPI.get(courseId)).catch(() => null),
     Promise.resolve().then(() => materialAPI.listByCourse(courseId)).catch(() => []),
     Promise.resolve().then(() => materialAnalysisStatusAPI.overview()).catch(() => null),
   ]);
   const tree = topics ?? [];
   const flat = flattenTopics(tree);
-  const proposals = proposalsResult ?? [];
+  const proposals = tidyToOverlayList(tidyResult);
   const materials = materialsResult ?? [];
   const statusById = new Map();
   (overviewResult?.materials ?? []).forEach((m) => statusById.set(m.materialId, m));
 
   const mine = materials.map((m) => ({ ...m, analysisState: statusById.get(m.materialId)?.state ?? null }));
-  const proposalMaterialIds = new Set(proposals.map((p) => p.materialId));
+  const proposalMaterialIds = new Set(
+    (tidyResult?.scope?.reviewed ?? []).map((r) => r.materialId));
   /*
    * 어느 자료가 topic에 연결됐는지는 옛 API로 알 수 없다. 확실한 것만 "미연결"로 본다:
    * 지도에 항목이 하나도 없으면 전부, 아니면 아직 변경안이 열려 있는 자료.
@@ -151,7 +138,7 @@ async function buildFallback(courseId) {
       hasRecords: flat.some((t) => t.progressStatus && t.progressStatus !== 'NOT_STARTED'),
     },
     topics: tree,
-    proposed: proposals.map(proposalToOverlay),
+    proposed: proposals,
     unlinked,
     weeks: [],
     source: 'fallback',

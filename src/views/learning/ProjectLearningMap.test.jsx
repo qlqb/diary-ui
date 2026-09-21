@@ -6,7 +6,7 @@ vi.mock('../../api/api.js', () => ({
   learningMapAPI: { get: vi.fn() },
   selfCheckAPI: { submit: vi.fn() },
   topicAPI: { getTree: vi.fn(), updateProgress: vi.fn(), updateUserMark: vi.fn() },
-  topicChangeProposalAPI: { listByCourse: vi.fn() },
+  projectTidyAPI: { get: vi.fn() },
   materialAPI: { listByCourse: vi.fn() },
   materialAnalysisStatusAPI: { overview: vi.fn(), retry: vi.fn() },
   materialStoreAPI: { file: vi.fn() },
@@ -14,7 +14,7 @@ vi.mock('../../api/api.js', () => ({
 
 import ProjectLearningMap from './ProjectLearningMap.jsx';
 import {
-  learningMapAPI, materialAPI, materialAnalysisStatusAPI, selfCheckAPI, topicAPI, topicChangeProposalAPI,
+  learningMapAPI, materialAPI, materialAnalysisStatusAPI, projectTidyAPI, selfCheckAPI, topicAPI,
 } from '../../api/api.js';
 
 const leaf = (topicId, title, extra = {}) => ({
@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   learningMapAPI.get.mockResolvedValue(mapResponse());
   topicAPI.getTree.mockResolvedValue([]);
-  topicChangeProposalAPI.listByCourse.mockResolvedValue([]);
+  projectTidyAPI.get.mockResolvedValue(null);
   materialAPI.listByCourse.mockResolvedValue([]);
   materialAnalysisStatusAPI.overview.mockResolvedValue({ materials: [] });
 });
@@ -314,12 +314,19 @@ describe('ProjectLearningMap - 서버가 아직 learning-map을 모를 때(404)'
         { topicId: 2, title: '단순 연결 리스트', progressStatus: 'NOT_STARTED', children: [] },
       ] },
     ]);
-    topicChangeProposalAPI.listByCourse.mockResolvedValue([{
-      proposalId: 5, materialId: 21, materialFilename: 'week3.pdf', summary: { add: 1 },
-      topicTitles: { 1: '연결 리스트' },
-      sections: [{ sectionId: 9, title: '3.4 원형 리스트', locator: 'p.30' }],
-      ops: [{ op: 'ADD', title: '원형 연결 리스트', parentTopicId: 1, sectionIds: [9] }],
-    }]);
+    // 검토 중인 정리안은 프로젝트당 하나다. 지도는 그것을 "승인 전" 미리보기로 겹쳐 보여준다.
+    projectTidyAPI.get.mockResolvedValue({
+      proposalId: 5,
+      status: 'PROPOSED',
+      summary: { headline: '새 항목 1개' },
+      scope: { reviewed: [{ materialId: 21, filename: 'week3.pdf' }], excluded: [] },
+      groups: [{ key: 't1', kind: 'EXISTING', topicId: 1, title: '연결 리스트', changeIds: ['c1'] }],
+      changes: [{
+        changeId: 'c1', op: 'ADD', label: '새 항목', title: '원형 연결 리스트',
+        text: '「연결 리스트」 아래에 「원형 연결 리스트」을(를) 새로 만들어요',
+        sections: [{ sectionId: 9, materialId: 21, title: '3.4 원형 리스트', locator: 'p.30' }],
+      }],
+    });
     materialAPI.listByCourse.mockResolvedValue([{ materialId: 21, originalFilename: 'week3.pdf' }]);
     materialAnalysisStatusAPI.overview.mockResolvedValue({ materials: [{ materialId: 21, state: 'DONE' }] });
 

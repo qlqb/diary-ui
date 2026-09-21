@@ -3,8 +3,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ProjectWorkspace from './ProjectWorkspace.jsx';
 import {
-  courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialStoreAPI, planAPI, topicAPI,
+  analysisBatchAPI, courseAPI, courseNoteAPI, executionItemAPI, materialAPI, materialStoreAPI,
+  planAPI, topicAPI,
 } from '../../api/api.js';
+import { createFakeBatchApi } from '../../testing/fakeAnalysisBatch.js';
 
 vi.mock('../../api/api.js', () => ({
   // 자동 분석·변경안·과제 — 이 테스트들의 관심사가 아니라 빈 값을 준다.
@@ -12,7 +14,14 @@ vi.mock('../../api/api.js', () => ({
     overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true }),
     retry: vi.fn(), section: vi.fn(), sections: vi.fn().mockResolvedValue([]), status: vi.fn(),
   },
-  topicChangeProposalAPI: { listByCourse: vi.fn().mockResolvedValue([]), apply: vi.fn(), dismiss: vi.fn() },
+  projectTidyAPI: {
+    get: vi.fn().mockResolvedValue({ courseId: 6, readyMaterialCount: 0, analyzingMaterialCount: 0, groups: [] }),
+    request: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
+  },
+  analysisBatchAPI: {
+    estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn().mockResolvedValue([]),
+  },
+  zipImportAPI: { create: vi.fn(), get: vi.fn(), confirm: vi.fn(), retryEntry: vi.fn(), cancel: vi.fn() },
   assignmentAPI: {
     listByCourse: vi.fn().mockResolvedValue([]), listOpen: vi.fn().mockResolvedValue([]),
     answer: vi.fn(), setDue: vi.fn(), setCompleted: vi.fn(), rename: vi.fn(), create: vi.fn(),
@@ -54,6 +63,12 @@ function renderWorkspace() {
 describe('프로젝트의 연결된 자료', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // 업로드는 서버 묶음을 먼저 열고 자리마다 올린다. 화면 테스트는 그 계약만 흉내 낸다.
+    const fakeBatch = createFakeBatchApi();
+    analysisBatchAPI.estimate.mockImplementation(fakeBatch.estimate);
+    analysisBatchAPI.create.mockImplementation(fakeBatch.create);
+    analysisBatchAPI.get.mockImplementation(fakeBatch.get);
+    analysisBatchAPI.listOpen.mockImplementation(fakeBatch.listOpen);
     planAPI.findCoveringDate.mockResolvedValue([]);
     executionItemAPI.getByDateRange.mockResolvedValue([]);
     courseAPI.get.mockResolvedValue({ courseId: 6, title: '자료구조', status: 'ACTIVE' });
@@ -75,9 +90,12 @@ describe('프로젝트의 연결된 자료', () => {
       new File(['%PDF-1.4'], '강의계획서.pdf', { type: 'application/pdf' }),
     );
     await user.selectOptions(screen.getByLabelText('자료 역할'), 'SYLLABUS');
-    await user.click(screen.getByRole('button', { name: '업로드' }));
+    await user.click(screen.getByRole('button', { name: '분석 시작' }));
 
-    expect(materialAPI.upload).toHaveBeenCalledWith(6, 'SYLLABUS', expect.any(File));
+    // 네 번째 인자는 묶음 자리 번호다 — 진행 상태의 원본이 서버에 생긴다.
+    await screen.findByRole('region', { name: /자료 분석/ });
+    expect(materialAPI.upload)
+      .toHaveBeenCalledWith(6, 'SYLLABUS', expect.any(File), expect.any(Number));
   });
 
   it('목록에서 역할을 바꾸면 연결을 끊지 않고 그 링크만 고친다', async () => {

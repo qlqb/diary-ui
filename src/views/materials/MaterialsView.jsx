@@ -36,7 +36,12 @@ import {
 import ZipImportPanel from '../../components/ZipImportPanel.jsx';
 import MaterialStages from './MaterialStages.jsx';
 import { NOT_USED_IMPACT, UNHELD_ATTACHMENT_NOTE, unheldAttachmentsOf } from '../../lib/materialStages.js';
+import AnalysisBatchCard from './AnalysisBatchCard.jsx';
+import { useAnalysisBatches } from './useAnalysisBatches.js';
+import { useUploadEstimate } from './useUploadEstimate.js';
+import { describeEstimate, estimateBasisNote, UPLOAD_TIME_NOTE } from '../../lib/analysisBatch.js';
 import '../../styles/material-status.css';
+import '../../styles/project-tidy.css';
 
 /**
  * 필터는 이 셋만.
@@ -146,7 +151,7 @@ const fileKey = (file) => `${file.name}::${file.size}::${file.lastModified}`;
  * 갱신되지 않아 같은 항목을 계속 집는다. 그래서 모든 변경이 applyItems 하나를 지나가고,
  * 루프는 state가 아니라 ref만 읽는다.
  */
-function useUploadQueue({ onBatchDone }) {
+function useUploadQueue({ onBatchDone, startBatch }) {
   const [items, setItemsState] = useState([]);
   const [running, setRunning] = useState(false);
   const [skipped, setSkipped] = useState(0);
@@ -210,15 +215,21 @@ function useUploadQueue({ onBatchDone }) {
   }, [applyItems]);
 
   /**
-   * 순차 전송. Promise.all로 한꺼번에 던지지 않는 이유는 텍스트 추출이 동기이고 CPU를 쓰기
-   * 때문이다 — 10개를 동시에 보내면 서버 스레드가 전부 추출에 물린다.
+   * [분석 시작]. 서버에 묶음을 열고 그 자리마다 하나씩 올린다.
    *
-   * 하나가 실패해도 루프를 멈추지 않는다. 각 파일은 독립된 자료라서 3번이 실패했다고
-   * 1·2번을 되돌릴 이유가 없다.
+   * 묶음을 먼저 여는 이유: 진행 상태의 원본이 서버에 있어야 탭을 옮기거나 새로고침해도
+   * "무엇이 도는 중인지"가 남는다. 그리고 분석 중에 파일을 더 올리면 <새 묶음>이 생겨
+   * 기존 묶음의 진행률이 뒤로 가지 않는다.
+   *
+   * 순차 전송은 그대로다. Promise.all로 한꺼번에 던지지 않는 이유는 텍스트 추출이 동기이고
+   * CPU를 쓰기 때문이다 — 10개를 동시에 보내면 서버 스레드가 전부 추출에 물린다.
+   * 하나가 실패해도 멈추지 않는다. 각 파일은 독립된 자료라서 3번이 실패했다고 1·2번을
+   * 되돌릴 이유가 없다.
    */
   const start = useCallback(async () => {
     if (runningRef.current) return;
-    if (!itemsRef.current.some((it) => it.state === 'staged')) return;
+    const staged = itemsRef.current.filter((it) => it.state === 'staged');
+    if (staged.length === 0) return;
 
     runningRef.current = true;
     setRunning(true);
@@ -227,24 +238,13 @@ function useUploadQueue({ onBatchDone }) {
 
     // 이번 배치에서 실제로 올라간 것만 모은다 — 연결 제안이 "방금 올린 자료"를 대상으로
     // 삼으려면 목록 전체가 아니라 이 배치의 id를 알아야 한다.
-    const uploaded = [];
+    let uploaded = [];
     try {
-      for (;;) {
-        const next = itemsRef.current.find((it) => it.state === 'staged');
-        if (!next) break;
-
-        patch(next.id, { state: 'uploading', error: null });
-        try {
-          const res = await materialStoreAPI.upload(next.file);
-          uploaded.push({
-            materialId: res?.materialId ?? null,
-            extractionStatus: res?.extractionStatus ?? null,
-          });
-          patch(next.id, { state: 'done', error: null, extractionStatus: res?.extractionStatus ?? null });
-        } catch (err) {
-          patch(next.id, { state: 'failed', error: err.message || '올리지 못했어요' });
-        }
-      }
+      const byFile = new Map(staged.map((it) => [it.file, it.id]));
+      uploaded = await startBatch(staged.map((it) => it.file), (file, next) => {
+        const id = byFile.get(file);
+        if (id) patch(id, next);
+      });
     } finally {
       runningRef.current = false;
       setRunning(false);
@@ -271,7 +271,7 @@ function useUploadQueue({ onBatchDone }) {
           (it) => !(it.state === 'done' && it.extractionStatus === ExtractionStatus.SUCCESS),
       ));
     }
-  }, [patch, applyItems, onBatchDone]);
+  }, [patch, applyItems, onBatchDone, startBatch]);
 
   /** 실패한 것만 다시 올린다. 이미 성공한 파일은 건드리지 않는다. */
   const retry = useCallback((id) => {
@@ -553,7 +553,13 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
     },
   });
 
-  const uploader = useUploadQueue({ onBatchDone: handleBatchDone });
+  /*
+   * 업로드·분석 묶음. 진행 상태의 원본은 서버다 — 화면을 떠났다 돌아와도 도는 묶음이
+   * 그대로 복원되고, 분석 중에 더 올리면 새 묶음이 따로 생긴다.
+   */
+  // onUploaded는 걸지 않는다 — 목록 새로고침은 handleBatchDone이 이미 한다(두 번 읽지 않는다).
+  const batches = useAnalysisBatches();
+  const uploader = useUploadQueue({ onBatchDone: handleBatchDone, startBatch: batches.startBatch });
   /*
    * 자동 분석 상태. 목록의 자료 수가 바뀌면(업로드·삭제) 다시 읽는다. 진행 중이면 hook이 알아서 폴링한다.
    * openId(상세) 화면에서는 목록이 없으므로 끈다.
@@ -778,6 +784,19 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
             onRetry={uploader.retry}
             onClear={uploader.clearSettled}
         />
+
+        {/*
+          분석 진행. 업로드 대기열과 다른 것이다 — 저쪽은 "보내는 중"이고 이쪽은 "서버가 읽는 중"이다.
+          다른 화면으로 가도 계속되고, 돌아오면 여기서 다시 보인다.
+        */}
+        {batches.batches.map((batch) => (
+            <AnalysisBatchCard key={batch.batchId} batch={batch}
+                onRefresh={() => batches.refreshOne(batch.batchId)}
+                onDismiss={batches.dismissBatch}
+                onAddMore={uploader.openPicker}
+                onBack={null} />
+        ))}
+        {batches.error && <p className="view-error">{batches.error}</p>}
 
         <UploadSummary summary={uploader.summary} onDismiss={uploader.dismissSummary} />
 
@@ -1094,6 +1113,9 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
  * 아무것도 고르지 않았으면 아예 나타나지 않는다 — 늘 자리를 차지하는 빈 폼은 화면만 먹는다.
  */
 function UploadTray({ items, running, skipped, stagedCount, onStart, onRemove, onRetry, onClear }) {
+  /* 시작 전 예상 시간. 고르는 동안 목록이 바뀌므로 잠깐 묶어서 한 번만 서버에 묻는다. */
+  const staged = useMemo(() => items.filter((it) => it.state === 'staged').map((it) => it.file), [items]);
+  const { estimate, loading: estimating } = useUploadEstimate(staged);
   if (items.length === 0) return null;
 
   const settledCount = items.filter((it) => it.state !== 'staged' && it.state !== 'uploading').length;
@@ -1135,6 +1157,21 @@ function UploadTray({ items, running, skipped, stagedCount, onStart, onRemove, o
             <p className="upload-tray-note">이미 목록에 있는 파일 {skipped}개는 넘어갔어요.</p>
         )}
 
+        {/*
+          시작 전에 얼마나 걸릴지 말한다. 숫자는 서버가 지난 실행에서 계산한 <범위>이고,
+          표본이 적으면 "초기 추정"이라고 덧붙인다 — 근거 없는 정확한 숫자를 내밀지 않는다.
+          전송 시간은 여기 들어 있지 않다.
+        */}
+        {stagedCount > 0 && (
+            <p className="upload-estimate">
+              <span className="upload-estimate-strong">
+                {describeEstimate(estimate) ?? (estimating ? '예상 시간을 계산하는 중이에요' : '')}
+              </span>
+              {estimateBasisNote(estimate?.basis) && <> · {estimateBasisNote(estimate.basis)}</>}
+              {' · '}{UPLOAD_TIME_NOTE}
+            </p>
+        )}
+
         <div className="upload-tray-foot">
           <span className="upload-tray-hint">{UPLOAD_HINT}</span>
           <span className="upload-format-note">{SHELL_SCRIPT_HINT}</span>
@@ -1146,7 +1183,7 @@ function UploadTray({ items, running, skipped, stagedCount, onStart, onRemove, o
           <button type="button" className="btn-primary" disabled={running || stagedCount === 0} onClick={onStart}>
             {running
                 ? <><Loader2 size={13} className="spin" /> 올리는 중</>
-                : <><Upload size={13} /> {stagedCount}개 올리기</>}
+                : <><Upload size={13} /> {stagedCount}개 분석 시작</>}
           </button>
         </div>
       </div>
