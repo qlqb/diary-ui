@@ -21,6 +21,7 @@ vi.mock('../../api/api.js', () => ({
 
 import ProjectTidyPanel from './ProjectTidyPanel.jsx';
 import { projectTidyAPI } from '../../api/api.js';
+import { __resetAll } from '../../lib/tidyEditStore.js';
 
 const change = (changeId, op, text, extra = {}) => ({
   changeId, op, label: op, text, reason: null, titleEditable: op === 'ADD' || op === 'RENAME',
@@ -81,6 +82,12 @@ const empty = (overrides = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  /*
+    검토 편집은 모듈 수준(tidyEditStore)에 산다 — 화면을 옮겨도 저장이 이어지게 하려고
+    일부러 그렇게 두었다. 그래서 테스트끼리도 상태가 넘어간다. 앞 테스트가 남긴 편집이
+    다음 테스트의 판 번호를 흔들지 않게 여기서 비운다.
+  */
+  __resetAll();
 });
 
 describe('정리를 시작하기 전', () => {
@@ -248,21 +255,31 @@ describe('검토 중 편집', () => {
     await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
     await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
 
-    expect(await screen.findByText(/저장하지 못했어요/)).toBeInTheDocument();
+    expect(await screen.findByText(/저장하지 못했어요 · 다시 시도해 주세요/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /선택한 변경 적용/ })).toBeDisabled();
+    // 고친 내용을 버리지 않는다. 다시 보낼 길이 화면에 있어야 한다.
+    expect(screen.getByRole('button', { name: '다시 저장' })).toBeInTheDocument();
   });
 
-  it('다른 곳에서 먼저 고쳤으면 최신을 다시 읽고 그 사실을 알린다', async () => {
+  /*
+    예전에는 이 자리에서 "최신을 다시 읽어 화면에 올린다"를 정답으로 고정하고 있었다.
+    그 동작은 방금 친 제목을 소리 없이 지운다 — 다시 읽는다는 것은 내 편집을 서버 값으로
+    갈아치운다는 뜻이기 때문이다. 요구가 바뀐 것이 아니라, 그 테스트가 사고를 정답으로
+    적어 두고 있었다. 이제는 합치고, 정말 부딪히는 것만 사용자에게 묻는다.
+  */
+  it('다른 곳에서 먼저 고쳤어도 내 편집을 버리지 않는다', async () => {
     const user = userEvent.setup();
-    projectTidyAPI.get.mockResolvedValue(view());
+    projectTidyAPI.get.mockResolvedValueOnce(view())
+      .mockResolvedValue(view({ editRevision: 7, edits: { c2: { title: '다른 탭이 고친 것' } } }));
     projectTidyAPI.saveEdits.mockRejectedValue(Object.assign(new Error('stale'), { code: 'E409_029' }));
     render(<ProjectTidyPanel courseId={6} />);
 
     await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
     await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
 
-    expect(await screen.findByText(/다른 곳에서 먼저 고쳤어요/)).toBeInTheDocument();
+    // 서로 다른 변경을 고쳤으므로 충돌이 아니다 — 합쳐지고 내 글자는 그대로 남는다.
     await waitFor(() => expect(projectTidyAPI.get).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText('항목 제목 고치기')).toHaveValue('원형 큐!');
   });
 });
 

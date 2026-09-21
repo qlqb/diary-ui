@@ -14,7 +14,7 @@
  *  - 딸린 변경(새 부모 ↔ 그 아래 새 항목)은 체크가 연동된다. 한쪽만 적용되게 두지 않는다.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   ChevronDown, ChevronRight, Loader2, Sparkles, RefreshCw, AlertCircle,
 } from 'lucide-react';
@@ -23,50 +23,76 @@ import {
   TIDY_OP_LABEL, applyButtonLabel, collectDependents, dependentsOf,
   describeJob, describeReadiness, describeScope, partialNote, saveStateText,
 } from '../../lib/tidyLabels.js';
-
-/** 편집을 서버에 밀어 넣기 전에 기다리는 시간. 타자를 칠 때마다 보내지 않는다. */
-const AUTOSAVE_MS = 700;
+import * as tidyEdits from '../../lib/tidyEditStore.js';
 
 export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied = null, onOpenMaterials = null }) {
   const [view, setView] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [saveState, setSaveState] = useState(null);
   const [openGroups, setOpenGroups] = useState(() => new Set());
   const [detailOpen, setDetailOpen] = useState(false);
 
-  /** 화면이 들고 있는 편집. 서버 저장은 이 값을 따라간다. */
-  const [edits, setEdits] = useState({});
-  const editRevisionRef = useRef(0);
+  /*
+    편집은 이 컴포넌트가 들고 있지 않다. tidyEditStore가 주인이고 여기서는 구독만 한다.
+    패널은 구역을 옮길 때마다 unmount되는데, 고친 것과 저장 타이머가 여기 있으면 그 순간
+    전부 사라지기 때문이다. 저장은 패널이 사라진 뒤에도 이어진다.
+  */
+  const subscribe = useCallback((fn) => tidyEdits.subscribe(courseId, fn), [courseId]);
+  const getSnap = useCallback(() => tidyEdits.getSnapshot(courseId), [courseId]);
+  const editState = useSyncExternalStore(subscribe, getSnap, getSnap);
+  const edits = editState.edits;
+  const saveState = editState.status;
+
+  /*
+    생명주기 표. 조회·적용·폐기가 서로를 무효로 만드는 규칙을 한 숫자로 모은다.
+
+    ticket은 "지금 유효한 조회"를 가리킨다. 늦게 온 GET이 화면을 되돌리지 못하게 하려면
+    조회를 띄울 때 번호를 매기는 것만으로는 부족하다 — 버리기·적용이 <성공한 순간>에도
+    번호를 올려야, 그 전에 떠난 조회가 돌아와 버린 정리안을 다시 그리지 못한다.
+    2026-09-21 판에는 이 두 번째 올림이 없었다.
+  */
   const ticketRef = useRef(0);
-  const saveTimerRef = useRef(null);
-  /** 마지막으로 서버에 보낸 편집. 같은 값을 다시 보내지 않으려고 둔다. */
-  const savedRef = useRef('{}');
+  const invalidate = useCallback(() => { ticketRef.current += 1; return ticketRef.current; }, []);
 
   const load = useCallback(async () => {
-    const mine = ticketRef.current + 1;
-    ticketRef.current = mine;
+    const mine = invalidate();
     try {
       const next = await projectTidyAPI.get(courseId);
       if (ticketRef.current !== mine) return;
       setView(next);
-      setEdits(next?.edits ?? {});
-      editRevisionRef.current = next?.editRevision ?? 0;
-      savedRef.current = JSON.stringify(next?.edits ?? {});
+      tidyEdits.adopt(courseId, next);
       setError(null);
     } catch (err) {
       if (ticketRef.current === mine) setError(err.message || '정리 상태를 불러오지 못했어요.');
     } finally {
       if (ticketRef.current === mine) setLoading(false);
     }
-  }, [courseId]);
+  }, [courseId, invalidate]);
 
   useEffect(() => {
-    setLoading(true);
+    // 다시 읽는 동안 화면을 비우지 않는다. 검토 중인 정리안이 깜빡이며 사라지면,
+    // 사용자는 자기가 고치던 것이 날아갔다고 읽는다. 첫 조회일 때만 "불러오는 중"을 쓴다.
+    setView((current) => {
+      if (!current) setLoading(true);
+      return current;
+    });
     load();
     return () => { ticketRef.current += 1; };
   }, [load, refreshToken]);
+
+  /* 프로젝트를 옮기면 앞 프로젝트의 화면 상태는 버린다 — 늦게 온 응답이 섞이지 않게. */
+  useEffect(() => {
+    setView(null);
+    setLoading(true);
+    setError(null);
+  }, [courseId]);
+
+  /*
+    떠나기 직전에 남은 편집을 곧바로 보낸다. 응답을 기다리지 않는다 — 저장 주인은
+    이 컴포넌트보다 오래 살기 때문에, 화면 전환을 네트워크 속도에 묶을 이유가 없다.
+  */
+  useEffect(() => () => { void tidyEdits.flush(courseId); }, [courseId]);
 
   /* 만드는 중이면 끝날 때까지 지켜본다. 끝나면 멈춘다 — 조용한 화면에서 계속 묻지 않는다. */
   const generating = view?.job?.status === 'QUEUED' || view?.job?.status === 'RUNNING';
@@ -87,39 +113,10 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
   const isExcluded = useCallback((changeId) => edits[changeId]?.excluded === true, [edits]);
   const selectedIds = changes.map((c) => c.changeId).filter((id) => !isExcluded(id));
 
-  /** 편집을 바꾸고 잠시 뒤 저장한다. 트리는 바뀌지 않는다 — 검토 초안일 뿐이다. */
+  /** 편집을 바꾼다. 화면은 즉시, 저장은 잠시 뒤. 트리는 바뀌지 않는다 — 검토 초안일 뿐이다. */
   const patchEdits = useCallback((next) => {
-    setEdits(next);
-    setSaveState('saving');
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      const payload = JSON.stringify(next);
-      if (payload === savedRef.current) {
-        setSaveState('saved');
-        return;
-      }
-      try {
-        const saved = await projectTidyAPI.saveEdits(view.proposalId, {
-          editRevision: editRevisionRef.current,
-          edits: next,
-        });
-        editRevisionRef.current = saved?.editRevision ?? editRevisionRef.current;
-        savedRef.current = JSON.stringify(saved?.edits ?? next);
-        setEdits(saved?.edits ?? next);
-        setSaveState('saved');
-      } catch (err) {
-        if (err.code === 'E409_029') {
-          // 다른 탭이 먼저 고쳤다. 고친 것을 버리지 않고 최신을 읽어 화면에 올린 뒤 알린다.
-          setSaveState('stale');
-          await load();
-        } else {
-          setSaveState('error');
-        }
-      }
-    }, AUTOSAVE_MS);
-  }, [view, load]);
-
-  useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
+    tidyEdits.update(courseId, next);
+  }, [courseId]);
 
   /** 체크를 풀면 이 변경에 딸린 것도 함께 푼다. 반쪽 적용을 만들지 않는다. */
   const toggleChange = (changeId) => {
@@ -151,7 +148,12 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
   };
 
   const requestTidy = (refresh = false) => run(async () => {
-    setView(await projectTidyAPI.request(courseId, { refresh }));
+    // 다시 만들기 전에 남은 편집을 먼저 확정한다. 아직 서버에 없는 편집은 새 판으로
+    // 승계될 수 없다 — 승계는 저장된 것만 옮긴다.
+    await tidyEdits.flush(courseId);
+    const result = await projectTidyAPI.request(courseId, { refresh });
+    invalidate();
+    setView(result);
   }, '정리를 시작하지 못했어요.');
 
   const apply = () => run(async () => {
@@ -161,20 +163,33 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
     });
     const result = await projectTidyAPI.apply(view.proposalId, {
       revision: view.revision,
-      editRevision: editRevisionRef.current,
+      editRevision: editState.editRevision,
       baseTreeVersion: view.baseTreeVersion,
       selectedChangeIds: selectedIds,
       titleOverrides,
     });
+    // 서버가 확정한 뒤에야 정리한다. 미리 비우면 실패했을 때 편집을 잃는다.
+    invalidate();
+    tidyEdits.clear(courseId);
     setView(result);
     await onApplied?.();
     await load();
   }, '적용하지 못했어요.');
 
   const dismiss = () => run(async () => {
-    setView(await projectTidyAPI.dismiss(courseId));
-    setEdits({});
+    const result = await projectTidyAPI.dismiss(courseId);
+    // 이 두 줄이 "버린 안이 돌아오지 않는다"를 지킨다. 폐기 <성공> 시점에 조회 번호와
+    // 편집 세대를 함께 올려, 그 전에 떠난 GET·PUT의 응답을 전부 무효로 만든다.
+    invalidate();
+    tidyEdits.clear(courseId);
+    setView(result);
   }, '버리지 못했어요.');
+
+  /** [나중에]. 남은 편집을 곧바로 보내고 화면만 옮긴다. */
+  const later = () => {
+    void tidyEdits.flush(courseId);
+    onOpenMaterials?.();
+  };
 
   if (loading) {
     return (
@@ -314,26 +329,70 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
               {detailOpen ? '자세히 접기' : '전부 펼쳐 보기'}
             </button>
             {saveStateText(saveState) && (
-              <span className={`project-tidy-save${saveState === 'error' ? ' is-problem' : ''}`}>
+              <span className={`project-tidy-save${saveState === 'error' || saveState === 'conflict' ? ' is-problem' : ''}`}>
                 {saveStateText(saveState)}
               </span>
             )}
           </div>
 
+          {/*
+            저장이 실패했을 때 무엇이 어떻게 됐는지 그대로 말한다. 고친 내용은 남아 있고
+            다시 보낼 수 있다는 사실이 화면에 있어야, 사용자가 같은 것을 또 치지 않는다.
+          */}
+          {editState.errorText && (
+            <p className="view-error project-tidy-save-error">
+              <AlertCircle size={13} /> {editState.errorText}
+              {' '}고친 내용은 그대로 있어요.
+              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                onClick={() => tidyEdits.flush(courseId)}>다시 저장</button>
+            </p>
+          )}
+
+          {/*
+            같은 변경을 두 곳에서 다르게 고쳤다. 한쪽을 임의로 이기게 하면 다른 쪽이
+            소리 없이 사라진다 — 무엇과 무엇이 부딪혔는지 보여주고 사용자가 정한다.
+          */}
+          {editState.conflicts.length > 0 && (
+            <ul className="project-tidy-conflicts">
+              {editState.conflicts.map((conflict) => {
+                const label = changeById[conflict.changeId]?.text ?? conflict.changeId;
+                return (
+                  <li key={conflict.changeId}>
+                    <p className="project-tidy-conflict-what">{label}</p>
+                    <p className="view-sub-dim">
+                      내가 고친 값: {describeEditValue(conflict.mine)}
+                      {' · '}다른 곳의 값: {describeEditValue(conflict.theirs)}
+                    </p>
+                    <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                      onClick={() => tidyEdits.resolveConflict(courseId, conflict.changeId, 'mine')}>
+                      내 편집 유지
+                    </button>
+                    <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                      onClick={() => tidyEdits.resolveConflict(courseId, conflict.changeId, 'theirs')}>
+                      다른 곳의 값 사용
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
           <div className="project-tidy-actions">
             {/*
-              저장 중에는 적용을 막는다. 아직 서버에 닿지 않은 편집이 있는 채로 적용하면 판 번호가
-              어긋나 409가 나는데, 사용자가 보기엔 방금 고친 것이 이유 없이 거절당한 것이다.
+              아직 서버에 닿지 않은 편집이 하나라도 있으면 적용을 막는다(editState.dirty).
+              그대로 보내면 판 번호가 어긋나 409가 나는데, 사용자가 보기엔 방금 고친 것이
+              이유 없이 거절당한 것이다. "요청 하나가 끝났다"가 아니라 "보낼 것이 남지
+              않았다"가 기준이어야 한다 — 앞엣것은 전송 중에 더 고친 경우를 놓친다.
             */}
             <button type="button" className="btn-primary"
               disabled={busy || view.treeChanged || selectedIds.length === 0
-                || saveState === 'error' || saveState === 'saving'}
+                || editState.dirty || saveState === 'error' || saveState === 'conflict'}
               onClick={apply}>
               {busy ? <Loader2 size={14} className="spin" /> : null}
               {applyButtonLabel(selectedIds.length, changes.length)}
             </button>
             {onOpenMaterials && (
-              <button type="button" className="btn-ghost" disabled={busy} onClick={onOpenMaterials}>나중에</button>
+              <button type="button" className="btn-ghost" disabled={busy} onClick={later}>나중에</button>
             )}
             <button type="button" className="btn-ghost" disabled={busy} onClick={dismiss}>버리기</button>
           </div>
@@ -397,4 +456,13 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle }) {
       )}
     </li>
   );
+}
+
+/** 충돌 화면에 쓰는 한 줄. 제목과 "빼기"를 사람 말로 쓴다. */
+function describeEditValue(value) {
+  if (!value) return '고치지 않음';
+  const parts = [];
+  if (value.title) parts.push(`제목 「${value.title}」`);
+  parts.push(value.excluded ? '이 변경 빼기' : '이 변경 적용');
+  return parts.join(' · ');
 }

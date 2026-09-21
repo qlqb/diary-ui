@@ -75,12 +75,18 @@ export const TIDY_OP_LABEL = Object.freeze({
 /** 저장 상태 → 한 줄. 실패를 조용히 넘기지 않는다. */
 export function saveStateText(state) {
   switch (state) {
+    // 아직 보내지 않았다. "저장 중"과 구분해야 한다 — 사용자가 이 순간 창을 닫으면
+    // 서버에는 아직 없다는 뜻이고, 적용 버튼이 막히는 이유이기도 하다.
+    case 'pending':
+      return '저장 대기 중…';
     case 'saving':
       return '저장 중…';
     case 'saved':
       return '저장됨';
     case 'error':
       return '저장하지 못했어요 · 다시 시도해 주세요';
+    case 'conflict':
+      return '다른 곳에서 같은 항목을 고쳤어요 · 어느 쪽을 쓸지 골라 주세요';
     case 'stale':
       return '다른 곳에서 먼저 고쳤어요 · 최신 내용을 불러왔어요';
     default:
