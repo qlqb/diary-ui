@@ -315,7 +315,9 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
                           excluded={isExcluded(change.changeId)}
                           edit={edits[change.changeId]}
                           onToggle={() => toggleChange(change.changeId)}
-                          onTitle={(value) => setTitle(change.changeId, value)} />
+                          onTitle={(value) => setTitle(change.changeId, value)}
+                          onKeepCarried={() => tidyEdits.resolveCarried(courseId, change.changeId, 'KEEP')}
+                          onDropCarried={() => tidyEdits.resolveCarried(courseId, change.changeId, 'DROP')} />
                       ))}
                     </ul>
                   )}
@@ -377,6 +379,18 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
             </ul>
           )}
 
+          {editState.unconfirmed.length > 0 && (
+            <p className="project-tidy-warn" role="status">
+              이전 판에서 옮겨 온 편집 {editState.unconfirmed.length}건을 확인해야 적용할 수 있어요:
+              {' '}{editState.unconfirmed.map((id) => changeById[id]?.text ?? id).join(', ')}
+              {!detailOpen && (
+                <button type="button" className="btn-ghost btn-sm" onClick={() => setDetailOpen(true)}>
+                  확인할 항목 펼치기
+                </button>
+              )}
+            </p>
+          )}
+
           <div className="project-tidy-actions">
             {/*
               아직 서버에 닿지 않은 편집이 하나라도 있으면 적용을 막는다(editState.dirty).
@@ -386,7 +400,8 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
             */}
             <button type="button" className="btn-primary"
               disabled={busy || view.treeChanged || selectedIds.length === 0
-                || editState.dirty || saveState === 'error' || saveState === 'conflict'}
+                || editState.dirty || saveState === 'error' || saveState === 'conflict'
+                || editState.unconfirmed.length > 0}
               onClick={apply}>
               {busy ? <Loader2 size={14} className="spin" /> : null}
               {applyButtonLabel(selectedIds.length, changes.length)}
@@ -410,7 +425,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
 }
 
 /** 변경 하나의 줄. 체크·제목 고치기·근거 보기. */
-function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle }) {
+function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarried, onDropCarried }) {
   const [showEvidence, setShowEvidence] = useState(false);
   return (
     <li className={`project-tidy-change${change.structural ? ' is-structural' : ''}${excluded ? ' is-excluded' : ''}`}>
@@ -426,10 +441,34 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle }) {
           value={edit?.title ?? change.title ?? ''} disabled={busy || excluded}
           onChange={(e) => onTitle(e.target.value)} />
       )}
+      {/*
+        판이 바뀌며 옮겨 온 편집. "확인해 주세요"만 쓰면 무엇과 무엇을 비교하라는 건지 알 수
+        없다. 전에 붙어 있던 제안, 무엇이 달라졌는지, 내 편집을 나란히 두고 고르게 한다.
+      */}
       {edit?.needsConfirm && (
-        <p className="project-tidy-confirm">
-          이전 판에서 옮겨 온 편집이에요. 같은 변경이 맞는지 확인해 주세요
-        </p>
+        <div className="project-tidy-confirm" role="group" aria-label="옮겨 온 편집 확인">
+          <p className="project-tidy-confirm-head">
+            <AlertCircle size={13} /> 확인 필요 · 이전 판에서 옮겨 온 편집이에요
+          </p>
+          {edit.carriedFrom?.text && (
+            <p className="view-sub-dim">전에 붙어 있던 제안: {edit.carriedFrom.text}</p>
+          )}
+          {edit.carriedFrom?.reason && (
+            <p className="view-sub-dim">{edit.carriedFrom.reason}</p>
+          )}
+          <p className="view-sub-dim">
+            내 편집: {edit.excluded ? '이 변경 빼기' : '이 변경 적용'}
+            {edit.title ? ` · 제목 「${edit.title}」` : ''}
+          </p>
+          <div className="project-tidy-confirm-actions">
+            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onKeepCarried}>
+              이 편집 유지
+            </button>
+            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onDropCarried}>
+              새 제안 사용
+            </button>
+          </div>
+        </div>
       )}
       {change.reason && <p className="project-tidy-reason">{change.reason}</p>}
       {change.caution && <p className="hint">{change.caution}</p>}

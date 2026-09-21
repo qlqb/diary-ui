@@ -123,7 +123,10 @@ function blank(courseId) {
   return {
     courseId,
     proposalId: null,
+    revision: null,
     generation: 0,
+    /** changeId → 'KEEP' | 'DROP'. 아직 서버에 보내지 않은 승계 확인. */
+    resolutions: {},
     confirmed: {},
     local: {},
     editRevision: 0,
@@ -147,6 +150,10 @@ function entryFor(courseId) {
   return entry;
 }
 
+function hasResolutions(entry) {
+  return Object.keys(entry.resolutions).length > 0;
+}
+
 function statusOf(entry) {
   if (entry.conflicts.length > 0) return 'conflict';
   if (entry.errorText) return 'error';
@@ -164,6 +171,15 @@ function publish(entry) {
     errorText: entry.errorText,
     conflicts: entry.conflicts,
     dirty: entry.dirty || !!entry.sending,
+    /*
+      확인을 기다리는 승계 편집. 하나라도 있으면 적용을 막는다 — 확인하지 않은 "제외"는
+      새 판의 작업을 조용히 가리고, 가려진 것은 화면에 나타나지 않으므로 사용자가
+      알아챌 방법이 없다. 서버도 같은 것을 막지만(E409_034), 거기까지 가서 거절당하는
+      것보다 누르기 전에 무엇을 확인해야 하는지 보이는 편이 낫다.
+    */
+    unconfirmed: Object.entries(entry.local)
+      .filter(([, value]) => value?.needsConfirm)
+      .map(([changeId]) => changeId),
   };
   entry.listeners.forEach((fn) => fn());
 }
@@ -186,7 +202,8 @@ function normalize(edits) {
       excluded: value.excluded === true,
       title,
       ...(value.needsConfirm ? { needsConfirm: true } : {}),
-      ...(value.confirmedAtRevision != null ? { confirmedAtRevision: value.confirmedAtRevision } : {}),
+      // 확인 화면이 "전에는 무엇이었고 무엇이 달라졌나"를 보여 주려면 이 값이 살아 있어야 한다.
+      ...(value.needsConfirm && value.carriedFrom ? { carriedFrom: value.carriedFrom } : {}),
     };
   });
   return out;
@@ -264,6 +281,7 @@ export function adopt(courseId, view) {
     // 다른 정리안이다(첫 조회이거나 새 판으로 교체됐다). 이전 편집은 이 안의 것이 아니다.
     reset(entry);
     entry.proposalId = proposalId;
+    entry.revision = view?.revision ?? null;
     entry.confirmed = serverEdits;
     entry.local = serverEdits;
     entry.editRevision = serverRevision;
@@ -282,6 +300,8 @@ export function adopt(courseId, view) {
     publish(entry);
     return entry.snapshot;
   }
+
+  entry.revision = view?.revision ?? entry.revision;
 
   // 같은 정리안. 서버가 확인한 값만 갱신하고, 내 미저장 편집은 그대로 둔다.
   if (!entry.sending && !entry.dirty) {
@@ -309,6 +329,8 @@ function reset(entry) {
   entry.timer = null;
   entry.generation += 1;
   entry.proposalId = null;
+  entry.revision = null;
+  entry.resolutions = {};
   entry.confirmed = {};
   entry.local = {};
   entry.editRevision = 0;
@@ -326,10 +348,39 @@ export function update(courseId, nextEdits) {
   const entry = entryFor(courseId);
   if (entry.proposalId == null) return entry.snapshot;
   entry.local = normalize(nextEdits);
-  entry.dirty = !sameEdits(entry.local, entry.confirmed);
+  entry.dirty = !sameEdits(entry.local, entry.confirmed) || hasResolutions(entry);
   entry.errorText = null;
   if (entry.dirty) rememberDraft(entry); else forgetDraft(courseId);
   schedule(entry, AUTOSAVE_MS);
+  publish(entry);
+  return entry.snapshot;
+}
+
+/**
+ * 판이 바뀌며 옮겨 온 편집을 사용자가 정한다.
+ *
+ * <p>'KEEP'은 "이 편집이 이 제안에도 맞다", 'DROP'은 "내 판단을 버리고 새 제안 그대로".
+ * 결정은 <b>서버가</b> 정리안 판과 대상 변경을 확인한 뒤에만 받아들인다 — 화면이 boolean
+ * 하나를 보내는 것만으로 확인 표시가 풀리면, 오래된 판을 들고 있는 탭이 실수로 풀어 버릴 수
+ * 있다. 그래서 여기서는 결정을 모아 두기만 하고 실제 해제는 응답으로 확인한다.
+ */
+export function resolveCarried(courseId, changeId, decision) {
+  const entry = entryFor(courseId);
+  if (entry.proposalId == null) return entry.snapshot;
+  entry.resolutions = { ...entry.resolutions, [changeId]: decision };
+  if (decision === 'DROP') {
+    // 화면에서도 곧바로 편집을 거둔다. 서버가 같은 결정을 확정하면 그대로 남는다.
+    const next = { ...entry.local };
+    delete next[changeId];
+    entry.local = normalize(next);
+  } else {
+    const value = entry.local[changeId];
+    if (value) entry.local = normalize({ ...entry.local, [changeId]: { ...value, needsConfirm: false } });
+  }
+  entry.dirty = true;
+  entry.errorText = null;
+  rememberDraft(entry);
+  schedule(entry, 0);
   publish(entry);
   return entry.snapshot;
 }
@@ -385,14 +436,20 @@ async function send(entry, round = 0) {
   publish(entry);
 
   try {
+    const resolutions = entry.resolutions;
     const saved = await projectTidyAPI.saveEdits(proposalId, {
       editRevision: entry.editRevision,
       edits: snapshot,
+      ...(Object.keys(resolutions).length > 0
+        ? { resolveCarried: resolutions, revision: entry.revision }
+        : {}),
     });
     // 떠난 사이에 버려졌거나 다른 안으로 갈아탔으면 이 응답은 아무것도 바꾸지 못한다.
     if (entry.generation !== generation || entry.proposalId !== proposalId) return entry.snapshot;
 
     entry.sending = null;
+    // 보낸 결정은 서버가 받았든 거절했든 다시 보내지 않는다. 결과는 응답의 edits가 말한다.
+    if (resolutions === entry.resolutions) entry.resolutions = {};
     entry.confirmed = normalize(saved?.edits ?? snapshot);
     entry.editRevision = saved?.editRevision ?? entry.editRevision;
     entry.everSaved = true;
@@ -401,7 +458,7 @@ async function send(entry, round = 0) {
     if (sameEdits(entry.local, snapshot)) {
       // 보내는 동안 새 입력이 없었다. 서버가 정리한 값을 그대로 받는다.
       entry.local = entry.confirmed;
-      entry.dirty = false;
+      entry.dirty = hasResolutions(entry);
       forgetDraft(entry.courseId);
     } else {
       // 보내는 동안 사용자가 더 고쳤다. 더 최근 값이 이긴다 — 되돌리지 않는다.

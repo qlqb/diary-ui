@@ -346,3 +346,88 @@ describe('버리기·적용 뒤 늦게 온 응답', () => {
     expect(screen.getByText('다른 프로젝트 안')).toBeInTheDocument();
   });
 });
+
+// ===== 4. 옮겨 온 편집 확인 =====
+
+describe('판이 바뀌며 옮겨 온 편집', () => {
+  const carried = (reason) => ({
+    needsConfirm: true,
+    excluded: true,
+    title: null,
+    carriedFrom: { changeId: 'old1', text: '새 항목 「원형 큐」', reason },
+  });
+
+  it('무엇이 달라졌는지 보여주고 해결하기 전에는 적용을 막는다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({
+      editRevision: 1,
+      edits: { c1: carried('제안한 이름이(가) 달라졌어요'), c2: carried('근거 구간이(가) 달라졌어요') },
+    }));
+    await openPanel();
+
+    expect(screen.getByText('제안한 이름이(가) 달라졌어요')).toBeInTheDocument();
+    expect(screen.getAllByText('전에 붙어 있던 제안: 새 항목 「원형 큐」')).toHaveLength(2);
+    expect(screen.getByText(/옮겨 온 편집 2건을 확인해야 적용할 수 있어요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /변경 적용|골라주세요/ })).toBeDisabled();
+  });
+
+  it('하나만 해결하면 나머지 때문에 여전히 막힌다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({
+      editRevision: 1,
+      edits: { c1: carried('제안한 이름이(가) 달라졌어요'), c2: carried('근거 구간이(가) 달라졌어요') },
+    }));
+    projectTidyAPI.saveEdits.mockImplementation((_id, body) => Promise.resolve(view({
+      editRevision: 2,
+      edits: {
+        c1: { excluded: true, title: null, needsConfirm: false },
+        c2: carried('근거 구간이(가) 달라졌어요'),
+      },
+      ...(body.resolveCarried ? {} : {}),
+    })));
+    const { user } = await openPanel();
+
+    await user.click(screen.getAllByRole('button', { name: '이 편집 유지' })[0]);
+    await waitFor(() => expect(projectTidyAPI.saveEdits).toHaveBeenCalled());
+
+    // 서버에 확인을 보낼 때는 판 번호를 함께 싣는다. 서버가 그것으로 확인을 검증한다.
+    const body = projectTidyAPI.saveEdits.mock.calls[0][1];
+    expect(body.resolveCarried).toEqual({ c1: 'KEEP' });
+    expect(body.revision).toBe(1);
+
+    expect(await screen.findByText(/옮겨 온 편집 1건을 확인해야/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /변경 적용|골라주세요|개 적용/ })).toBeDisabled();
+  });
+
+  it('새 제안 사용은 옮겨 온 편집을 거둔다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({
+      editRevision: 1, edits: { c1: carried('제안한 이름이(가) 달라졌어요') },
+    }));
+    projectTidyAPI.saveEdits.mockResolvedValue(view({ editRevision: 2, edits: {} }));
+    const { user } = await openPanel();
+
+    await user.click(screen.getByRole('button', { name: '새 제안 사용' }));
+
+    await waitFor(() => expect(projectTidyAPI.saveEdits).toHaveBeenCalled());
+    expect(projectTidyAPI.saveEdits.mock.calls[0][1].resolveCarried).toEqual({ c1: 'DROP' });
+    await waitFor(() => expect(screen.queryByText(/확인해야 적용할 수 있어요/)).not.toBeInTheDocument());
+  });
+
+  it('다른 제목을 고쳐도 확인 표시는 남는다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({
+      editRevision: 1, edits: { c1: carried('제안한 이름이(가) 달라졌어요') },
+    }));
+    // 서버는 needsConfirm을 지키고 돌려준다(요청에 실려 오지 않는 값이다).
+    projectTidyAPI.saveEdits.mockImplementation((_id, body) => Promise.resolve(view({
+      editRevision: 2,
+      edits: { ...body.edits, c1: { ...body.edits.c1, needsConfirm: true, carriedFrom: carried('x').carriedFrom } },
+    })));
+    const { user } = await openPanel();
+
+    await retype(user, titleInputs()[1], '연결 리스트 구현');
+    await act(async () => { vi.advanceTimersByTime(800); });
+    await waitFor(() => expect(projectTidyAPI.saveEdits).toHaveBeenCalled());
+
+    // 확인은 보내지 않았다 — 다른 제목을 저장한 것뿐이다.
+    expect(projectTidyAPI.saveEdits.mock.calls[0][1].resolveCarried).toBeUndefined();
+    expect(screen.getByText(/옮겨 온 편집 1건을 확인해야/)).toBeInTheDocument();
+  });
+});
