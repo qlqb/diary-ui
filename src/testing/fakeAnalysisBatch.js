@@ -149,6 +149,19 @@ export function createFakeBatchApi(options = {}) {
     });
   };
 
+  /** 자리 하나를 id로 고친다. 이름이 같은 자리가 있을 때(압축 안 run.sh 둘) 쓴다. */
+  api.__advanceItem = (itemId, patch) => {
+    batches.forEach((batch) => {
+      batch.items = batch.items.map((i) => (i.itemId === itemId ? { ...i, ...patch } : i));
+    });
+  };
+
+  /** 묶음 자체의 값을 고친다(압축에서 온 묶음 표시 등). */
+  api.__patchBatch = (batchId, patch) => {
+    const batch = batches.get(batchId);
+    if (batch) Object.assign(batch, patch);
+  };
+
   /** 모든 자리를 완료로. "묶음이 끝났다"를 만들 때. */
   api.__finishAll = () => {
     batches.forEach((batch) => {

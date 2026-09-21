@@ -29,7 +29,7 @@ vi.mock('../../api/api.js', () => ({
 }));
 
 import MaterialsView from './MaterialsView.jsx';
-import { analysisBatchAPI, materialAnalysisStatusAPI, materialStoreAPI } from '../../api/api.js';
+import { analysisBatchAPI, materialAnalysisStatusAPI, materialStoreAPI, zipImportAPI } from '../../api/api.js';
 import { createFakeBatchApi } from '../../testing/fakeAnalysisBatch.js';
 
 const EMPTY_OVERVIEW = { materials: [], paused: false, serviceAvailable: true, queued: 0, running: 0, done: 0 };
@@ -123,5 +123,48 @@ describe('시작 전 예상 시간', () => {
     expect(await screen.findByText(/자료 2개 · 예상 분석/)).toBeInTheDocument();
     expect(screen.getByText(/아직 초기 추정이에요/)).toBeInTheDocument();
     expect(screen.getByText(/올리는 데 걸리는 시간은 따로예요/)).toBeInTheDocument();
+  });
+});
+
+describe('압축 가져오기도 같은 분석 흐름에', () => {
+  const READY = {
+    importId: 5, originalFilename: '과제모음.zip', status: 'READY', entryCount: 2, selectableCount: 2,
+    doneCount: 0, failedCount: 0, remainingCount: 0, archiveAvailable: true,
+    entries: [
+      { entryId: 11, entryPath: '과제1/run.sh', displayName: 'run.sh', extension: 'sh', sizeBytes: 20, supported: true, status: 'PENDING' },
+      { entryId: 12, entryPath: '과제2/run.sh', displayName: 'run.sh', extension: 'sh', sizeBytes: 20, supported: true, status: 'PENDING' },
+    ],
+  };
+
+  it('살펴보는 동안에는 분석 진행 카드가 없고, 확정하면 곧바로 압축 묶음 카드가 뜬다', async () => {
+    const user = userEvent.setup();
+    zipImportAPI.listRecent.mockResolvedValue([READY]);
+    // 서버는 확정하는 순간 그 파일들로 분석 묶음을 연다. 가짜 서버도 그 순간 묶음을 만든다.
+    zipImportAPI.confirm.mockImplementation(async () => {
+      const created = await fake.create({ files: [
+        { filename: 'run.sh', sizeBytes: 20 }, { filename: 'run.sh', sizeBytes: 20 },
+      ] });
+      created.items.forEach((it, i) => {
+        fake.__advanceItem(it.itemId, { sourcePath: READY.entries[i].entryPath });
+      });
+      fake.__patchBatch(created.batchId, { zipImportId: 5, sourceArchiveName: '과제모음.zip' });
+      return { ...READY, status: 'IMPORTING' };
+    });
+    zipImportAPI.get.mockResolvedValue({ ...READY, status: 'IMPORTING' });
+    render(<MaterialsView />);
+
+    // 가져오기 목록은 보이지만, 무엇을 가져올지 정하기 전이라 분석 진행 카드는 없다.
+    await screen.findByRole('button', { name: /2개 가져오기/ });
+    expect(screen.queryByRole('region', { name: '자료 분석 진행 상황' })).not.toBeInTheDocument();
+
+    const callsBefore = analysisBatchAPI.listOpenPage.mock.calls.length;
+    await user.click(screen.getByRole('button', { name: /2개 가져오기/ }));
+
+    await waitFor(() => expect(analysisBatchAPI.listOpenPage.mock.calls.length).toBeGreaterThan(callsBefore));
+    expect(await screen.findByText('압축에서 가져옴: 과제모음.zip')).toBeInTheDocument();
+    // 경로는 가져오기 패널에도 보인다. 진행 카드 안에서 경로로 구분되는지를 본다.
+    const card = screen.getByRole('region', { name: '자료 분석 진행 상황' });
+    expect(within(card).getByText('과제1/run.sh')).toBeInTheDocument();
+    expect(within(card).getByText('과제2/run.sh')).toBeInTheDocument();
   });
 });
