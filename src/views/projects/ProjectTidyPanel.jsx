@@ -321,8 +321,13 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
           </div>
 
           <div className="project-tidy-actions">
+            {/*
+              저장 중에는 적용을 막는다. 아직 서버에 닿지 않은 편집이 있는 채로 적용하면 판 번호가
+              어긋나 409가 나는데, 사용자가 보기엔 방금 고친 것이 이유 없이 거절당한 것이다.
+            */}
             <button type="button" className="btn-primary"
-              disabled={busy || view.treeChanged || selectedIds.length === 0 || saveState === 'error'}
+              disabled={busy || view.treeChanged || selectedIds.length === 0
+                || saveState === 'error' || saveState === 'saving'}
               onClick={apply}>
               {busy ? <Loader2 size={14} className="spin" /> : null}
               {applyButtonLabel(selectedIds.length, changes.length)}

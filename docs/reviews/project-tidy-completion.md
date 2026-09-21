@@ -22,7 +22,8 @@
    탭을 옮기면 그 숫자가 사라진다.
 2. **100%는 "처리 종료"이지 "전부 성공"이 아니다.** 끝난 묶음의 문장이 성공/실패/제외를 나눠 말한다.
 3. **저장 실패를 삼키지 않는다.** 검토 편집 자동 저장이 실패하면 그 자리에서 말하고 적용을 막는다.
-   다른 탭이 먼저 고쳤으면(409) 고친 것을 버리지 않고 최신을 읽어 올린 뒤 알린다.
+   다른 탭이 먼저 고쳤으면(409) 고친 것을 버리지 않고 최신을 읽어 올린 뒤 알린다. 저장이 아직
+   서버에 닿지 않은 동안에도 적용을 막는다 — 그대로 보내면 판 번호가 어긋나 이유 없는 409가 된다.
 4. **정리안을 숨기지 않는다.** 트리가 바뀌었으면 내용은 그대로 보이고 적용만 막으며 [다시 정리]를 준다.
 5. **라우트를 가로채지 않는다.** 검토할 정리안이 있어도 학습 지도·다른 탭으로 자유롭게 간다
    (`ProjectWorkspaceLearningMap.test.jsx`에 회귀 테스트).
@@ -56,13 +57,13 @@
 
 | 파일 | 건수 |
 |---|---|
-| `src/views/projects/ProjectTidyPanel.test.jsx` | 22 |
+| `src/views/projects/ProjectTidyPanel.test.jsx` | 23 |
 | `src/views/materials/AnalysisBatchCard.test.jsx` | 8 |
 | `src/views/materials/MaterialsViewBatch.test.jsx` | 5 |
 | `src/lib/analysisBatch.test.js` | 14 |
 | `src/lib/tidyLabels.test.js` | 10 |
 
-전체 633건 통과, lint 0, build 성공.
+전체 634건 통과, lint 0, build 성공.
 
 `vite.config.js`의 `testTimeout`을 15초로 올렸다. 작업 중 이 스위트를 API 스위트·개발 서버와 같은
 머신에서 동시에 돌리면 회차마다 다른 테스트가 1~2건씩 시간을 넘겼다 — 기계가 조용하면 전부

@@ -225,6 +225,20 @@ describe('검토 중 편집', () => {
     expect(projectTidyAPI.apply).not.toHaveBeenCalled();
   });
 
+  it('저장이 아직 서버에 닿지 않았으면 적용을 막는다 — 이유 없는 409를 만들지 않는다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(view());
+    // 저장이 끝나지 않은 상태를 만든다.
+    projectTidyAPI.saveEdits.mockReturnValue(new Promise(() => {}));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
+    await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /선택한 변경 적용/ })).toBeDisabled());
+  });
+
   it('저장에 실패하면 알리고 적용을 막는다 — 조용히 넘기지 않는다', async () => {
     const user = userEvent.setup();
     projectTidyAPI.get.mockResolvedValue(view());
