@@ -64,6 +64,12 @@ export default function AnalysisBatchCard({
             <span className="analysis-batch-count"> · 처리 진행률 {batch.processedPercent}%</span>
           </p>
           <p className="analysis-batch-sub">{describeBatch(batch)}</p>
+          {/* 압축에서 확정한 묶음이면 어느 압축인지 말한다. 같은 화면의 업로드 묶음과 구분된다. */}
+          {batch.zipImportId && (
+            <p className="analysis-batch-note">
+              압축에서 가져옴{batch.sourceArchiveName ? `: ${batch.sourceArchiveName}` : ''}
+            </p>
+          )}
         </div>
         {onDismiss && finished && (
           <button type="button" className="batch-close" aria-label="이 결과 닫기"
@@ -91,7 +97,13 @@ export default function AnalysisBatchCard({
         {(batch.items ?? []).map((item) => (
           <li key={item.itemId} className={`batch-item is-${item.stage.toLowerCase()}`}>
             <StageIcon stage={item.stage} />
-            <span className="batch-item-name" title={item.filename}>{item.filename}</span>
+            {/*
+              압축 안에서 온 자리는 경로로 보여 준다. "과제1/run.sh"와 "과제2/run.sh"가 둘 다
+              "run.sh"로만 보이면 어느 쪽이 실패했는지 알 수 없다.
+            */}
+            <span className="batch-item-name" title={item.sourcePath ?? item.filename}>
+              {item.sourcePath ?? item.filename}
+            </span>
             <span className="batch-item-size">{formatBytes(item.sizeBytes)}</span>
             <span className="batch-item-stage">
               {BATCH_STAGE_LABEL[item.stage] ?? item.stage}

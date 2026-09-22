@@ -61,6 +61,9 @@ export function createFakeBatchApi(options = {}) {
     return {
       ...batch,
       status: finished ? 'FINISHED' : batch.status,
+      // 서버처럼 끝난 묶음에는 종료 시각이 있다. 다시 열리면 비고, 다시 끝나면 새로 찍힌다.
+      finishedAt: finished ? (batch.finishedAt ?? (batch.finishedAt = `t${(batch.finishCount = (batch.finishCount ?? 0) + 1)}`))
+        : (batch.finishedAt = null),
       processedPercent: percent,
       doneCount: done,
       runningCount: items.filter((i) => i.stage === 'ANALYZING').length,
@@ -113,8 +116,28 @@ export function createFakeBatchApi(options = {}) {
       return snapshot(batch);
     }),
 
+    /** 옛 목록 경로. 서버처럼 최대 5개에서 자른다 — 그 잘림이 2026-09-21 결함의 출발점이다. */
     listOpen: vi.fn(async () => [...batches.values()]
-      .map(snapshot).filter((b) => b.status !== 'FINISHED')),
+      .map(snapshot).filter((b) => b.status !== 'FINISHED')
+      .sort((a, b) => b.batchId - a.batchId).slice(0, 5)),
+
+    /**
+     * 쪽 나눈 열린 목록. 서버와 같은 규칙: batchId 내림차순, cursor보다 작은 것, 전체 수 함께.
+     * options.pageSize로 쪽 크기를 줄여 여러 쪽을 넘기는 경로를 테스트할 수 있다.
+     */
+    listOpenPage: vi.fn(async ({ cursor = null, limit = 20 } = {}) => {
+      const open = [...batches.values()].map(snapshot).filter((b) => b.status !== 'FINISHED')
+        .sort((a, b) => b.batchId - a.batchId);
+      const size = Math.min(limit, options.pageSize ?? limit);
+      const after = cursor == null ? open : open.filter((b) => b.batchId < cursor);
+      const page = after.slice(0, size);
+      const more = after.length > size;
+      return {
+        batches: page,
+        nextCursor: more ? page[page.length - 1].batchId : null,
+        totalOpen: open.length,
+      };
+    }),
   };
 
   /** 테스트가 자리의 단계를 직접 옮긴다. 업로드 결과·분석 완료를 흉내 낼 때. */
@@ -124,6 +147,19 @@ export function createFakeBatchApi(options = {}) {
         if (item.filename === filename) batch.items[i] = { ...item, ...patch };
       });
     });
+  };
+
+  /** 자리 하나를 id로 고친다. 이름이 같은 자리가 있을 때(압축 안 run.sh 둘) 쓴다. */
+  api.__advanceItem = (itemId, patch) => {
+    batches.forEach((batch) => {
+      batch.items = batch.items.map((i) => (i.itemId === itemId ? { ...i, ...patch } : i));
+    });
+  };
+
+  /** 묶음 자체의 값을 고친다(압축에서 온 묶음 표시 등). */
+  api.__patchBatch = (batchId, patch) => {
+    const batch = batches.get(batchId);
+    if (batch) Object.assign(batch, patch);
   };
 
   /** 모든 자리를 완료로. "묶음이 끝났다"를 만들 때. */

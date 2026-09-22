@@ -624,25 +624,38 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
   }, []);
 
   /** 자료가 하나라도 늘었으면 목록을 다시 읽는다 — 가져오기 패널과 자료 목록이 어긋나지 않게. */
+  const { refresh: refreshBatches } = batches;
+  /** 압축 가져오기의 직전 상태. 상태가 바뀔 때(확정·다시 가져오기·취소) 분석 묶음을 다시 읽는다. */
+  const zipStatusRef = useRef(null);
   const handleZipChanged = useCallback((next) => {
     setZipImport(next);
     if ((next?.doneCount ?? 0) > zipDoneRef.current) {
       zipDoneRef.current = next.doneCount;
       load();
     }
-  }, [load]);
-
+    /*
+      확정하면 서버가 그 파일들로 분석 묶음을 연다. 여기서 묶음을 읽어야 진행 카드가 곧바로
+      나타난다 — 도는 묶음이 없으면 폴링이 멈춰 있어 다음 틱을 기다려도 오지 않는다.
+    */
+    if (next?.status && next.status !== zipStatusRef.current) {
+      zipStatusRef.current = next.status;
+      void refreshBatches();
+    }
+  }, [load, refreshBatches]);
   const retryExtraction = useCallback(async (materialId) => {
     setReExtractingId(materialId);
     try {
       await materialStoreAPI.retryExtraction(materialId);
       await load();
+      // 다시 읽는 데 성공하면 서버가 그 자료가 든 끝난 묶음을 다시 연다. 여기서 묶음을 읽어야
+      // 진행 카드가 다시 나타나고 폴링이 이어진다 — 도는 묶음이 없으면 폴링이 멈춰 있기 때문이다.
+      await refreshBatches();
     } catch (err) {
       setError(err.message || '본문을 다시 읽지 못했습니다.');
     } finally {
       setReExtractingId(null);
     }
-  }, [load]);
+  }, [load, refreshBatches]);
 
   /** 고른 파일을 갈라 보낸다: 압축은 가져오기로, 나머지는 업로드 대기열로. */
   const addFiles = useCallback((fileList) => {

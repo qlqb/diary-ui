@@ -79,3 +79,28 @@ describe('자료 원본 열기', () => {
     expect(screen.getByRole('button', { name: 'PDF 열기 — 네트워크.pdf' })).toBeInTheDocument();
   });
 });
+
+describe('근거 쪽으로 열기', () => {
+  it('PDF는 준 쪽에서 열린다', async () => {
+    const tab = { location: null, opener: {}, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(tab);
+    const user = userEvent.setup();
+
+    render(<MaterialFileLink materialId={4} filename="자료구조.pdf" page={17} label="PDF p.17 열기" />);
+    await user.click(screen.getByRole('button', { name: /PDF p.17 열기/ }));
+
+    await waitFor(() => expect(tab.location).toBe(`${BLOB_URL}#page=17`));
+  });
+
+  it('PDF가 아니면 쪽을 받아도 붙이지 않는다 — 뛸 수 없는 것을 뛰는 척하지 않는다', async () => {
+    const open = vi.spyOn(window, 'open');
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    render(<MaterialFileLink materialId={7} filename="강의.pptx" page={4} />);
+    await user.click(screen.getByRole('button', { name: /파일 내려받기/ }));
+
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(open).not.toHaveBeenCalled();
+  });
+});

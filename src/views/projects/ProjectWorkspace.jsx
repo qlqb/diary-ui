@@ -887,6 +887,7 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
           courseId={courseId}
           startBatch={batches.startBatch}
           starting={batches.starting}
+          refreshBatches={batches.refresh}
           onCancel={() => setUploadOpen(false)}
           /*
             keepOpen: 압축 가져오기는 파일 하나가 끝날 때마다 목록을 새로 읽는데, 그때마다 폼을 닫으면
@@ -922,7 +923,7 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
  * OTHER로 확정한 뒤 "성격은 자료 상세에서 바꾼다"고만 적어뒀는데, 그 기능이 실제로는
  * 없었기 때문이다. 필수로 만들지는 않는다 — 기본값 OTHER로 두고 나중에 목록에서 바꿔도 된다.
  */
-function UploadForm({ courseId, startBatch, starting, onCancel, onUploaded }) {
+function UploadForm({ courseId, startBatch, starting, onCancel, onUploaded, refreshBatches = null }) {
   const [files, setFiles] = useState([]);
   const [materialType, setMaterialType] = useState(MaterialType.OTHER);
   const [error, setError] = useState(null);
@@ -960,8 +961,14 @@ function UploadForm({ courseId, startBatch, starting, onCancel, onUploaded }) {
     }
   };
 
+  const zipStatusRef = useRef(null);
   const handleZipChanged = async (next) => {
     setZipImport(next);
+    // 확정·다시 가져오기·취소로 상태가 바뀌면 분석 묶음을 다시 읽는다(서버가 묶음을 열고 닫는다).
+    if (next?.status && next.status !== zipStatusRef.current) {
+      zipStatusRef.current = next.status;
+      void refreshBatches?.();
+    }
     if ((next?.doneCount ?? 0) > importedRef.current) {
       importedRef.current = next.doneCount;
       await onUploaded({ keepOpen: true });

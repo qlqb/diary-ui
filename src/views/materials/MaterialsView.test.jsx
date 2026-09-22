@@ -20,7 +20,7 @@ vi.mock('../../api/api.js', () => ({
     cancel: vi.fn(),
   },
   analysisBatchAPI: {
-    estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn(),
+    estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn(), listOpenPage: vi.fn(),
   },
   materialStoreAPI: {
     list: vi.fn(),
@@ -88,6 +88,7 @@ function installFakeBatchApi() {
   analysisBatchAPI.create.mockImplementation(fake.create);
   analysisBatchAPI.get.mockImplementation(fake.get);
   analysisBatchAPI.listOpen.mockImplementation(fake.listOpen);
+  analysisBatchAPI.listOpenPage.mockImplementation(fake.listOpenPage);
   return fake;
 }
 

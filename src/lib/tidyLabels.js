@@ -5,25 +5,55 @@
  * 구조에 붙는 말 — 범위 안내, 버튼 이름, 무엇이 왜 빠졌는지다.
  */
 
-/** 정리안이 무엇을 보았는지 한 줄. "자료 5개 검토 · 2개 제외" */
+/**
+ * 정리안이 무엇을 보았는지 한 줄.
+ *
+ * "목록으로 봤다"와 "자세히 읽었다"를 나눠 말한다. 모든 구간을 목록으로 훑은 것을 두고 모든
+ * 원문을 읽었다고 말하면 안 된다 — 사용자는 그 차이로 결과를 얼마나 믿을지 정한다.
+ * 예: "자료 5개 · 구간 240개 모두 목록 확인 · 38개 자세히 검토 · 2개 제외"
+ *
+ * sectionsListed가 없으면(2026-09-21 판 정리안) 예전 문장을 쓴다.
+ */
 export function describeScope(scope) {
   if (!scope) return null;
-  const reviewed = scope.reviewed?.length ?? 0;
+  const materials = scope.reviewed?.length ?? 0;
   const excluded = scope.excluded?.length ?? 0;
-  const parts = [`자료 ${reviewed}개 검토`];
+  const total = scope.sectionsTotal ?? 0;
+  const listed = scope.sectionsListed ?? 0;
+  const detailed = scope.sectionsReviewed ?? 0;
+
+  const parts = [];
+  if (listed > 0 && total > 0) {
+    parts.push(`자료 ${materials}개`);
+    parts.push(listed >= total ? `구간 ${total}개 모두 목록 확인` : `구간 ${total}개 중 ${listed}개 목록 확인`);
+    parts.push(detailed >= listed ? '전부 자세히 검토' : `${detailed}개 자세히 검토`);
+  } else {
+    parts.push(`자료 ${materials}개 검토`);
+  }
   if (excluded > 0) parts.push(`${excluded}개 제외`);
   return parts.join(' · ');
 }
 
 /**
- * 부분 정리 안내. 입력 한도로 일부만 본 경우에만 값이 있다.
+ * 부분 정리 안내. 목록 수준에서도 보지 못한 것이 있을 때만 값이 있다.
  *
- * 이 문장이 없으면 사용자는 전체를 반영한 결과라고 믿는다. 숨기지 않는 것이 규칙이다.
+ * 자세히 읽은 것이 일부라는 것만으로는 부분 정리가 아니다 — 모든 구간을 목록으로 보고 모델이
+ * 무엇을 읽을지 골랐기 때문이다. 목록에도 오르지 못한 자료가 있으면 그때는 판단에서 빠진 것이
+ * 있으므로 숨기지 않고 말한다.
  */
 export function partialNote(scope) {
   if (!scope?.truncated) return null;
-  const seen = scope.sectionsReviewed ?? 0;
   const total = scope.sectionsTotal ?? 0;
+  const listed = scope.sectionsListed ?? 0;
+  const unseen = (scope.excluded ?? []).filter((e) => e.reason === 'OVER_BUDGET');
+  if (listed > 0 && total > listed) {
+    const names = unseen.map((e) => e.filename).filter(Boolean);
+    return `자료가 많아 구간 ${total}개 중 ${total - listed}개는 목록으로도 보지 못했어요`
+      + (names.length > 0 ? ` (${names.join(', ')})` : '')
+      + '. 그 자료는 이번 판단에 쓰이지 않았어요';
+  }
+  // 예전 판: 목록/상세를 나눠 세기 전의 정리안.
+  const seen = scope.sectionsReviewed ?? 0;
   if (total > seen) {
     return `분량이 많아 자료 구간 ${total}개 중 ${seen}개만 보고 정리했어요. 나머지는 이번 판단에 쓰이지 않았어요`;
   }
@@ -75,12 +105,18 @@ export const TIDY_OP_LABEL = Object.freeze({
 /** 저장 상태 → 한 줄. 실패를 조용히 넘기지 않는다. */
 export function saveStateText(state) {
   switch (state) {
+    // 아직 보내지 않았다. "저장 중"과 구분해야 한다 — 사용자가 이 순간 창을 닫으면
+    // 서버에는 아직 없다는 뜻이고, 적용 버튼이 막히는 이유이기도 하다.
+    case 'pending':
+      return '저장 대기 중…';
     case 'saving':
       return '저장 중…';
     case 'saved':
       return '저장됨';
     case 'error':
       return '저장하지 못했어요 · 다시 시도해 주세요';
+    case 'conflict':
+      return '다른 곳에서 같은 항목을 고쳤어요 · 어느 쪽을 쓸지 골라 주세요';
     case 'stale':
       return '다른 곳에서 먼저 고쳤어요 · 최신 내용을 불러왔어요';
     default:

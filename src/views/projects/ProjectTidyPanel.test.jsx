@@ -14,13 +14,15 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/api.js', () => ({
+  materialStoreAPI: { file: vi.fn() },
   projectTidyAPI: {
-    get: vi.fn(), request: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
+    get: vi.fn(), request: vi.fn(), retry: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
   },
 }));
 
 import ProjectTidyPanel from './ProjectTidyPanel.jsx';
 import { projectTidyAPI } from '../../api/api.js';
+import { __resetAll } from '../../lib/tidyEditStore.js';
 
 const change = (changeId, op, text, extra = {}) => ({
   changeId, op, label: op, text, reason: null, titleEditable: op === 'ADD' || op === 'RENAME',
@@ -81,6 +83,12 @@ const empty = (overrides = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  /*
+    검토 편집은 모듈 수준(tidyEditStore)에 산다 — 화면을 옮겨도 저장이 이어지게 하려고
+    일부러 그렇게 두었다. 그래서 테스트끼리도 상태가 넘어간다. 앞 테스트가 남긴 편집이
+    다음 테스트의 판 번호를 흔들지 않게 여기서 비운다.
+  */
+  __resetAll();
 });
 
 describe('정리를 시작하기 전', () => {
@@ -248,21 +256,31 @@ describe('검토 중 편집', () => {
     await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
     await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
 
-    expect(await screen.findByText(/저장하지 못했어요/)).toBeInTheDocument();
+    expect(await screen.findByText(/저장하지 못했어요 · 다시 시도해 주세요/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /선택한 변경 적용/ })).toBeDisabled();
+    // 고친 내용을 버리지 않는다. 다시 보낼 길이 화면에 있어야 한다.
+    expect(screen.getByRole('button', { name: '다시 저장' })).toBeInTheDocument();
   });
 
-  it('다른 곳에서 먼저 고쳤으면 최신을 다시 읽고 그 사실을 알린다', async () => {
+  /*
+    예전에는 이 자리에서 "최신을 다시 읽어 화면에 올린다"를 정답으로 고정하고 있었다.
+    그 동작은 방금 친 제목을 소리 없이 지운다 — 다시 읽는다는 것은 내 편집을 서버 값으로
+    갈아치운다는 뜻이기 때문이다. 요구가 바뀐 것이 아니라, 그 테스트가 사고를 정답으로
+    적어 두고 있었다. 이제는 합치고, 정말 부딪히는 것만 사용자에게 묻는다.
+  */
+  it('다른 곳에서 먼저 고쳤어도 내 편집을 버리지 않는다', async () => {
     const user = userEvent.setup();
-    projectTidyAPI.get.mockResolvedValue(view());
+    projectTidyAPI.get.mockResolvedValueOnce(view())
+      .mockResolvedValue(view({ editRevision: 7, edits: { c2: { title: '다른 탭이 고친 것' } } }));
     projectTidyAPI.saveEdits.mockRejectedValue(Object.assign(new Error('stale'), { code: 'E409_029' }));
     render(<ProjectTidyPanel courseId={6} />);
 
     await user.click(await screen.findByRole('button', { name: /원형 큐.*변경 1/ }));
     await user.type(screen.getByLabelText('항목 제목 고치기'), '!');
 
-    expect(await screen.findByText(/다른 곳에서 먼저 고쳤어요/)).toBeInTheDocument();
+    // 서로 다른 변경을 고쳤으므로 충돌이 아니다 — 합쳐지고 내 글자는 그대로 남는다.
     await waitFor(() => expect(projectTidyAPI.get).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText('항목 제목 고치기')).toHaveValue('원형 큐!');
   });
 });
 
@@ -378,5 +396,105 @@ describe('적용과 버리기', () => {
 
     await user.click(await screen.findByRole('button', { name: /스택.*변경 1/ }));
     expect(screen.getByText(/흡수되는 항목은 보관돼요/)).toBeInTheDocument();
+  });
+});
+
+describe('실패한 정리', () => {
+  it('다시 시도는 요청 때의 입력으로 한다 — 새 요청이 아니다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(empty({
+      readyMaterialCount: 3,
+      job: { jobId: 5, status: 'FAILED', retryable: true, needsNewRequest: false, message: '정리안을 만들지 못했어요' },
+    }));
+    projectTidyAPI.retry.mockResolvedValue(empty({ readyMaterialCount: 3, job: { jobId: 6, status: 'QUEUED' } }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await user.click(await screen.findByRole('button', { name: '다시 시도' }));
+
+    expect(projectTidyAPI.retry).toHaveBeenCalledWith(6);
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+  });
+
+  it('입력이 바뀌어 멈췄으면 다시 시도 대신 새로 정리를 준다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(empty({
+      readyMaterialCount: 3,
+      job: {
+        jobId: 5, status: 'FAILED', retryable: false, needsNewRequest: true, errorCode: 'STALE_INPUT',
+        message: '요청한 뒤 자료가 바뀌었어요: 「강의.pdf」 다시 분석됨. 지금 자료로 다시 정리해 주세요',
+      },
+    }));
+    projectTidyAPI.request.mockResolvedValue(empty({ readyMaterialCount: 3, job: { jobId: 7, status: 'QUEUED' } }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/「강의.pdf」 다시 분석됨/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '지금 자료로 새로 정리' }));
+
+    expect(projectTidyAPI.request).toHaveBeenCalledWith(6, { refresh: true });
+  });
+});
+
+describe('근거 원문 열기', () => {
+  const withEvidence = (sections) => view({
+    groups: [{ key: 't1', kind: 'EXISTING', topicId: 1, title: '스택', parentTitle: null, changeIds: ['c1'] }],
+    changes: [change('c1', 'LINK', '「스택」에 근거를 연결해요', { sections })],
+  });
+
+  async function openEvidence(user) {
+    await user.click(await screen.findByRole('button', { name: /스택.*변경 1/ }));
+    await user.click(screen.getByRole('button', { name: /근거 1곳 보기/ }));
+  }
+
+  it('지금 파일의 PDF 쪽이면 그 쪽으로 여는 버튼을 준다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(withEvidence([{
+      sectionId: 9, materialId: 21, materialFilename: '강의.pdf', locator: 'p.3', title: '스택 정의',
+      availability: 'OK', page: 3,
+    }]));
+    render(<ProjectTidyPanel courseId={6} />);
+    await openEvidence(user);
+
+    expect(screen.getByRole('button', { name: /PDF p.3 열기/ })).toBeInTheDocument();
+  });
+
+  it('쪽으로 뛸 수 없는 형식은 여는 버튼과 위치를 글로 준다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(withEvidence([{
+      sectionId: 9, materialId: 21, materialFilename: '실습.ipynb', locator: '셀 12', title: '스택 구현',
+      availability: 'OK', page: null,
+    }]));
+    render(<ProjectTidyPanel courseId={6} />);
+    await openEvidence(user);
+
+    expect(screen.getByRole('button', { name: /파일 내려받기/ })).toBeInTheDocument();
+    expect(screen.getByText(/위치로 바로 가지 못해요 — 위치: 셀 12/)).toBeInTheDocument();
+  });
+
+  it('예전 파일의 발췌면 그렇다고 말하고 지금 파일을 연다고 밝힌다', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(withEvidence([{
+      sectionId: 9, materialId: 21, materialFilename: '강의.pdf', locator: 'p.3', title: '스택 정의',
+      excerpt: '옛 발췌', availability: 'OUTDATED', page: null,
+    }]));
+    render(<ProjectTidyPanel courseId={6} />);
+    await openEvidence(user);
+
+    expect(screen.getByText(/예전 파일\(또는 예전 분석\)에서 나왔어요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /지금 파일 열기/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /PDF p.3 열기/ })).not.toBeInTheDocument();
+  });
+
+  it('자료가 지워졌으면 여는 버튼을 두지 않는다 — 다른 파일을 열지 않게', async () => {
+    const user = userEvent.setup();
+    projectTidyAPI.get.mockResolvedValue(withEvidence([{
+      sectionId: 9, materialId: 21, materialFilename: '강의.pdf', locator: 'p.3', title: '스택 정의',
+      availability: 'MATERIAL_DELETED', page: null,
+    }]));
+    render(<ProjectTidyPanel courseId={6} />);
+    await openEvidence(user);
+
+    expect(screen.getByText('자료가 지워져 원본을 열 수 없어요.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /열기|내려받기/ })).not.toBeInTheDocument();
   });
 });

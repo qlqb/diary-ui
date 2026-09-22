@@ -134,3 +134,30 @@ describe('끝난 뒤', () => {
     expect(screen.getByText('본문을 읽지 못함')).toBeInTheDocument();
   });
 });
+
+describe('압축에서 가져온 묶음', () => {
+  it('어느 압축인지 말하고, 이름이 같은 파일은 압축 안 경로로 구분한다', () => {
+    render(<AnalysisBatchCard batch={batch({
+      zipImportId: 3,
+      sourceArchiveName: '과제모음.zip',
+      items: [
+        item({ itemId: 1, filename: 'run.sh', sourcePath: '과제1/run.sh', stage: 'DONE', settled: true }),
+        item({
+          itemId: 2, filename: 'run.sh', sourcePath: '과제2/run.sh', materialId: null,
+          uploadState: 'UPLOAD_FAILED', stage: 'UPLOAD_FAILED', stageLabel: '올리지 못함', settled: true,
+          message: '압축 안에서 이 파일을 찾지 못했어요',
+        }),
+      ],
+    })} />);
+
+    expect(screen.getByText('압축에서 가져옴: 과제모음.zip')).toBeInTheDocument();
+    expect(screen.getByText('과제1/run.sh')).toBeInTheDocument();
+    expect(screen.getByText('과제2/run.sh')).toBeInTheDocument();
+    expect(screen.getByText('압축 안에서 이 파일을 찾지 못했어요')).toBeInTheDocument();
+  });
+
+  it('일반 업로드 묶음에는 압축 표시가 없다', () => {
+    render(<AnalysisBatchCard batch={batch()} />);
+    expect(screen.queryByText(/압축에서 가져옴/)).not.toBeInTheDocument();
+  });
+});

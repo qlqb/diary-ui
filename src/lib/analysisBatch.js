@@ -67,6 +67,8 @@ export const BATCH_STAGE_LABEL = Object.freeze({
   UPLOAD_FAILED: '올리지 못함',
   PAUSED: '멈춤',
   CANCELLED: '취소됨',
+  // 파일을 고른 탭이 떠나 올라오지 못한 자리. 서버가 사유("다시 골라 올려야 해요")를 함께 준다.
+  ABANDONED: '올리지 못함',
 });
 
 /** 처리가 끝난 단계인가. 끝났다고 성공은 아니다. */
@@ -82,6 +84,13 @@ export function isSettledStage(stage) {
  */
 export function describeBatch(batch) {
   if (!batch) return null;
+  /*
+    서버에 물었는데 답을 못 받았다. 들고 있는 숫자는 마지막으로 확인한 값일 뿐이다 —
+    지금 값인 것처럼 말하지 않고, 끝났다고 추측하지도 않는다.
+  */
+  if (batch.unknown) {
+    return `지금 상태를 확인하지 못했어요 · 마지막 확인: ${batch.itemCount}개 중 ${batch.doneCount ?? 0}개 완료`;
+  }
   const { doneCount = 0, failedCount = 0, skippedCount = 0, runningCount = 0, waitingCount = 0 } = batch;
   if (batch.status === 'FINISHED') {
     const parts = [`처리 종료 · ${doneCount}개 성공`];

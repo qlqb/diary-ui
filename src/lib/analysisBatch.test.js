@@ -101,3 +101,14 @@ describe('크기 표시', () => {
     expect(formatBytes(3 * 1024 * 1024)).toBe('3.0MB');
   });
 });
+
+describe('확인하지 못한 묶음', () => {
+  it('마지막으로 확인한 값이라고 말하고 끝났다고 하지 않는다', () => {
+    const text = describeBatch({
+      unknown: true, status: 'ANALYZING', itemCount: 5, doneCount: 2, processedPercent: 40,
+    });
+    expect(text).toContain('확인하지 못했어요');
+    expect(text).toContain('마지막 확인');
+    expect(text).not.toContain('처리 종료');
+  });
+});

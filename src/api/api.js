@@ -1541,9 +1541,23 @@ export const analysisBatchAPI = {
 
     get: (batchId) => request(`/materials/analysis/batches/${batchId}`),
 
-    /** 아직 도는 묶음. 화면에 다시 들어왔을 때 복원한다. */
+    /**
+     * @deprecated 최대 5개에서 잘린다. 옛 화면 호환용. listOpenPage로 끝까지 넘긴다.
+     */
     listOpen: (courseId = null) =>
         request(`/materials/analysis/batches${courseId == null ? '' : `?courseId=${courseId}`}`),
+
+    /**
+     * 아직 도는 묶음 한 쪽. { batches, nextCursor, totalOpen }.
+     * nextCursor가 null이 될 때까지 넘겨야 전부다 — 한 쪽만 보고 빠진 것을 끝났다고 추측하지 않는다.
+     */
+    listOpenPage: ({ courseId = null, cursor = null, limit = 20 } = {}) => {
+        const params = new URLSearchParams();
+        if (courseId != null) params.set('courseId', courseId);
+        if (cursor != null) params.set('cursor', cursor);
+        params.set('limit', limit);
+        return request(`/materials/analysis/batches/open?${params.toString()}`);
+    },
 };
 
 /**
@@ -1575,6 +1589,12 @@ export const projectTidyAPI = {
             method: 'POST',
             body: JSON.stringify(body),
         }),
+
+    /**
+     * 실패한 정리를 <요청 때의 입력 그대로> 다시 한다. 그 사이 끝난 자료는 섞지 않는다 —
+     * 최신을 반영하려면 request(courseId, { refresh: true }).
+     */
+    retry: (courseId) => request(`/courses/${courseId}/tidy/retry`, { method: 'POST' }),
 
     dismiss: (courseId) => request(`/courses/${courseId}/tidy/dismiss`, { method: 'POST' }),
 

@@ -78,3 +78,31 @@ describe('버튼과 저장 상태', () => {
     expect(saveStateText(null)).toBeNull();
   });
 });
+
+describe('목록으로 본 것과 자세히 읽은 것', () => {
+  it('전부 목록으로 봤으면 그렇게 말하고, 자세히 읽은 수를 따로 말한다', () => {
+    const text = describeScope({
+      reviewed: [{}, {}, {}, {}, {}], excluded: [],
+      sectionsTotal: 240, sectionsListed: 240, sectionsReviewed: 38, truncated: false,
+    });
+    expect(text).toBe('자료 5개 · 구간 240개 모두 목록 확인 · 38개 자세히 검토');
+  });
+
+  it('자세히 읽은 것이 일부여도 전부 목록으로 봤으면 부분 정리가 아니다', () => {
+    expect(partialNote({ truncated: false, sectionsTotal: 240, sectionsListed: 240, sectionsReviewed: 38 }))
+      .toBeNull();
+  });
+
+  it('목록에도 못 오른 자료가 있으면 이름과 함께 부분 정리라고 말한다', () => {
+    const note = partialNote({
+      truncated: true, sectionsTotal: 300, sectionsListed: 260, sectionsReviewed: 40,
+      excluded: [{ materialId: 9, filename: '부록.pdf', reason: 'OVER_BUDGET' }],
+    });
+    expect(note).toContain('40개는 목록으로도 보지 못했어요');
+    expect(note).toContain('부록.pdf');
+  });
+
+  it('목록 수를 세기 전의 정리안은 예전 문장을 쓴다', () => {
+    expect(describeScope({ reviewed: [{}, {}], excluded: [{}] })).toBe('자료 2개 검토 · 1개 제외');
+  });
+});

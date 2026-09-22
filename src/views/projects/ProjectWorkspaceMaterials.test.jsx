@@ -20,6 +20,7 @@ vi.mock('../../api/api.js', () => ({
   },
   analysisBatchAPI: {
     estimate: vi.fn(), create: vi.fn(), get: vi.fn(), listOpen: vi.fn().mockResolvedValue([]),
+    listOpenPage: vi.fn().mockResolvedValue({ batches: [], nextCursor: null, totalOpen: 0 }),
   },
   zipImportAPI: { create: vi.fn(), get: vi.fn(), confirm: vi.fn(), retryEntry: vi.fn(), cancel: vi.fn() },
   assignmentAPI: {
@@ -69,6 +70,7 @@ describe('프로젝트의 연결된 자료', () => {
     analysisBatchAPI.create.mockImplementation(fakeBatch.create);
     analysisBatchAPI.get.mockImplementation(fakeBatch.get);
     analysisBatchAPI.listOpen.mockImplementation(fakeBatch.listOpen);
+    analysisBatchAPI.listOpenPage.mockImplementation(fakeBatch.listOpenPage);
     planAPI.findCoveringDate.mockResolvedValue([]);
     executionItemAPI.getByDateRange.mockResolvedValue([]);
     courseAPI.get.mockResolvedValue({ courseId: 6, title: '자료구조', status: 'ACTIVE' });
