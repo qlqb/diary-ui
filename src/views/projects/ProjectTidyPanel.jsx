@@ -33,6 +33,8 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
   const [error, setError] = useState(null);
   const [openGroups, setOpenGroups] = useState(() => new Set());
   const [detailOpen, setDetailOpen] = useState(false);
+  /** 다시 정리 전에 편집 저장을 기다리는 중. 입력을 막고 그 사실을 말한다. */
+  const [savingBeforeRequest, setSavingBeforeRequest] = useState(false);
 
   /*
     편집은 이 컴포넌트가 들고 있지 않다. tidyEditStore가 주인이고 여기서는 구독만 한다.
@@ -55,6 +57,15 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
   */
   const ticketRef = useRef(0);
   const invalidate = useCallback(() => { ticketRef.current += 1; return ticketRef.current; }, []);
+
+  /*
+    생명 번호. 조회 번호(ticket)와 따로 둔다 — 폴링 조회도 ticket을 올리므로, 그것으로
+    "기다리는 사이 무슨 일이 있었나"를 판단하면 평범한 폴링이 다시 정리를 취소해 버린다.
+    이 번호는 버리기·적용 성공과 프로젝트 전환·unmount에서만 오른다.
+  */
+  const lifeRef = useRef(0);
+  const courseRef = useRef(courseId);
+  courseRef.current = courseId;
 
   const load = useCallback(async () => {
     const mine = invalidate();
@@ -87,6 +98,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
     setView(null);
     setLoading(true);
     setError(null);
+    return () => { lifeRef.current += 1; };
   }, [courseId]);
 
   /*
@@ -155,11 +167,35 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
     setView(result);
   }, '다시 시도하지 못했어요.');
 
+  /**
+   * [이 프로젝트 자료 정리]·[다시 정리].
+   *
+   * 다시 만들기 전에 남은 편집이 <서버에 확인될 때까지> 기다린다. 서버는 저장된 편집만 새 판으로
+   * 옮기므로, 확인되지 않은 편집을 두고 만들면 사용자가 본 마지막 내용이 새 판에서 사라진다.
+   * flush는 "보내 둬"일 뿐 저장 보장이 아니다 — 이미 전송 중이면 기다리지 않고, 실패도 삼킨다.
+   * 기다리는 동안 입력은 막는다(busy). 저장이 실패·충돌하거나, 그 사이 정리안이 없어지거나,
+   * 프로젝트·계정이 바뀌면 만들지 않는다.
+   */
   const requestTidy = (refresh = false) => run(async () => {
-    // 다시 만들기 전에 남은 편집을 먼저 확정한다. 아직 서버에 없는 편집은 새 판으로
-    // 승계될 수 없다 — 승계는 저장된 것만 옮긴다.
-    await tidyEdits.flush(courseId);
-    const result = await projectTidyAPI.request(courseId, { refresh });
+    const life = lifeRef.current;
+    const course = courseId;
+    const stillHere = () => lifeRef.current === life && courseRef.current === course;
+
+    setSavingBeforeRequest(true);
+    let saved;
+    try {
+      saved = await tidyEdits.ensureSaved(course);
+    } finally {
+      if (stillHere()) setSavingBeforeRequest(false);
+    }
+    if (!stillHere()) return;
+    if (!saved.ok) {
+      setError(describeSaveBlock(saved.reason));
+      return;
+    }
+
+    const result = await projectTidyAPI.request(course, { refresh });
+    if (!stillHere()) return;
     invalidate();
     setView(result);
   }, '정리를 시작하지 못했어요.');
@@ -178,6 +214,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
     });
     // 서버가 확정한 뒤에야 정리한다. 미리 비우면 실패했을 때 편집을 잃는다.
     invalidate();
+    lifeRef.current += 1;
     tidyEdits.clear(courseId);
     setView(result);
     await onApplied?.();
@@ -189,6 +226,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
     // 이 두 줄이 "버린 안이 돌아오지 않는다"를 지킨다. 폐기 <성공> 시점에 조회 번호와
     // 편집 세대를 함께 올려, 그 전에 떠난 GET·PUT의 응답을 전부 무효로 만든다.
     invalidate();
+    lifeRef.current += 1;
     tidyEdits.clear(courseId);
     setView(result);
   }, '버리지 못했어요.');
@@ -255,6 +293,11 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
       )}
 
       {error && <p className="view-error">{error}</p>}
+      {savingBeforeRequest && (
+        <p className="view-dim" role="status">
+          <Loader2 size={13} className="spin" /> 고친 내용을 저장한 뒤 다시 정리해요…
+        </p>
+      )}
 
       {hasProposal && (
         <>
@@ -370,6 +413,12 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
             같은 변경을 두 곳에서 다르게 고쳤다. 한쪽을 임의로 이기게 하면 다른 쪽이
             소리 없이 사라진다 — 무엇과 무엇이 부딪혔는지 보여주고 사용자가 정한다.
           */}
+          {editState.recovered?.legacy && editState.conflicts.length > 0 && (
+            <p className="project-tidy-warn" role="status">
+              새로고침 전에 저장되지 못한 편집을 찾았어요. 예전 저장 형식이라 어느 것이 내가 바꾼 것인지
+              알 수 없어 자동으로 보내지 않았어요 — 항목마다 어느 쪽을 쓸지 골라 주세요.
+            </p>
+          )}
           {editState.conflicts.length > 0 && (
             <ul className="project-tidy-conflicts">
               {editState.conflicts.map((conflict) => {
@@ -378,7 +427,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
                   <li key={conflict.changeId}>
                     <p className="project-tidy-conflict-what">{label}</p>
                     <p className="view-sub-dim">
-                      내가 고친 값: {describeEditValue(conflict.mine)}
+                      {conflict.recovered ? '새로고침 전 편집' : '내가 고친 값'}: {describeEditValue(conflict.mine)}
                       {' · '}다른 곳의 값: {describeEditValue(conflict.theirs)}
                     </p>
                     <button type="button" className="btn-ghost btn-sm" disabled={busy}
@@ -505,6 +554,24 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarr
       )}
     </li>
   );
+}
+
+/** 저장 보장이 막힌 이유를 사람 말로. 입력은 그대로 있다는 것을 함께 말한다. */
+function describeSaveBlock(reason) {
+  switch (reason) {
+    case 'conflict':
+      return '다른 곳에서 같은 항목을 고쳤어요. 어느 쪽을 쓸지 고른 뒤 다시 정리해 주세요.';
+    case 'timeout':
+      return '저장 응답이 오지 않아 다시 정리하지 않았어요. 고친 내용은 그대로 있어요 — 잠시 뒤 다시 눌러 주세요.';
+    case 'busy':
+      return '고친 내용이 계속 바뀌고 있어 다시 정리하지 않았어요. 잠시 뒤 다시 눌러 주세요.';
+    case 'replaced':
+      return '그 사이 이 정리안이 바뀌었거나 없어져서 다시 정리하지 않았어요.';
+    case 'switched':
+      return '계정이 바뀌어 다시 정리하지 않았어요.';
+    default:
+      return '고친 내용을 저장하지 못해 다시 정리하지 않았어요. 고친 내용은 그대로 있어요 — 다시 눌러 주세요.';
+  }
 }
 
 /** 충돌 화면에 쓰는 한 줄. 제목과 "빼기"를 사람 말로 쓴다. */

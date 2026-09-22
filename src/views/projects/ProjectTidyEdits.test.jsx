@@ -239,7 +239,7 @@ describe('새로고침 뒤 복구', () => {
     unmount();
 
     // 저장소에 남아 있어야 새로고침을 견딘다.
-    expect(localStorage.getItem('tidyEdits:v1')).toContain('복구될 제목');
+    expect(localStorage.getItem('tidyEdits:v2')).toContain('복구될 제목');
 
     // 새로고침: 모듈 상태는 전부 사라지고 localStorage만 남는다.
     __resetAll({ keepStorage: true });
@@ -264,7 +264,7 @@ describe('새로고침 뒤 복구', () => {
     render(<ProjectTidyPanel courseId={6} />);
 
     await waitFor(() => expect(screen.queryByLabelText('항목 제목 고치기')).not.toBeInTheDocument());
-    expect(localStorage.getItem('tidyEdits:v1')).toBeNull();
+    expect(localStorage.getItem('tidyEdits:v2')).toBeNull();
   });
 });
 
@@ -312,7 +312,7 @@ describe('버리기·적용 뒤 늦게 온 응답', () => {
     });
 
     expect(screen.queryByText(/새 항목 2개/)).not.toBeInTheDocument();
-    expect(localStorage.getItem('tidyEdits:v1')).toBeNull();
+    expect(localStorage.getItem('tidyEdits:v2')).toBeNull();
   });
 
   it('적용이 끝난 뒤 도착한 이전 조회도 정리안을 되살리지 않는다', async () => {
@@ -429,5 +429,151 @@ describe('판이 바뀌며 옮겨 온 편집', () => {
     // 확인은 보내지 않았다 — 다른 제목을 저장한 것뿐이다.
     expect(projectTidyAPI.saveEdits.mock.calls[0][1].resolveCarried).toBeUndefined();
     expect(screen.getByText(/옮겨 온 편집 1건을 확인해야/)).toBeInTheDocument();
+  });
+});
+
+// ===== 3. 다시 정리는 저장이 확인된 뒤에만 =====
+
+describe('다시 정리 전에 편집 저장을 확인한다', () => {
+  const refreshButton = () => screen.getByRole('button', { name: /새 자료 반영해 다시 정리/ });
+  const created = () => view({ proposalId: null, status: null, job: { jobId: 5, status: 'QUEUED' } });
+
+  it('저장 응답을 기다리는 동안에는 만들지 않고, 그 뒤에 친 편집까지 저장된 다음 정확히 한 번 만든다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({ newMaterialCount: 1 }));
+    const first = deferred();
+    const second = deferred();
+    projectTidyAPI.saveEdits.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    projectTidyAPI.request.mockResolvedValue(created());
+    const { user } = await openPanel();
+
+    await retype(user, titleInputs()[0], 'A');
+    await act(async () => { vi.advanceTimersByTime(800); });
+    await waitFor(() => expect(projectTidyAPI.saveEdits).toHaveBeenCalledTimes(1));
+    // A가 날아가는 중에 B를 친다.
+    await retype(user, titleInputs()[1], 'B');
+
+    await user.click(refreshButton());
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+    expect(await screen.findByText(/저장한 뒤 다시 정리해요/)).toBeInTheDocument();
+
+    await act(async () => { first.resolve(view({ editRevision: 1, edits: { c1: { title: 'A' } } })); });
+    await waitFor(() => expect(projectTidyAPI.saveEdits).toHaveBeenCalledTimes(2));
+    expect(projectTidyAPI.saveEdits.mock.calls[1][1]).toMatchObject({
+      editRevision: 1, edits: { c1: { title: 'A' }, c2: { title: 'B' } },
+    });
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+
+    await act(async () => {
+      second.resolve(view({ editRevision: 2, edits: { c1: { title: 'A' }, c2: { title: 'B' } } }));
+    });
+    await waitFor(() => expect(projectTidyAPI.request).toHaveBeenCalledTimes(1));
+    expect(projectTidyAPI.request).toHaveBeenCalledWith(6, { refresh: true });
+  });
+
+  it('저장이 실패하면 만들지 않고 입력을 남기며, 다시 누르면 저장이 확인된 뒤 만든다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({ newMaterialCount: 1 }));
+    projectTidyAPI.saveEdits.mockRejectedValueOnce(new Error('네트워크가 끊겼어요'))
+      .mockImplementation((_id, body) => Promise.resolve(view({ editRevision: 1, edits: body.edits })));
+    projectTidyAPI.request.mockResolvedValue(created());
+    const { user } = await openPanel();
+
+    await retype(user, titleInputs()[0], '남아야 함');
+    await user.click(refreshButton());
+
+    expect(await screen.findByText(/고친 내용을 저장하지 못해 다시 정리하지 않았어요/)).toBeInTheDocument();
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+    expect(titleInputs()[0]).toHaveValue('남아야 함');
+
+    await user.click(refreshButton());
+    await waitFor(() => expect(projectTidyAPI.request).toHaveBeenCalledTimes(1));
+    expect(projectTidyAPI.saveEdits).toHaveBeenCalledTimes(2);
+  });
+
+  it('충돌이 남아 있으면 만들지 않는다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({ newMaterialCount: 1 }));
+    projectTidyAPI.saveEdits.mockRejectedValue(Object.assign(new Error('x'), { code: 'E409_029' }));
+    projectTidyAPI.request.mockResolvedValue(created());
+    const { user } = await openPanel();
+
+    await retype(user, titleInputs()[0], '내 값');
+    projectTidyAPI.get.mockResolvedValue(view({ newMaterialCount: 1, editRevision: 4, edits: { c1: { title: '남의 값' } } }));
+    await user.click(refreshButton());
+
+    expect(await screen.findByText(/어느 쪽을 쓸지 고른 뒤 다시 정리해 주세요/)).toBeInTheDocument();
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+    expect(projectTidyAPI.saveEdits).toHaveBeenCalledTimes(1);
+  });
+
+  it('기다리는 동안 그 정리안이 없어지면(다른 곳에서 버림) 만들지 않는다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({ newMaterialCount: 1 }));
+    const held = deferred();
+    projectTidyAPI.saveEdits.mockReturnValue(held.promise);
+    projectTidyAPI.request.mockResolvedValue(created());
+    const { user, rerender } = await openPanel();
+
+    await retype(user, titleInputs()[0], 'A');
+    await user.click(refreshButton());
+    // 다른 탭에서 버렸다 — 다시 읽으니 정리안이 없다.
+    projectTidyAPI.get.mockResolvedValue(gone());
+    rerender(<ProjectTidyPanel courseId={6} refreshToken={1} />);
+    await waitFor(() => expect(screen.queryByLabelText('항목 제목 고치기')).not.toBeInTheDocument());
+
+    await act(async () => { held.resolve(view({ editRevision: 1, edits: { c1: { title: 'A' } } })); });
+    await act(async () => { vi.advanceTimersByTime(100); });
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+  });
+
+  it('기다리는 동안 다른 프로젝트로 옮기면 앞 프로젝트를 만들지 않고 새 화면을 덮지 않는다', async () => {
+    projectTidyAPI.get.mockImplementation((courseId) => Promise.resolve(courseId === 7
+      ? view({ courseId: 7, proposalId: 12, summary: { headline: '다른 프로젝트 안' } })
+      : view({ newMaterialCount: 1 })));
+    const held = deferred();
+    projectTidyAPI.saveEdits.mockReturnValue(held.promise);
+    projectTidyAPI.request.mockResolvedValue(created());
+    const { user, rerender } = await openPanel();
+
+    await retype(user, titleInputs()[0], 'A');
+    await user.click(refreshButton());
+    rerender(<ProjectTidyPanel courseId={7} />);
+    await screen.findByText('다른 프로젝트 안');
+
+    await act(async () => { held.resolve(view({ editRevision: 1, edits: { c1: { title: 'A' } } })); });
+    await act(async () => { vi.advanceTimersByTime(100); });
+    expect(projectTidyAPI.request).not.toHaveBeenCalled();
+    expect(screen.getByText('다른 프로젝트 안')).toBeInTheDocument();
+  });
+});
+
+// ===== 2. 화면에서 본 충돌 =====
+
+describe('충돌 중에는 화면 어디서도 저장이 나가지 않는다', () => {
+  it('충돌 중 다시 저장·다른 제목 입력·탭 이동에도 PATCH가 없고, 고르면 한 번 저장한다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view());
+    projectTidyAPI.saveEdits.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'E409_029' }))
+      .mockImplementation((_id, body) => Promise.resolve(view({ editRevision: 5, edits: body.edits })));
+    const { user, unmount } = await openPanel();
+
+    await retype(user, titleInputs()[0], '내 값');
+    projectTidyAPI.get.mockResolvedValue(view({ editRevision: 4, edits: { c1: { title: '남의 값' } } }));
+    await act(async () => { vi.advanceTimersByTime(800); });
+    await screen.findByRole('button', { name: '내 편집 유지' });
+    expect(projectTidyAPI.saveEdits).toHaveBeenCalledTimes(1);
+
+    await retype(user, titleInputs()[1], '다른 제목');
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(projectTidyAPI.saveEdits).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /변경 적용/ })).toBeDisabled();
+
+    unmount();
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(projectTidyAPI.saveEdits).toHaveBeenCalledTimes(1);
+
+    const again = await openPanel();
+    expect(titleInputs()[1]).toHaveValue('다른 제목');
+    await again.user.click(screen.getByRole('button', { name: '다른 곳의 값 사용' }));
+    await waitFor(() => expect(projectTidyAPI.saveEdits).toHaveBeenCalledTimes(2));
+    expect(projectTidyAPI.saveEdits.mock.calls[1][1]).toMatchObject({
+      editRevision: 4, edits: { c1: { title: '남의 값' }, c2: { title: '다른 제목' } },
+    });
   });
 });
