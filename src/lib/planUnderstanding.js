@@ -53,6 +53,10 @@ export function buildPlanUnderstanding({ strategy, provenance, selection, items 
   const skippedIds = new Set(skipped.map((t) => t.topicId));
   const deferred = (strategy?.deferred ?? []).filter((d) => d.topicId == null || !skippedIds.has(d.topicId));
   const unread = strategy?.unreadNotes ?? [];
+  // 사용자가 정정한 시험·계획 범위 제외. 학습 완료가 아니라 이번 범위에서 뺀 것이다.
+  const scoped = (selection?.excludedTopics ?? [])
+    .filter((e) => typeof e.reason === 'string' && e.reason.startsWith('SCOPE'))
+    .map((e) => ({ title: e.title, label: e.reason.startsWith('SCOPE:') ? e.reason.slice(6) : '이번 계획' }));
 
   const courses = strategy?.courses ?? [];
   const order = courses.length > 0
@@ -80,6 +84,7 @@ export function buildPlanUnderstanding({ strategy, provenance, selection, items 
     questions: strategy?.openQuestions ?? [],
     skipped,
     deferred,
+    scoped,
     unread,
     notRead,
     unreviewed,

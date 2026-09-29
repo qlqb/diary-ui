@@ -13,6 +13,8 @@ import {
 } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
+  structureAPI: { corrections: vi.fn(() => Promise.resolve({ classProgress: [], exclusions: [] })), manual: vi.fn(), request: vi.fn(), removeExclusion: vi.fn() },
+  textbookAPI: { get: vi.fn(() => Promise.resolve(null)), apply: vi.fn() },
   materialAnalysisStatusAPI: {
     overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true }),
     retry: vi.fn(), section: vi.fn(), sections: vi.fn().mockResolvedValue([]), status: vi.fn(),

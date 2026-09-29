@@ -1597,9 +1597,15 @@ export const analysisBatchAPI = {
 export const projectTidyAPI = {
     get: (courseId) => request(`/courses/${courseId}/tidy`),
 
-    /** [이 프로젝트 자료 정리]. refresh=true면 [새 자료 반영해 다시 정리]. */
-    request: (courseId, { refresh = false } = {}) =>
-        request(`/courses/${courseId}/tidy?refresh=${refresh ? 'true' : 'false'}`, { method: 'POST' }),
+    /**
+     * [이 프로젝트 자료 정리]. refresh=true면 [새 자료 반영해 다시 정리].
+     * instruction이 있으면 그 지시를 붙여 자료를 다시 보며 정리한다(검토 중인 안이 있어도 새로 만든다).
+     */
+    request: (courseId, { refresh = false, instruction = null, focusTopicIds = null } = {}) =>
+        request(`/courses/${courseId}/tidy?refresh=${refresh ? 'true' : 'false'}`, {
+            method: 'POST',
+            ...(instruction ? { body: JSON.stringify({ instruction, focusTopicIds }) } : {}),
+        }),
 
     /**
      * 검토 중 고친 것 저장(자동 저장). 트리는 바뀌지 않는다.
@@ -1627,6 +1633,37 @@ export const projectTidyAPI = {
     dismiss: (courseId) => request(`/courses/${courseId}/tidy/dismiss`, { method: 'POST' }),
 
     history: (courseId) => request(`/courses/${courseId}/tidy/history`),
+};
+
+/**
+ * 학습 구조 조정. 직접 조작·말로 한 요청 모두 정리안(검토 → 선택 적용)으로 들어간다 — 여기서 바로 바뀌는 것은 없다.
+ * 응답 { tidy, summary, question, dropped, added }.
+ */
+export const structureAPI = {
+    /** ops: TopicChangeOp[] (RENAME·MOVE·MERGE·SPLIT·CLASS·MATERIAL_WEEK·SCOPE_EXCLUDE) */
+    manual: (courseId, ops, note = null) =>
+        request(`/courses/${courseId}/structure/manual`, { method: 'POST', body: JSON.stringify({ ops, note }) }),
+    /** "교재 5장을 3장보다 먼저 수업했어" 같은 요청을 변경안으로 해석한다(모델 1회). */
+    request: (courseId, text, focusTopicIds = null) =>
+        request(`/courses/${courseId}/structure/requests`, {
+            method: 'POST', body: JSON.stringify({ text, focusTopicIds }),
+        }),
+    /** 사용자가 정정한 실제 수업 진행과 범위 제외 */
+    corrections: (courseId) => request(`/courses/${courseId}/corrections`),
+    removeExclusion: (courseId, exclusionId) =>
+        request(`/courses/${courseId}/scope-exclusions/${exclusionId}`, { method: 'DELETE' }),
+};
+
+/**
+ * 프로젝트 교재: 어느 책인가(서지)·그 책의 목차. 조회는 규칙 추출이라 모델을 부르지 않는다.
+ * apply: 고른 칸만, 화면이 본 지금 값(expected)과 다르면 409.
+ */
+export const textbookAPI = {
+    get: (courseId) => request(`/courses/${courseId}/textbook`),
+    apply: (courseId, { materialId, values, expected }) =>
+        request(`/courses/${courseId}/textbook/apply`, {
+            method: 'POST', body: JSON.stringify({ materialId, values, expected }),
+        }),
 };
 
 /** @deprecated 자료별 변경안. 2026-09-21에 프로젝트 단위 정리(projectTidyAPI)로 옮겼다. 이력 조회만 남는다. */

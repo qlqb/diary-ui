@@ -15,13 +15,14 @@ import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/api.js', () => ({
   materialStoreAPI: { file: vi.fn() },
+  structureAPI: { request: vi.fn() },
   projectTidyAPI: {
     get: vi.fn(), request: vi.fn(), retry: vi.fn(), saveEdits: vi.fn(), apply: vi.fn(), dismiss: vi.fn(), history: vi.fn(),
   },
 }));
 
 import ProjectTidyPanel from './ProjectTidyPanel.jsx';
-import { projectTidyAPI } from '../../api/api.js';
+import { projectTidyAPI, structureAPI } from '../../api/api.js';
 import { __resetAll } from '../../lib/tidyEditStore.js';
 
 const change = (changeId, op, text, extra = {}) => ({
@@ -496,5 +497,58 @@ describe('근거 원문 열기', () => {
 
     expect(screen.getByText('자료가 지워져 원본을 열 수 없어요.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /열기|내려받기/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('학습 구조 조정 요청과 전후 보기', () => {
+  const adjusted = () => view({
+    origin: 'REQUEST',
+    userRequest: '교재 5장을 3장보다 먼저 수업했어',
+    summary: { headline: '실제 수업·범위 정정 1건', structural: false, total: 2 },
+    tree: [
+      { topicId: 1, parentTopicId: null, title: '3장 스택', orderIndex: 0 },
+      { topicId: 2, parentTopicId: null, title: '4장 큐', orderIndex: 1 },
+    ],
+    groups: [{ key: 't1', kind: 'EXISTING', topicId: 1, title: '3장 스택', parentTitle: null, changeIds: ['c1', 'c2'] }],
+    changes: [
+      change('c1', 'CLASS', '실제 수업에서 「3장 스택」을(를) 2주차에 다룬 것으로 기록해요 (교재 구조는 그대로)', {
+        by: 'REQUEST', treeOp: false, payload: { op: 'CLASS', topicId: 1, week: 2 },
+      }),
+      change('c2', 'MOVE', '「4장 큐」을(를) 맨 위 단계의 맨 앞로 옮겨요', {
+        by: 'REQUEST', payload: { op: 'MOVE', topicId: 2, parentTopicId: null, afterTopicId: 0 },
+        impact: [{ topicId: 2, title: '4장 큐', openItems: 2, doneItems: 1, contexts: 0, progress: 'IN_PROGRESS' }],
+      }),
+    ],
+  });
+
+  it('말로 한 요청은 해석만 하고 정리안에 더한다 — 되묻는 말이 있으면 보인다', async () => {
+    projectTidyAPI.get.mockResolvedValue(empty({ readyMaterialCount: 2 }));
+    structureAPI.request.mockResolvedValue({ tidy: adjusted(), summary: '5장을 실제 수업 2주차로 옮겼어요', added: 1,
+      question: '4장도 3장보다 먼저였나요?', dropped: [] });
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await userEvent.type(await screen.findByLabelText(/학습 구조 조정/), '교재 5장을 3장보다 먼저 수업했어');
+    await userEvent.click(screen.getByRole('button', { name: /조정안 만들기/ }));
+
+    await waitFor(() => expect(structureAPI.request).toHaveBeenCalledWith(6, '교재 5장을 3장보다 먼저 수업했어'));
+    expect(await screen.findByText('5장을 실제 수업 2주차로 옮겼어요')).toBeInTheDocument();
+    expect(screen.getByText(/확인이 필요해요: 4장도 3장보다 먼저였나요\?/)).toBeInTheDocument();
+    expect(screen.getByText(/요청: “교재 5장을 3장보다 먼저 수업했어”/)).toBeInTheDocument();
+    expect(projectTidyAPI.apply).not.toHaveBeenCalled();
+  });
+
+  it('전후 구조와 걸린 기록을 보여 주고, 실제 수업 정정은 구조가 아니라 표시로 남는다', async () => {
+    projectTidyAPI.get.mockResolvedValue(adjusted());
+    render(<ProjectTidyPanel courseId={6} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /구조 전후 보기/ }));
+    expect(screen.getByText('고른 변경을 적용하면')).toBeInTheDocument();
+    expect(screen.getByText('실제 수업 2주차')).toBeInTheDocument();
+    expect(screen.getByText('위치 바뀜')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /3장 스택/ }));
+    expect(screen.getByText(/「4장 큐」에 걸린 기록: 남은 할 일 2 · 끝낸 것 1 · 진도 기록 있음 — 기록은 옮기거나 지우지 않아요/))
+      .toBeInTheDocument();
+    expect(screen.getAllByText('내 요청').length).toBeGreaterThan(0);
   });
 });

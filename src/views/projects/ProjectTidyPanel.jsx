@@ -18,13 +18,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import {
   ChevronDown, ChevronRight, Loader2, Sparkles, RefreshCw, AlertCircle,
 } from 'lucide-react';
-import { projectTidyAPI } from '../../api/api.js';
+import { projectTidyAPI, structureAPI } from '../../api/api.js';
 import {
-  TIDY_OP_LABEL, applyButtonLabel, collectDependents, dependentsOf,
-  describeJob, describeReadiness, describeScope, partialNote, saveStateText,
+  CHANGE_BY_LABEL, TIDY_OP_LABEL, applyButtonLabel, collectDependents, dependentsOf,
+  describeJob, describeReadiness, describeScope, impactLine, partialNote, saveStateText,
 } from '../../lib/tidyLabels.js';
+import { hasStructureChange, previewStructure } from '../../lib/structurePreview.js';
 import * as tidyEdits from '../../lib/tidyEditStore.js';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
+import '../../styles/learning-flow.css';
 
 export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied = null, onOpenMaterials = null }) {
   const [view, setView] = useState(null);
@@ -35,6 +37,10 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
   const [detailOpen, setDetailOpen] = useState(false);
   /** 다시 정리 전에 편집 저장을 기다리는 중. 입력을 막고 그 사실을 말한다. */
   const [savingBeforeRequest, setSavingBeforeRequest] = useState(false);
+  /** 학습 구조 조정 요청(말로). 해석 결과는 정리안에 더해지고, 요지·되묻기만 여기 남는다. */
+  const [adjustText, setAdjustText] = useState('');
+  const [adjustNote, setAdjustNote] = useState(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   /*
     편집은 이 컴포넌트가 들고 있지 않다. tidyEditStore가 주인이고 여기서는 구독만 한다.
@@ -200,6 +206,39 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
     setView(result);
   }, '정리를 시작하지 못했어요.');
 
+  /**
+   * "교재 5장을 3장보다 먼저 수업했어" 같은 요청을 변경안으로. 바로 바뀌는 것은 없다 — 정리안에 더해져 검토한다.
+   * 모호하면 서버가 되묻는 문장을 준다.
+   */
+  const requestAdjust = () => run(async () => {
+    const text = adjustText.trim();
+    if (!text) return;
+    await tidyEdits.ensureSaved(courseId);
+    const result = await structureAPI.request(courseId, text);
+    invalidate();
+    setView(result.tidy);
+    tidyEdits.adopt(courseId, result.tidy);
+    setAdjustNote({ summary: result.summary, question: result.question, added: result.added,
+      dropped: result.dropped ?? [] });
+    if (result.added > 0) setAdjustText('');
+  }, '요청을 변경안으로 옮기지 못했어요.');
+
+  /** 지시를 붙여 자료를 다시 보며 정리한다(비동기). 기존 안과 편집은 새 안이 나올 때까지 남는다. */
+  const requestTidyWithInstruction = () => run(async () => {
+    const text = adjustText.trim();
+    if (!text) return;
+    const saved = await tidyEdits.ensureSaved(courseId);
+    if (!saved.ok) {
+      setError(describeSaveBlock(saved.reason));
+      return;
+    }
+    const result = await projectTidyAPI.request(courseId, { refresh: true, instruction: text });
+    invalidate();
+    setView(result);
+    setAdjustNote({ summary: '자료를 다시 보며 정리하고 있어요. 요청이 반영된 안이 나오면 여기 보여요.', added: 0, dropped: [] });
+    setAdjustText('');
+  }, '정리를 시작하지 못했어요.');
+
   const apply = () => run(async () => {
     const titleOverrides = {};
     Object.entries(edits).forEach(([changeId, edit]) => {
@@ -292,6 +331,43 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
         </p>
       )}
 
+      {/*
+        학습 구조 조정: 교재와 실제 수업이 다를 때 말로 정정한다. 교재상의 위치·실제 수업 순서·이번 시험 범위·구조(나누기·합치기)를
+        서버가 구분해 변경안으로 만들고, 여기서 검토한 것만 적용된다. 학습 지도를 정리하지 않아도 계획·학습은 할 수 있다.
+      */}
+      {!generating && (
+        <div className="project-adjust">
+          <label className="project-adjust-label" htmlFor={`adjust-${courseId}`}>
+            학습 구조 조정 <span className="view-sub-dim">(선택 · 교재와 실제 수업이 다를 때)</span>
+          </label>
+          <textarea id={`adjust-${courseId}`} className="input project-adjust-input" rows={2} maxLength={1000}
+            placeholder="예: 교재 5장을 3장보다 먼저 수업했어 / 이 실습은 3주차야 / 이번 중간고사에는 4장이 빠져 / 스택 항목은 너무 넓으니 나눠줘"
+            value={adjustText} disabled={busy} onChange={(e) => setAdjustText(e.target.value)} />
+          <div className="project-adjust-actions">
+            <button type="button" className="btn-primary btn-sm" disabled={busy || !adjustText.trim()}
+              onClick={requestAdjust}>
+              {busy ? <Loader2 size={13} className="spin" /> : <Sparkles size={13} />} 조정안 만들기
+            </button>
+            <button type="button" className="btn-ghost btn-sm"
+              disabled={busy || !adjustText.trim() || view?.readyMaterialCount === 0}
+              title="자료 구간을 다시 읽으며 이 요청을 반영해 정리해요(시간이 걸려요)"
+              onClick={requestTidyWithInstruction}>
+              자료를 다시 보며 정리
+            </button>
+          </div>
+          {adjustNote && (
+            <div className="project-adjust-note" role="status">
+              {adjustNote.summary && <p>{adjustNote.summary}</p>}
+              {adjustNote.added > 0 && <p className="view-sub-dim">변경 {adjustNote.added}개를 아래 검토 목록에 더했어요. 적용 전에는 아무것도 바뀌지 않아요.</p>}
+              {adjustNote.question && <p className="project-tidy-warn">확인이 필요해요: {adjustNote.question}</p>}
+              {adjustNote.dropped.length > 0 && (
+                <p className="view-sub-dim">근거가 없거나 가리키는 항목이 없어 뺀 것 {adjustNote.dropped.length}개</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {error && <p className="view-error">{error}</p>}
       {savingBeforeRequest && (
         <p className="view-dim" role="status">
@@ -302,7 +378,12 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
       {hasProposal && (
         <>
           <div className="project-tidy-summary">
-            <p className="project-tidy-headline">{view.summary?.headline}</p>
+            <p className="project-tidy-headline">
+              {view.origin === 'USER' && <span className="chip chip-status">직접 고른 조정</span>}
+              {view.origin === 'REQUEST' && <span className="chip chip-status">내 요청</span>}
+              {' '}{view.summary?.headline}
+            </p>
+            {view.userRequest && <p className="view-sub-dim">요청: “{view.userRequest}”</p>}
             <p className="view-sub-dim">{describeScope(view.scope)}</p>
             {partialNote(view.scope) && <p className="view-sub-dim">{partialNote(view.scope)}</p>}
             {(view.scope?.excluded ?? []).length > 0 && (
@@ -333,6 +414,9 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
               </button>
             </p>
           )}
+
+          <StructurePreview view={view} selectedIds={selectedIds} open={previewOpen}
+            onToggle={() => setPreviewOpen((v) => !v)} />
 
           <ul className="project-tidy-groups">
             {(view.groups ?? []).map((group) => {
@@ -489,6 +573,56 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
   );
 }
 
+/**
+ * 변경 전·후 구조. 고른 변경만 반영해 화면에서 계산한다(서버 호출 없음). 실제 수업 주차·범위 제외는 구조가 아니라 표시다.
+ */
+function StructurePreview({ view, selectedIds, open, onToggle }) {
+  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const preview = useMemo(
+    () => previewStructure(view.tree ?? [], view.changes ?? [], selected),
+    [view, selected],
+  );
+  if (!(view.tree ?? []).length && !(view.changes ?? []).some((c) => c.op === 'ADD')) return null;
+  return (
+    <div className="structure-preview">
+      <button type="button" className="collapse-head" aria-expanded={open} onClick={onToggle}>
+        {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />} 구조 전후 보기
+        {!hasStructureChange(preview.after) && <span className="view-sub-dim"> · 고른 변경으로 바뀌는 곳 없음</span>}
+      </button>
+      {open && (
+        <div className="structure-preview-cols">
+          <div>
+            <p className="structure-preview-label">지금</p>
+            <PreviewTree nodes={preview.before} />
+          </div>
+          <div>
+            <p className="structure-preview-label">고른 변경을 적용하면</p>
+            <PreviewTree nodes={preview.after} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PREVIEW_STATUS = { renamed: '이름 바뀜', moved: '위치 바뀜', added: '새 항목', absorbed: '합쳐짐' };
+
+function PreviewTree({ nodes }) {
+  if (!nodes.length) return <p className="view-sub-dim">비어 있음</p>;
+  return (
+    <ul className="structure-preview-tree">
+      {nodes.map((n) => (
+        <li key={n.key} className={`is-${n.status}`}>
+          <span>{n.title}</span>
+          {PREVIEW_STATUS[n.status] && <span className="chip chip-status">{PREVIEW_STATUS[n.status]}</span>}
+          {n.marks.map((m) => <span key={m} className="chip">{m}</span>)}
+          {n.children.length > 0 && <PreviewTree nodes={n.children} />}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** 변경 하나의 줄. 체크·제목 고치기·근거 보기. */
 function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarried, onDropCarried }) {
   const [showEvidence, setShowEvidence] = useState(false);
@@ -500,6 +634,7 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarr
           {change.label ?? TIDY_OP_LABEL[change.op]}
         </span>
         <span className="project-tidy-change-text">{change.text}</span>
+        {CHANGE_BY_LABEL[change.by] && <span className="chip">{CHANGE_BY_LABEL[change.by]}</span>}
       </label>
       {change.titleEditable && (
         <input type="text" className="input project-tidy-title-input" aria-label="항목 제목 고치기"
@@ -537,6 +672,9 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarr
       )}
       {change.reason && <p className="project-tidy-reason">{change.reason}</p>}
       {change.caution && <p className="hint">{change.caution}</p>}
+      {(change.impact ?? []).map((impact) => impactLine(impact)).filter(Boolean).map((line) => (
+        <p key={line} className="hint project-tidy-impact">{line} — 기록은 옮기거나 지우지 않아요</p>
+      ))}
       {(change.sections ?? []).length > 0 && (
         <>
           <button type="button" className="btn-ghost btn-sm project-tidy-evidence-toggle" aria-expanded={showEvidence}

@@ -22,6 +22,7 @@ import { actionOf, doneCriteriaOf, startSourceLine } from '../../lib/planItemTex
 import { BLOCKER_LABEL, SUPPORT_LABEL, SUPPORT_OPTIONS } from '../../lib/recordLabels.js';
 import { ItemWorkspaceContext } from './itemWorkspaceContext.js';
 import '../../styles/item-workspace.css';
+import '../../styles/learning-flow.css';
 
 const OUTCOME_LABEL = { COMPLETED: '완료', PARTIAL: '일부 수행', NOT_DONE: '진행 없음' };
 

@@ -21,6 +21,7 @@ import ExecutionRow from '../../components/ExecutionRow.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
 import ProjectLearningMap from '../learning/ProjectLearningMap.jsx';
 import MaterialReview from '../learning/MaterialReview.jsx';
+import TextbookPanel from './TextbookPanel.jsx';
 import MaterialWeekReview from '../learning/MaterialWeekReview.jsx';
 import { weekApi } from '../learning/materialWeekApi.js';
 import AssignmentSection from './AssignmentSection.jsx';
@@ -74,6 +75,7 @@ function TextbookLine({ project }) {
     <span className="view-sub-dim project-textbook">
       {' '}교재 {project.textbookTitle}
       {parts.length > 0 && ` · ${parts.join(' · ')}`}
+      {project.textbookEdition && ` · ${project.textbookEdition}`}
       {project.textbookIsbn && (
         <span className="project-textbook-isbn">ISBN {project.textbookIsbn}</span>
       )}
@@ -424,6 +426,8 @@ export default function ProjectWorkspace({
             />
           </div>
 
+          <TextbookPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken} onChanged={load} />
+
           <ProjectTidyPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken}
             onApplied={load} onOpenMaterials={() => revealIn('work', materialsRef)} />
 
@@ -443,6 +447,7 @@ export default function ProjectWorkspace({
             onAsk={onAsk}
             onMarkTopic={markTopic}
             onChanged={load}
+            onStructureSent={async () => { setProposalRefresh((v) => v + 1); revealIn('map', proposalsRef); }}
           />
           {/* 지도의 "승인 전 제안"을 적용하는 곳. 같은 카드를 지도 바로 아래에 둬서 구역을 오가지 않게 한다. */}
           <div ref={proposalsRef} tabIndex={-1} className="project-anchor">
@@ -475,6 +480,7 @@ function RenameForm({ project, onCancel, onSaved }) {
     textbookAuthor: project?.textbookAuthor ?? '',
     textbookPublisher: project?.textbookPublisher ?? '',
     textbookIsbn: project?.textbookIsbn ?? '',
+    textbookEdition: project?.textbookEdition ?? '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -494,6 +500,7 @@ function RenameForm({ project, onCancel, onSaved }) {
             textbookAuthor: textbook.textbookAuthor.trim() || null,
             textbookPublisher: textbook.textbookPublisher.trim() || null,
             textbookIsbn: textbook.textbookIsbn.trim() || null,
+            textbookEdition: textbook.textbookEdition.trim() || null,
           });
           await onSaved();
         } finally {
@@ -516,6 +523,8 @@ function RenameForm({ project, onCancel, onSaved }) {
           onChange={setField('textbookPublisher')} aria-label="교재 출판사" />
         <input className="project-edit-textbook" value={textbook.textbookIsbn} placeholder="ISBN"
           onChange={setField('textbookIsbn')} aria-label="교재 ISBN" />
+        <input className="project-edit-textbook" value={textbook.textbookEdition} placeholder="판 (예: 개정 4판)"
+          onChange={setField('textbookEdition')} aria-label="교재 판" />
       </div>
 
       <p className="project-edit-hint">
@@ -624,7 +633,6 @@ function MaterialsSection({
     onUploaded: async () => { await onChanged(); },
     onBatchFinished: () => onProposalsChanged?.(),
   });
-  const [analyzingId, setAnalyzingId] = useState(null);
   const [picking, setPicking] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -768,21 +776,6 @@ function MaterialsSection({
     }
   };
 
-  const handleAnalyze = async (materialId) => {
-    setAnalyzingId(materialId);
-    setError(null);
-    try {
-      // 201(새로 만듦)이든 200(검토 중이던 것 재사용)이든 화면이 하는 일은 같다.
-      const analysis = await materialAnalysisAPI.analyze(courseId, materialId);
-      setAnalyses((prev) => ({ ...prev, [materialId]: analysis }));
-      setDraftStatus((prev) => ({ ...prev, [materialId]: 'ready' }));
-    } catch (err) {
-      setError(err.message || '분석하지 못했습니다.');
-    } finally {
-      setAnalyzingId(null);
-    }
-  };
-
   /** 연결 해제. 자료 원본도, 다른 프로젝트 연결도, 이미 적용한 학습 내용도 그대로 남는다. */
   const handleUnlink = async (materialId) => {
     setBusyId(materialId);
@@ -907,16 +900,10 @@ function MaterialsSection({
                       </span>
                     )}
                     {/*
-                      자동 분석이 기본이다. 수동 버튼은 자동 분석 결과가 아직 없고(대기·없음) 검토 중인 예전
-                      초안도 없을 때만, "지금 앞당겨 분석" 의미로 남긴다 — 예전의 전체 트리 초안 경로다.
+                      (2026-09-29) 예전 수동 [구조 분석]으로 새 초안을 만드는 길은 닫았다. 교재 정보는 [교재] 구역이, 학습 구조는
+                      [이 프로젝트 자료 정리]가 자동 분석 결과로 맡는다 — 두 길이 같은 교재·항목을 서로 다르게(덧붙여) 적용하던
+                      원인이었다. 이미 검토 중이던 예전 초안은 아래에서 그대로 검토·적용·버릴 수 있다.
                     */}
-                    {draftStatus[m.materialId] === 'ready' && !analyses[m.materialId]
-                      && ['NONE', 'FAILED', 'UNAVAILABLE'].includes(analysisStatus[m.materialId]?.state ?? 'NONE') && (
-                      <button type="button" className="btn-ghost btn-sm" disabled={analyzingId === m.materialId}
-                        onClick={() => handleAnalyze(m.materialId)}>
-                        {analyzingId === m.materialId ? '분석 중...' : '구조 분석'}
-                      </button>
-                    )}
                   </>
                 )}
                 <button type="button" className="btn-ghost btn-sm" disabled={busyId === m.materialId}

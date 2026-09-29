@@ -19,11 +19,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2, ChevronDown, ChevronRight, Circle, CircleDot, FileText, Search, Sparkles, X,
 } from 'lucide-react';
-import { materialAnalysisStatusAPI } from '../../api/api.js';
+import { materialAnalysisStatusAPI, structureAPI } from '../../api/api.js';
 import { TOPIC_PROGRESS_STATUS_LABEL, TopicProgressStatus } from '../../types/learning.js';
 import { CHANGE_OP_LABEL, analysisStateLabel, sectionRoleLabel } from '../../lib/analysisLabels.js';
 import TopicDetail from './TopicDetail.jsx';
 import SelfCheckActivity from './SelfCheckActivity.jsx';
+import StructureEditor from './StructureEditor.jsx';
 import MaterialWeekReview from './MaterialWeekReview.jsx';
 import {
   SELF_CHECK_LABEL, ancestorIdsOf, flattenTopics, loadLearningMap, mapStates, searchTopics,
@@ -74,6 +75,7 @@ export default function ProjectLearningMap({
   onAsk = null,
   onMarkTopic = null,
   onChanged = null,
+  onStructureSent = null,
 }) {
   const [model, setModel] = useState(null);
   const [error, setError] = useState(null);
@@ -287,6 +289,10 @@ export default function ProjectLearningMap({
         <WeekReviewNotice review={model.weekReview} hasWeeks={hasWeeks} onOpen={() => setWeekReviewOpen(true)} />
       )}
 
+      {model && topics.length > 0 && (
+        <MapCorrections courseId={courseId} refreshKey={model} onChanged={async () => { await load(); await onChanged?.(); }} />
+      )}
+
       {model && (topics.length > 0 || overlay.roots.length > 0) && (
         <>
           <div className="lm-toolbar">
@@ -368,6 +374,16 @@ export default function ProjectLearningMap({
                   onProgressChanged={async () => { await load(); await onChanged?.(); }}
                   onStartTutor={onAsk ? (topic) => onAsk(`${topic.title}에 대해 알려줘.`) : undefined}
                 />
+                <StructureEditor
+                  key={selectedTopic.topicId}
+                  courseId={courseId}
+                  topic={selectedTopic}
+                  topics={flat}
+                  onSent={async (result) => {
+                    setNotice(`변경 ${result?.added ?? 0}개를 검토 목록에 더했어요. 아래 정리 구역에서 전후 구조를 보고 적용하세요.`);
+                    await onStructureSent?.();
+                  }}
+                />
               </div>
             )}
           </div>
@@ -405,6 +421,63 @@ export default function ProjectLearningMap({
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * 사용자가 정정한 실제 수업 진행과 범위 제외. 교재 구조와 따로 보인다 — 정정은 재분석·재정리에서도 유지된다.
+ * 범위 제외는 여기서 바로 풀 수 있다(자기 정정을 되돌리는 것이라 검토를 거치지 않는다). 없으면 아무것도 그리지 않는다.
+ */
+function MapCorrections({ courseId, refreshKey, onChanged }) {
+  const [view, setView] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const next = await structureAPI.corrections(courseId);
+        if (alive) setView(next);
+      } catch {
+        // 정정 목록을 못 읽어도 지도는 그대로 보인다. 없는 정정을 있다고 하지 않을 뿐이다.
+        if (alive) setView(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [courseId, refreshKey]);
+  if (!view || ((view.classProgress ?? []).length === 0 && (view.exclusions ?? []).length === 0)) return null;
+  const ordered = (view.classProgress ?? []).filter((c) => c.classSeq != null);
+  const remove = async (exclusionId) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setView(await structureAPI.removeExclusion(courseId, exclusionId));
+      await onChanged?.();
+    } catch (err) {
+      setError(err.message || '풀지 못했어요.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="lm-corrections" aria-label="내가 정정한 실제 수업·범위">
+      {ordered.length > 0 && (
+        <p><span className="lm-corrections-label">실제 수업 순서</span>
+          {ordered.map((c) => `${c.title}${c.weekNo ? `(${c.weekNo}주차)` : ''}`).join(' → ')}
+        </p>
+      )}
+      {(view.exclusions ?? []).length > 0 && (
+        <ul>
+          {view.exclusions.map((e) => (
+            <li key={e.exclusionId}>
+              <span className="lm-corrections-label">{e.label || '이번 계획'} 범위에서 뺌</span> {e.title}
+              <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => remove(e.exclusionId)}>풀기</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="view-error">{error}</p>}
+    </div>
   );
 }
 
@@ -546,6 +619,20 @@ function TopicNode({ topic, scope, depth, insideMatch, shared }) {
             )}
             {SELF_CHECK_LABEL[topic.selfCheck] && (
               <span className="chip chip-status">자기평가: {SELF_CHECK_LABEL[topic.selfCheck]}</span>
+            )}
+            {topic.classWeek != null && (
+              <span className="chip">실제 수업 {topic.classWeek}주차{topic.classSeq != null ? ` · ${topic.classSeq}번째` : ''}</span>
+            )}
+            {topic.classWeek == null && topic.classSeq != null && (
+              <span className="chip">실제 수업 {topic.classSeq}번째</span>
+            )}
+            {topic.scopeLabel != null && (
+              <span className="chip chip-status">{topic.scopeLabel || '이번 계획'} 범위에서 뺌</span>
+            )}
+            {topic.mergedDoneItems > 0 && (
+              <span className="chip chip-warn" title="병합으로 보관된 항목에 남아 있는 기록이에요. 이 항목의 상태는 직접 확인해 주세요.">
+                합친 항목의 끝낸 일 {topic.mergedDoneItems}개 · 상태 확인 필요
+              </span>
             )}
             {mark === 'KNOWN' && <span className="chip chip-status">이미 알아요</span>}
             {mark === 'DEFER' && <span className="chip chip-status">나중에</span>}

@@ -9,6 +9,8 @@ import {
 import { createFakeBatchApi } from '../../testing/fakeAnalysisBatch.js';
 
 vi.mock('../../api/api.js', () => ({
+  structureAPI: { corrections: vi.fn(() => Promise.resolve({ classProgress: [], exclusions: [] })), manual: vi.fn(), request: vi.fn(), removeExclusion: vi.fn() },
+  textbookAPI: { get: vi.fn(() => Promise.resolve(null)), apply: vi.fn() },
   // 자동 분석·변경안·과제 — 이 테스트들의 관심사가 아니라 빈 값을 준다.
   materialAnalysisStatusAPI: {
     overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true }),

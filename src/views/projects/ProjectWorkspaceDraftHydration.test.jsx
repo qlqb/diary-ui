@@ -18,6 +18,8 @@ import {
 } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
+  structureAPI: { corrections: vi.fn(() => Promise.resolve({ classProgress: [], exclusions: [] })), manual: vi.fn(), request: vi.fn(), removeExclusion: vi.fn() },
+  textbookAPI: { get: vi.fn(() => Promise.resolve(null)), apply: vi.fn() },
   // 자동 분석·변경안·과제 — 이 테스트들의 관심사가 아니라 빈 값을 준다.
   materialAnalysisStatusAPI: {
     overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true }),
@@ -122,10 +124,12 @@ describe('구조 분석 초안 복원', () => {
     expect(screen.queryByRole('button', { name: '구조 분석' })).not.toBeInTheDocument();
   });
 
-  it('초안이 없으면 조회가 끝난 뒤에 분석 버튼이 나온다', async () => {
+  it('초안이 없으면 새 수동 구조 분석을 만드는 버튼이 없다 — 교재·구조는 자동 분석 결과로 확인한다', async () => {
     renderWorkspace();
 
-    expect(await screen.findByRole('button', { name: '구조 분석' })).toBeInTheDocument();
+    await waitFor(() => expect(materialAnalysisAPI.listByMaterial).toHaveBeenCalled());
+    expect(await screen.findByText('웹서버프로그래밍.pdf')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '구조 분석' })).not.toBeInTheDocument();
   });
 
   /*
@@ -144,7 +148,8 @@ describe('구조 분석 초안 복원', () => {
     expect(screen.queryByRole('button', { name: '구조 분석' })).not.toBeInTheDocument();
 
     release();
-    expect(await screen.findByRole('button', { name: '구조 분석' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('초안 확인 중...')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: '구조 분석' })).not.toBeInTheDocument();
   });
 
   /* 실패를 "초안 없음"으로 취급하면 버튼이 열리고, 그게 바로 중복을 만드는 경로다. */
@@ -165,7 +170,7 @@ describe('구조 분석 초안 복원', () => {
     renderWorkspace();
     await user.click(await screen.findByRole('button', { name: '다시 시도' }));
 
-    expect(await screen.findByRole('button', { name: '구조 분석' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('초안을 확인하지 못했어요')).not.toBeInTheDocument());
   });
 
   it('한 자료의 조회가 실패해도 다른 자료의 초안은 복원된다', async () => {
@@ -199,17 +204,6 @@ describe('구조 분석 초안 복원', () => {
 
     expect(screen.getByDisplayValue('최신 초안 항목')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('오래된 초안 항목')).not.toBeInTheDocument();
-  });
-
-  /* 서버가 201(새로 만듦)로 주든 200(기존 것 재사용)으로 주든 화면이 하는 일은 같다. */
-  it('분석 요청이 기존 초안을 돌려줘도 검토 폼이 열린다', async () => {
-    const user = userEvent.setup();
-    materialAnalysisAPI.analyze.mockResolvedValue(draft(8, '2026-08-31T15:52:20'));
-
-    renderWorkspace();
-    await user.click(await screen.findByRole('button', { name: '구조 분석' }));
-
-    expect(await screen.findByRole('button', { name: /구조 분석 결과/ })).toBeInTheDocument();
   });
 
   /*

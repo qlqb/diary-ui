@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { EXISTING_ACTION_LABEL } from '../../lib/planLabels.js';
+import '../../styles/learning-flow.css';
 import {
   buildPlanUnderstanding, fitLine, groundingLine, USER_STATE_KIND_LABEL,
 } from '../../lib/planUnderstanding.js';
@@ -35,6 +36,7 @@ export default function PlanStrategyPanel({
   const leftOutCount = u.skipped.length + u.deferred.length;
   const unreadCount = u.unread.length + u.unreviewed.length;
   const hasBody = u.goal || u.why || u.reach || u.order.length > 0 || u.kept.length > 0 || leftOutCount > 0
+    || u.scoped.length > 0
     || u.changes.length > 0 || uncertainCount > 0 || unreadCount > 0 || existing.length > 0;
   if (!hasBody) return null;
 
@@ -182,6 +184,13 @@ export default function PlanStrategyPanel({
                 </ul>
               )}
             </div>
+          )}
+
+          {u.scoped.length > 0 && (
+            <p className="plan-strategy-summary">
+              <span className="plan-strategy-label">내가 범위에서 뺀 항목</span>
+              {u.scoped.map((x) => `${x.title}(${x.label})`).join(', ')} — 학습을 마친 것으로 보지 않아요. 학습 지도에서 풀 수 있어요.
+            </p>
           )}
 
           {more && u.kept.length > 0 && (

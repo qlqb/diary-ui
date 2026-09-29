@@ -100,7 +100,29 @@ export const TIDY_OP_LABEL = Object.freeze({
   MOVE: '위치 이동',
   MERGE: '병합',
   SPLIT: '분할',
+  CLASS: '실제 수업 진행',
+  MATERIAL_WEEK: '자료 주차',
+  SCOPE_EXCLUDE: '범위 제외',
 });
+
+/** 누가 낸 변경인가. AI 정리는 표시하지 않는다(기본). */
+export const CHANGE_BY_LABEL = Object.freeze({
+  USER: '직접 고름',
+  REQUEST: '내 요청',
+  TOC: '교재 목차',
+});
+
+/** 변경이 닿는 기록 한 줄. 옮기거나 바꾸지 않는다는 것을 함께 말한다. */
+export function impactLine(impact) {
+  if (!impact) return null;
+  const parts = [];
+  if (impact.openItems > 0) parts.push(`남은 할 일 ${impact.openItems}`);
+  if (impact.doneItems > 0) parts.push(`끝낸 것 ${impact.doneItems}`);
+  if (impact.contexts > 0) parts.push(`자기평가·기억 ${impact.contexts}`);
+  if (impact.progress && impact.progress !== 'NOT_STARTED') parts.push('진도 기록 있음');
+  if (parts.length === 0) return null;
+  return `「${impact.title ?? '항목'}」에 걸린 기록: ${parts.join(' · ')}`;
+}
 
 /** 저장 상태 → 한 줄. 실패를 조용히 넘기지 않는다. */
 export function saveStateText(state) {

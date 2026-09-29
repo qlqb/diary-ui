@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ProjectWorkspace from './ProjectWorkspace.jsx';
 import {
@@ -7,6 +7,8 @@ import {
 } from '../../api/api.js';
 
 vi.mock('../../api/api.js', () => ({
+  structureAPI: { corrections: vi.fn(() => Promise.resolve({ classProgress: [], exclusions: [] })), manual: vi.fn(), request: vi.fn(), removeExclusion: vi.fn() },
+  textbookAPI: { get: vi.fn(() => Promise.resolve(null)), apply: vi.fn() },
   // 자동 분석·변경안·과제 — 이 테스트들의 관심사가 아니라 빈 값을 준다.
   materialAnalysisStatusAPI: {
     overview: vi.fn().mockResolvedValue({ materials: [], paused: false, serviceAvailable: true }),
@@ -109,8 +111,9 @@ describe('프로젝트의 교재 정보', () => {
     courseAPI.get.mockResolvedValue({ ...BASE, textbookTitle: null });
     renderWorkspace();
 
-    await screen.findByRole('heading', { name: '빅데이터분석' });
-    expect(screen.queryByText(/교재/)).not.toBeInTheDocument();
+    const heading = await screen.findByRole('heading', { name: '빅데이터분석' });
+    // 머리의 교재 줄이 없다. (아래 구역의 "교재와 실제 수업이 다를 때" 같은 안내 문구는 교재 정보가 아니다.)
+    expect(within(heading.closest('header')).queryByText(/교재/)).not.toBeInTheDocument();
   });
 });
 

@@ -36,6 +36,7 @@ import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
 import PlanItemDetail from './PlanItemDetail.jsx';
 import PlanMaterialSelection from './PlanMaterialSelection.jsx';
 
+import '../../styles/learning-flow.css';
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 function itemIds(draft) {

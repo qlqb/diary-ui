@@ -3,6 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/api.js', () => ({
+  structureAPI: { corrections: vi.fn(() => Promise.resolve({ classProgress: [], exclusions: [] })), manual: vi.fn(), request: vi.fn(), removeExclusion: vi.fn() },
+  textbookAPI: { get: vi.fn(() => Promise.resolve(null)), apply: vi.fn() },
   learningMapAPI: { get: vi.fn() },
   selfCheckAPI: { submit: vi.fn() },
   topicAPI: { getTree: vi.fn(), updateProgress: vi.fn(), updateUserMark: vi.fn() },
