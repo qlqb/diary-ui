@@ -5,7 +5,8 @@
  * 처음 펼칠 때만 서버가 그 항목이 실제로 인용한 자료 구간으로 단계를 만들고(모델 1회), 그 뒤로는
  * 저장된 것을 다시 쓴다. 원문이나 항목이 바뀌면 stale=true로 와서 "이전 원문 기준 안내"라고 표시하고,
  * [지금 원문으로 다시 만들기]를 누를 때만 새 판을 만든다 — 저절로 다시 만들지 않는다(모델 호출은 사용자가 고른다).
- * 내 메모(userText)는 서버가 판이 바뀌어도 보존하고, 여기서 바로 고칠 수 있다.
+ * 내 메모(userText)는 서버가 판이 바뀌어도 보존하고, 여기서 바로 고칠 수 있다. 안내 단계가 아직 없거나 만들 근거가
+ * 없어도 메모는 남길 수 있다 — 초안 항목에 남긴 메모는 적용 뒤 실행 항목에서도 같은 자리다(그 항목을 만든 제안 항목).
  * 늦게 도착한 응답은 요청 순번으로 버린다 — 다른 항목을 펼치는 사이에 옛 응답이 덮지 않는다.
  */
 
@@ -69,11 +70,12 @@ export default function PlanItemDetail({ mode = 'draft', id, expanded }) {
     }
   };
 
+  const memoSaver = mode === 'item' ? planAPI.saveItemMemo : planAPI.saveDraftItemMemo;
   const saveMemo = async () => {
-    if (!detail?.detailId || memoSaving || !planAPI.updateItemDetailText) return;
+    if (memoSaving || !memoSaver) return;
     setMemoSaving(true);
     try {
-      const saved = await planAPI.updateItemDetailText(detail.detailId, memoDraft.trim() || null);
+      const saved = await memoSaver(id, memoDraft.trim() || null);
       // 서버는 메모만 바꾼다. 단계·구간·판은 화면이 들고 있는 것을 그대로 쓴다.
       setDetail((prev) => (prev ? { ...prev, userText: saved?.userText ?? (memoDraft.trim() || null) } : prev));
       setMemoOpen(false);
@@ -89,11 +91,39 @@ export default function PlanItemDetail({ mode = 'draft', id, expanded }) {
   if (error && !detail) return <p className="plan-item-detail error-text">{error}</p>;
   if (!detail) return null;
 
+  const memo = memoOpen ? (
+    <div className="plan-item-detail-user">
+      <label>
+        <span className="plan-item-done-label">내 메모</span>
+        <textarea rows={2} value={memoDraft} onChange={(e) => setMemoDraft(e.target.value)}
+          placeholder="이 항목을 할 때 기억할 것" />
+      </label>
+      <span className="plan-item-actions">
+        <button type="button" className="btn-ghost btn-sm" disabled={memoSaving} onClick={saveMemo}>저장</button>
+        <button type="button" className="btn-ghost btn-sm" disabled={memoSaving} onClick={() => setMemoOpen(false)}>취소</button>
+      </span>
+    </div>
+  ) : (
+    <p className="plan-item-detail-user">
+      {detail.userText && <><span className="plan-item-done-label">내 메모</span>{detail.userText} </>}
+      {memoSaver && (
+        <button type="button" className="btn-ghost btn-sm"
+          onClick={() => { setMemoDraft(detail.userText ?? ''); setMemoOpen(true); }}>
+          {detail.userText ? '메모 고치기' : '메모 남기기'}
+        </button>
+      )}
+    </p>
+  );
+
   if (!detail.available) {
     return (
-      <p className="plan-item-detail hint">
-        {detail.canGenerate ? '자세한 안내를 아직 만들지 않았어요.' : '이 항목에는 자세히 볼 근거 자료가 없어요. 활동 설명을 그대로 따라 하면 돼요.'}
-      </p>
+      <div className="plan-item-detail">
+        <p className="hint">
+          {detail.canGenerate ? '자세한 안내를 아직 만들지 않았어요.' : '이 항목에는 자세히 볼 근거 자료가 없어요. 활동 설명을 그대로 따라 하면 돼요.'}
+        </p>
+        {error && <p className="error-text">{error}</p>}
+        {memo}
+      </div>
     );
   }
 
@@ -129,29 +159,7 @@ export default function PlanItemDetail({ mode = 'draft', id, expanded }) {
           </li>
         ))}
       </ol>
-      {memoOpen ? (
-        <div className="plan-item-detail-user">
-          <label>
-            <span className="plan-item-done-label">내 메모</span>
-            <textarea rows={2} value={memoDraft} onChange={(e) => setMemoDraft(e.target.value)}
-              placeholder="이 항목을 할 때 기억할 것" />
-          </label>
-          <span className="plan-item-actions">
-            <button type="button" className="btn-ghost btn-sm" disabled={memoSaving} onClick={saveMemo}>저장</button>
-            <button type="button" className="btn-ghost btn-sm" disabled={memoSaving} onClick={() => setMemoOpen(false)}>취소</button>
-          </span>
-        </div>
-      ) : (
-        <p className="plan-item-detail-user">
-          {detail.userText && <><span className="plan-item-done-label">내 메모</span>{detail.userText} </>}
-          {detail.detailId && (
-            <button type="button" className="btn-ghost btn-sm"
-              onClick={() => { setMemoDraft(detail.userText ?? ''); setMemoOpen(true); }}>
-              {detail.userText ? '메모 고치기' : '메모 남기기'}
-            </button>
-          )}
-        </p>
-      )}
+      {memo}
       {(detail.sections ?? []).length > 0 && (
         <p className="plan-item-detail-sources">
           {detail.sections.map((s) => (

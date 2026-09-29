@@ -31,6 +31,7 @@ import { acquirePreview, previewInputKey, replacePreview, storedOrRecompute } fr
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import PlanDraftOverview from './PlanDraftOverview.jsx';
 import PlanStrategyPanel from './PlanStrategyPanel.jsx';
+import { actionOf, startSourceLine } from '../../lib/planItemText.js';
 import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
 import PlanItemDetail from './PlanItemDetail.jsx';
 import PlanMaterialSelection from './PlanMaterialSelection.jsx';
@@ -599,7 +600,8 @@ export default function PlanDraftReview({
       </div>
 
       {/* 판단은 조각보다 먼저 온다. 무엇을 하는지보다 왜 그렇게 보는지가 먼저 읽혀야 한다. */}
-      <PlanStrategyPanel strategy={strategy} projectTitles={projectTitles} />
+      <PlanStrategyPanel strategy={strategy} projectTitles={projectTitles} provenance={provenance}
+        selection={current.materialSelection} items={items} />
 
       {/*
         판단 다음에 온다. "이렇게 봤어요"가 결론이고 이쪽은 그 결론 이전에 무엇을 봤는지다.
@@ -972,8 +974,9 @@ function PlanDraftGroup({
 /**
  * 항목이 어디서 나왔고(출처 라벨), 자료의 어디를 보면 되고(위치 + 파일 열기), 왜 중요하고, 마감이 무엇인가.
  *
- * ★ 위치로 곧장 데려가지 못한다 — 파일은 통째로 열리고 쪽·슬라이드·셀까지 이동시키지 않는다. 그래서
- *   "이 위치를 열어서 확인해 주세요: p.3~4"라고 말한다. 갈 수 없는 곳을 가는 것처럼 적지 않는다.
+ * ★ 할 일(행동)과 완료 기준을 함께 보인다. 완료 기준이 있다고 행동을 숨기지 않는다.
+ * ★ 시작 자료는 서버가 인용 근거로 찾은 첫 구간이다(startSource). PDF는 그 쪽으로 열고, 슬라이드·셀·구간은
+ *   위치를 글로만 알린다 — 갈 수 없는 곳을 가는 것처럼 적지 않는다. 파일이 바뀌었으면 옛 쪽으로 열지 않는다.
  * ★ 「꼭 하기」는 이유와 함께 보인다. 이유 없는 「꼭」은 사용자가 빼도 되는지 판단할 수 없다.
  * ★ 마감은 출처와 함께 따로 적는다. AI가 잡은 목표 시각은 실제 마감이 아니다. 없으면 "마감 미확인"이다.
  */
@@ -981,6 +984,9 @@ function ItemFacts({ item, evidence, provenance, projectTitles, classAt, onMater
   const origin = ITEM_ORIGIN_LABEL[evidence?.origin ?? item.evidence?.origin ?? item.origin] ?? null;
   const deadline = describeDeadline(item.deadlineAt, classAt, item.deadlineSource);
   const must = item.priority === 'MUST';
+  // 할 일은 완료 기준과 함께 보인다. 설명은 "행동 · 완료: 기준"으로 합쳐 저장돼 있어 꼬리만 뗀다.
+  const action = actionOf(item.description, item.doneCriteria);
+  const start = item.startSource ?? null;
   // selectionReason: 서버가 근거 기록(evidence)에서 읽어 붙인, 모델이 쓴 선정 이유. reason은 조정 카드(줄임·이동)의 이유다.
   const reason = item.priorityReason ?? item.selectionReason ?? item.reason ?? null;
   // 이 항목이 실제로 인용한 자료 중 지금 열 수 있는 첫 파일. 제목이 아니라 근거의 id로 찾는다.
@@ -993,7 +999,30 @@ function ItemFacts({ item, evidence, provenance, projectTitles, classAt, onMater
     <>
       {origin && <p className="plan-item-origin"><span className="plan-item-tag">{origin}</span></p>}
 
-      {item.sourceLocator && (
+      {action && (
+        <p className="plan-item-action">
+          <span className="plan-item-done-label">할 일</span>
+          {action}
+        </p>
+      )}
+
+      {start && (
+        <p className="plan-item-source">
+          <span className="plan-item-done-label">시작 자료</span>
+          <span>{startSourceLine(start)}</span>
+          {start.state === 'AVAILABLE' && (
+            <MaterialFileLink
+              materialId={start.materialId}
+              filename={start.filename}
+              contentType={start.contentType}
+              page={start.page ?? undefined}
+              onError={onMaterialOpenError}
+            />
+          )}
+        </p>
+      )}
+
+      {!start && item.sourceLocator && (
         <p className="plan-item-source">
           <span className="plan-item-done-label">이 위치를 열어서 확인해 주세요</span>
           <span>{item.sourceLocator}</span>
@@ -1015,9 +1044,6 @@ function ItemFacts({ item, evidence, provenance, projectTitles, classAt, onMater
         </p>
       ) : (
         reason && <p className="plan-item-reason">{reason}</p>
-      )}
-      {!item.doneCriteria && item.description && (
-        <p className="plan-item-reason">{item.description}</p>
       )}
 
       <p className="plan-item-deadline">

@@ -58,6 +58,27 @@ describe('ExecutionRow - 걸린 점(선택)', () => {
     expect(payload).not.toHaveProperty('actualMinutes');
   });
 
+  it('어떻게 했는지(혼자/도움)와 막힌 단계는 고른 것만 간다 — 안 고르면 필드가 없다', async () => {
+    const { onAction, user } = setup();
+    await user.click(screen.getByRole('button', { name: '일부 했어요' }));
+    expect(screen.getByRole('group', { name: '어떻게 했나요 (선택)' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '설명·예제를 보고 했어' }));
+    await user.type(screen.getByLabelText('막힌 단계 (선택)'), '직접 작성');
+    await user.click(screen.getByRole('button', { name: '시간은 모르겠어요' }));
+
+    expect(onAction).toHaveBeenCalledWith('partial', ITEM, {
+      completionPercent: 50, supportLevel: 'GUIDED', stuckStep: '직접 작성',
+    });
+  });
+
+  it('완료에서도 어떻게 했는지는 접혀 있고 쓰지 않아도 완료된다', async () => {
+    const { onAction, user } = setup();
+    await user.click(screen.getByRole('button', { name: '완료' }));
+    expect(screen.queryByRole('group', { name: '어떻게 했나요 (선택)' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '모르겠어요' }));
+    expect(onAction).toHaveBeenCalledWith('complete', ITEM, {});
+  });
+
   it('고른 이유를 다시 누르면 풀린다', async () => {
     const { onAction, user } = setup();
     await user.click(screen.getByRole('button', { name: '일부 했어요' }));
@@ -73,7 +94,7 @@ describe('ExecutionRow - 걸린 점(선택)', () => {
     await user.click(screen.getByRole('button', { name: '완료' }));
     expect(screen.queryByRole('group', { name: '걸린 점이 있었다면 (선택)' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '걸린 점 남기기 (선택)' }));
+    await user.click(screen.getByRole('button', { name: '어떻게 했는지·걸린 점 남기기 (선택)' }));
     await user.click(screen.getByRole('button', { name: '컨디션이 안 좋았어' }));
     await user.click(screen.getByRole('button', { name: '모르겠어요' }));
 

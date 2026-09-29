@@ -482,6 +482,25 @@ function toFrontendExecutionItem(raw) {
 export const executionItemAPI = {
     getTodayString,
 
+    /**
+     * 실행 항목 하나의 작업 공간: 할 일·완료 기준·시작 자료·안내·시작 도움·기록. 모델을 부르지 않는다.
+     * item은 목록과 같은 모양으로 바꿔 준다 — 오늘·계획·일정이 같은 항목을 본다.
+     */
+    workspace: async (executionItemId) => {
+        const data = await request(`/execution-items/${executionItemId}/workspace`);
+        return data ? { ...data, item: toFrontendExecutionItem(data.item) } : data;
+    },
+
+    /** "어디서 시작할지 모르겠어요". 항목의 범위·시간은 바꾸지 않는다(모델 1회). */
+    requestStartHelp: (executionItemId, kind, text) =>
+        request(`/execution-items/${executionItemId}/start-help`, { method: 'POST', body: JSON.stringify({ kind, text }) }),
+
+    /** 기록의 "어떻게 했나"만 고친다. 결과·분량은 그대로다. 보이는 값을 모두 보낸다(빈 값은 지운다). */
+    updateRecordReflection: (executionRecordId, { supportLevel = null, stuckStep = null, blockerKind = null, note = null }) =>
+        request(`/execution-items/records/${executionRecordId}`, {
+            method: 'PATCH', body: JSON.stringify({ supportLevel, stuckStep, blockerKind, note }),
+        }),
+
     /** 날짜별 실행 조각 조회 */
     getByDate: async (date) => {
         const params = new URLSearchParams({ date });
@@ -1380,6 +1399,15 @@ export const planAPI = {
         request(`/plans/items/${executionItemId}/detail`, { method: 'POST' }),
     updateItemDetailText: (detailId, userText) =>
         request(`/plans/item-details/${detailId}`, { method: 'PATCH', body: JSON.stringify({ userText }) }),
+    /** 메모. 안내 단계가 아직 없어도 남긴다(서버가 그 항목의 자리를 만든다). 초안에서 남긴 메모는 적용 뒤에도 같은 자리다. */
+    saveDraftItemMemo: (proposalItemId, userText) =>
+        request(`/plans/drafts/items/${proposalItemId}/memo`, { method: 'PUT', body: JSON.stringify({ userText }) }),
+    saveItemMemo: (executionItemId, userText) =>
+        request(`/plans/items/${executionItemId}/memo`, { method: 'PUT', body: JSON.stringify({ userText }) }),
+    /** 초안 항목의 시작 도움. 없으면 null(204). */
+    draftStartHelp: (proposalItemId) => request(`/plans/drafts/items/${proposalItemId}/start-help`),
+    requestDraftStartHelp: (proposalItemId, kind, text) =>
+        request(`/plans/drafts/items/${proposalItemId}/start-help`, { method: 'POST', body: JSON.stringify({ kind, text }) }),
 
     /**
      * 판단은 그대로 두고 조각만 다시 만든다.

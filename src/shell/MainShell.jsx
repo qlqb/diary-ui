@@ -56,6 +56,8 @@ import useUndoDelete from './useUndoDelete.js';
 import UndoToast from '../components/UndoToast.jsx';
 import { todayString } from '../lib/datetime.js';
 import { tabForProposal } from './proposalTab.js';
+import ItemWorkspace from '../views/today/ItemWorkspace.jsx';
+import { ItemWorkspaceContext } from '../views/today/itemWorkspaceContext.js';
 
 const TABS = [
   { key: 'today', label: '오늘', icon: CalendarCheck2 },
@@ -198,6 +200,9 @@ export default function MainShell({ user, onLogout }) {
   const [todayNotice, setTodayNotice] = useState(null);
   /** 적용 후 다른 화면들이 자기 데이터를 다시 읽게 만드는 신호. */
   const [refreshToken, setRefreshToken] = useState(0);
+  /** 열어 둔 실행 항목의 작업 공간. 어느 화면에서 열든 같은 항목을 같은 창으로 본다. */
+  const [workspaceItemId, setWorkspaceItemId] = useState(null);
+  const workspaceValue = useMemo(() => ({ open: (id) => setWorkspaceItemId(id) }), []);
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true);
@@ -443,6 +448,7 @@ export default function MainShell({ user, onLogout }) {
   const paneOpenOf = (name) => layout !== 'inline' && openPane === name;
 
   return (
+    <ItemWorkspaceContext.Provider value={workspaceValue}>
     <div className={`shell${aiVisible ? '' : ' ai-collapsed'}${consultActive ? ' is-consult' : ''}${aiVisible && !consultActive ? ' ai-open' : ''}`}>
       <aside className="nav">
         <div className="nav-logo">
@@ -725,6 +731,17 @@ export default function MainShell({ user, onLogout }) {
           />
         </ConsultPaneFrame>
       )}
+
+      {workspaceItemId != null && (
+        <ItemWorkspace
+          key={workspaceItemId}
+          executionItemId={workspaceItemId}
+          onClose={() => setWorkspaceItemId(null)}
+          onChanged={refreshAll}
+          onAskAi={(text) => { setWorkspaceItemId(null); ask(text); }}
+        />
+      )}
     </div>
+    </ItemWorkspaceContext.Provider>
   );
 }

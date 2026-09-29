@@ -7,7 +7,7 @@ import { planAPI } from '../../api/api.js';
 vi.mock('../../api/api.js', () => ({
   planAPI: {
     draftItemDetail: vi.fn(), createDraftItemDetail: vi.fn(), itemDetail: vi.fn(), createItemDetail: vi.fn(),
-    updateItemDetailText: vi.fn(),
+    updateItemDetailText: vi.fn(), saveDraftItemMemo: vi.fn(), saveItemMemo: vi.fn(),
   },
   materialStoreAPI: { file: vi.fn() },
 }));
@@ -79,7 +79,7 @@ describe('계획 항목 「자세히」', () => {
 
   it('내 메모를 남기면 서버에 저장하고 단계는 그대로다 — 모델을 다시 부르지 않는다', async () => {
     planAPI.draftItemDetail.mockResolvedValueOnce(ready);
-    planAPI.updateItemDetailText.mockResolvedValueOnce({ ...ready, userText: '먼저 예제부터' });
+    planAPI.saveDraftItemMemo.mockResolvedValueOnce({ ...ready, userText: '먼저 예제부터' });
     render(<PlanItemDetail id={11} expanded />);
     await screen.findByText('실습 문제 3번을 먼저 풀어 본다');
 
@@ -87,10 +87,28 @@ describe('계획 항목 「자세히」', () => {
     await userEvent.type(screen.getByPlaceholderText('이 항목을 할 때 기억할 것'), '먼저 예제부터');
     await userEvent.click(screen.getByRole('button', { name: '저장' }));
 
-    await waitFor(() => expect(planAPI.updateItemDetailText).toHaveBeenCalledWith(3, '먼저 예제부터'));
+    await waitFor(() => expect(planAPI.saveDraftItemMemo).toHaveBeenCalledWith(11, '먼저 예제부터'));
     expect(screen.getByText('먼저 예제부터')).toBeInTheDocument();
     expect(screen.getByText('실습 문제 3번을 먼저 풀어 본다')).toBeInTheDocument();
     expect(planAPI.createDraftItemDetail).not.toHaveBeenCalled();
+  });
+
+  it('안내를 만들 근거가 없어도 확정 항목에 메모를 남길 수 있다 — 모델을 부르지 않는다', async () => {
+    planAPI.itemDetail.mockResolvedValueOnce({
+      proposalItemId: 11, evidenceVersion: 'v1', available: false, canGenerate: false, stale: false,
+      steps: [], sections: [], userText: null,
+    });
+    planAPI.saveItemMemo.mockResolvedValueOnce({ available: false, canGenerate: false, userText: '예제 2부터' });
+    render(<PlanItemDetail mode="item" id={501} expanded />);
+    await screen.findByText(/자세히 볼 근거 자료가 없어요/);
+
+    await userEvent.click(screen.getByRole('button', { name: '메모 남기기' }));
+    await userEvent.type(screen.getByPlaceholderText('이 항목을 할 때 기억할 것'), '예제 2부터');
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(planAPI.saveItemMemo).toHaveBeenCalledWith(501, '예제 2부터'));
+    expect(screen.getByText('예제 2부터')).toBeInTheDocument();
+    expect(planAPI.createItemDetail).not.toHaveBeenCalled();
   });
 
   it('늦게 도착한 옛 항목의 응답이 새 항목을 덮지 않는다', async () => {

@@ -9,13 +9,14 @@
  * "지금 뭘 하고 있었는지"를 잃기 때문이다.
  */
 
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { Clock, Sparkles, Check, X, RotateCcw, Trash2 } from 'lucide-react';
 import {
   ceilToStep, clampToDay, formatDateShort, formatMinutes, hhmmOf, minutesOf, nowMinutes, shiftDate, todayString,
 } from '../lib/datetime.js';
 import ExecutionItemEvidence from '../views/plan/ExecutionItemEvidence.jsx';
-import { BLOCKER_OPTIONS } from '../lib/recordLabels.js';
+import { BLOCKER_OPTIONS, SUPPORT_OPTIONS } from '../lib/recordLabels.js';
+import { ItemWorkspaceContext } from '../views/today/itemWorkspaceContext.js';
 import '../styles/records.css';
 
 const PRIORITY_LABEL = { MUST: '꼭', SHOULD: '하면 좋음', OPTIONAL: '여유 있으면' };
@@ -87,12 +88,40 @@ function withActualMinutes(base, input) {
 }
 
 /** 고른 것만 싣는다. 안 골랐으면 필드를 보내지 않는다 — null을 보내 "이유 없음"으로 단정하지 않는다. */
-function withBlocker(base, blockerKind, note) {
+function withBlocker(base, blockerKind, note, reflection = {}) {
   const next = { ...base };
   if (blockerKind) next.blockerKind = blockerKind;
   const text = String(note ?? '').trim();
   if (text) next.note = text;
+  if (reflection.supportLevel) next.supportLevel = reflection.supportLevel;
+  const stuck = String(reflection.stuckStep ?? '').trim();
+  if (stuck) next.stuckStep = stuck;
   return next;
+}
+
+/**
+ * 어떻게 했나(선택): 혼자 / 설명·예제를 보고, 그리고 막힌 단계. 쓰지 않아도 기록된다.
+ * 이 활동 하나의 사실로만 남는다 — 과목 전체를 "안다/모른다"로 판정하지 않는다.
+ */
+function SupportPicker({ value, onChange, stuck, onStuckChange, disabled }) {
+  return (
+    <fieldset className="exec-blocker exec-support" disabled={disabled}>
+      <legend className="exec-blocker-legend">어떻게 했나요 (선택)</legend>
+      <div className="exec-blocker-options">
+        {SUPPORT_OPTIONS.map((o) => (
+          <button key={o.level} type="button"
+            className={`btn-ghost btn-sm exec-blocker-option${value === o.level ? ' is-active' : ''}`}
+            aria-pressed={value === o.level}
+            onClick={() => onChange(value === o.level ? null : o.level)}>
+            {value === o.level && <Check size={12} aria-hidden="true" />} {o.label}
+          </button>
+        ))}
+      </div>
+      <input type="text" className="exec-blocker-note" aria-label="막힌 단계 (선택)"
+        placeholder="막힌 단계가 있었다면 (예: 직접 작성하는 부분)"
+        maxLength={300} value={stuck} onChange={(e) => onStuckChange(e.target.value)} />
+    </fieldset>
+  );
 }
 
 /**
@@ -160,6 +189,7 @@ export default function ExecutionRow({
   busy,
   compact,
   onOpenSource,
+  hideEvidence = false,
 }) {
   const [tray, setTray] = useState(null); // null | 'complete' | 'partial' | 'reduce' | 'move'
   const [reduceMinutes, setReduceMinutes] = useState(item.estimatedMinutes ?? 30);
@@ -180,6 +210,11 @@ export default function ExecutionRow({
   const [blockerKind, setBlockerKind] = useState(null);
   const [blockerNote, setBlockerNote] = useState('');
   const [completeBlockerOpen, setCompleteBlockerOpen] = useState(false);
+  const [supportLevel, setSupportLevel] = useState(null);
+  const [stuckStep, setStuckStep] = useState('');
+  const reflection = { supportLevel, stuckStep };
+  // 작업 공간을 열 수 있는 화면(셸 안)에서만 [열기]가 보인다. 셸 밖(단독 테스트 등)에서는 없다.
+  const workspace = useContext(ItemWorkspaceContext);
 
   const isDone = item.status === 'DONE';
   const isHold = item.status === 'HOLD';
@@ -227,6 +262,8 @@ export default function ExecutionRow({
     setBlockerKind(null);
     setBlockerNote('');
     setCompleteBlockerOpen(false);
+    setSupportLevel(null);
+    setStuckStep('');
     return true;
   };
 
@@ -245,7 +282,15 @@ export default function ExecutionRow({
     <article className={`exec-row${isDone ? ' is-done' : ''}${isHold ? ' is-hold' : ''}${adjustment ? ' has-draft' : ''}${compact ? ' is-compact' : ''}`}>
       <div className="exec-row-main">
         <div className="exec-row-headline">
-          <span className="exec-row-title">{item.title}</span>
+          {workspace?.open && item.executionItemId != null ? (
+            <button type="button" className="exec-row-title exec-row-title-open"
+              aria-label={`${item.title} 열기`} title="할 일·자료·안내 열기"
+              onClick={() => workspace.open(item.executionItemId)}>
+              {item.title}
+            </button>
+          ) : (
+            <span className="exec-row-title">{item.title}</span>
+          )}
           {projectTitle && <span className="chip chip-project">{projectTitle}</span>}
         </div>
         <div className="exec-row-meta">
@@ -315,7 +360,7 @@ export default function ExecutionRow({
           화면으로 되돌아가지 않아도 같은 근거를 본다 — 같은 사실을 화면마다 복제하지
           않으려고 서버의 같은 응답을 쓴다. 펼칠 때만 불러온다.
         */}
-        {item.executionItemId != null && (
+        {item.executionItemId != null && !hideEvidence && (
           <ExecutionItemEvidence
             executionItemId={item.executionItemId}
             version={item.version}
@@ -375,12 +420,12 @@ export default function ExecutionRow({
                 <span>분</span>
               </label>
               <button type="button" className="btn-primary btn-sm" disabled={busy || !completeInput.valid}
-                onClick={() => run('complete', withBlocker(withActualMinutes({}, completeInput), blockerKind, blockerNote))}>
+                onClick={() => run('complete', withBlocker(withActualMinutes({}, completeInput), blockerKind, blockerNote, reflection))}>
                 <Check size={13} /> 완료 기록
               </button>
               {/* 모른다고 하면 그대로 "시간 미기록"이다. 예상값을 대신 채워 넣지 않는다. */}
               <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                onClick={() => run('complete', withBlocker({}, blockerKind, blockerNote))}>
+                onClick={() => run('complete', withBlocker({}, blockerKind, blockerNote, reflection))}>
                 모르겠어요
               </button>
               <button type="button" className="btn-ghost btn-sm" onClick={closeTray} aria-label="완료 기록 취소">
@@ -389,12 +434,16 @@ export default function ExecutionRow({
               <p className="exec-tray-note">내가 적은 시간으로 남아요. 비워 두면 &quot;시간 미기록&quot;이에요.</p>
               {/* 끝냈어도 힘들었던 점은 있을 수 있다. 다만 대부분은 필요 없으니 접어 둔다. */}
               {completeBlockerOpen ? (
-                <BlockerPicker value={blockerKind} onChange={setBlockerKind}
-                  note={blockerNote} onNoteChange={setBlockerNote} disabled={busy} />
+                <>
+                  <SupportPicker value={supportLevel} onChange={setSupportLevel}
+                    stuck={stuckStep} onStuckChange={setStuckStep} disabled={busy} />
+                  <BlockerPicker value={blockerKind} onChange={setBlockerKind}
+                    note={blockerNote} onNoteChange={setBlockerNote} disabled={busy} />
+                </>
               ) : (
                 <button type="button" className="btn-ghost btn-sm" aria-expanded={false}
                   onClick={() => setCompleteBlockerOpen(true)}>
-                  걸린 점 남기기 (선택)
+                  어떻게 했는지·걸린 점 남기기 (선택)
                 </button>
               )}
               {trayError && <p className="exec-tray-error">{trayError}</p>}
@@ -422,16 +471,18 @@ export default function ExecutionRow({
               </label>
               <button type="button" className="btn-primary btn-sm" disabled={busy || !partialInput.valid}
                 onClick={() => run('partial', withBlocker(
-                  withActualMinutes({ completionPercent: partialPercent }, partialInput), blockerKind, blockerNote))}>
+                  withActualMinutes({ completionPercent: partialPercent }, partialInput), blockerKind, blockerNote, reflection))}>
                 <Check size={13} /> 기록
               </button>
               <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                onClick={() => run('partial', withBlocker({ completionPercent: partialPercent }, blockerKind, blockerNote))}>
+                onClick={() => run('partial', withBlocker({ completionPercent: partialPercent }, blockerKind, blockerNote, reflection))}>
                 시간은 모르겠어요
               </button>
               <button type="button" className="btn-ghost btn-sm" onClick={closeTray} aria-label="일부 수행 기록 취소">
                 <X size={13} />
               </button>
+              <SupportPicker value={supportLevel} onChange={setSupportLevel}
+                stuck={stuckStep} onStuckChange={setStuckStep} disabled={busy} />
               <BlockerPicker value={blockerKind} onChange={setBlockerKind}
                 note={blockerNote} onNoteChange={setBlockerNote} disabled={busy} />
               {trayError && <p className="exec-tray-error">{trayError}</p>}

@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, CircleSlash, MinusCircle } from 'lucide-react';
 import { executionItemAPI } from '../api/api.js';
 import { formatDateKo, formatMinutes, shiftDate, todayString } from '../lib/datetime.js';
-import { BLOCKER_LABEL } from '../lib/recordLabels.js';
+import { BLOCKER_LABEL, SUPPORT_LABEL } from '../lib/recordLabels.js';
 import '../styles/records.css';
 
 const RANGES = [
@@ -115,6 +115,10 @@ export default function RecordView({ projectTitles, refreshToken }) {
                       {record.actualMinutes != null
                         ? <span className="chip">내가 적은 시간 {formatMinutes(record.actualMinutes)}</span>
                         : <span className="chip record-chip-missing">시간 미기록</span>}
+                      {SUPPORT_LABEL[record.supportLevel] && (
+                        <span className="chip">{SUPPORT_LABEL[record.supportLevel]}</span>
+                      )}
+                      {record.stuckStep && <span className="chip record-chip-blocker">막힌 단계: {record.stuckStep}</span>}
                       {BLOCKER_LABEL[record.blockerKind] && (
                         <span className="chip record-chip-blocker">걸린 점: {BLOCKER_LABEL[record.blockerKind]}</span>
                       )}

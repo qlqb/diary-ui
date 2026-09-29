@@ -98,6 +98,43 @@ beforeEach(() => {
   schedulePreviewAPI.recompute.mockResolvedValue({ placedItems: [], unplacedItems: [] });
 });
 
+describe('할 일·완료 기준·시작 자료', () => {
+  const WITH_ACTION = {
+    ...DRAFT,
+    proposal: {
+      ...DRAFT.proposal,
+      items: [{
+        ...DRAFT.proposal.items[0],
+        description: '예제 2-3의 반복문 5개를 표로 추적하고 각 줄의 실행 횟수를 적기 · 완료: 코드 5개의 시간복잡도를 자료 없이 판별',
+        startSource: {
+          materialId: 31, sectionId: 501, filename: '2주차_복잡도.pdf', contentType: 'application/pdf',
+          locator: 'p.4~6', page: 4, state: 'AVAILABLE',
+        },
+      }, DRAFT.proposal.items[1]],
+    },
+  };
+
+  it('완료 기준이 있어도 할 일(행동)이 함께 보이고, 같은 기준이 두 번 적히지 않는다', async () => {
+    await openDraft(WITH_ACTION);
+    const item = screen.getByText('자료구조 · ADT와 복잡도').closest('li');
+    expect(within(item).getByText('예제 2-3의 반복문 5개를 표로 추적하고 각 줄의 실행 횟수를 적기')).toBeInTheDocument();
+    expect(within(item).getAllByText(/코드 5개의 시간복잡도를 자료 없이 판별/)).toHaveLength(1);
+  });
+
+  it('시작 자료는 인용 근거의 파일·위치이고 바로 열 수 있다', async () => {
+    await openDraft(WITH_ACTION);
+    const item = screen.getByText('자료구조 · ADT와 복잡도').closest('li');
+    expect(within(item).getByText('2주차_복잡도.pdf · p.4~6')).toBeInTheDocument();
+    expect(within(item).getByRole('button', { name: /2주차_복잡도\.pdf|열기/ })).toBeInTheDocument();
+  });
+
+  it('판단 영역은 자료 근거와 난이도를 따로 말한다 — 기록이 없으면 추정이라고', async () => {
+    await openDraft(WITH_ACTION);
+    expect(screen.getByText(/실제로 해 본 기록이 아직 없어 분량·난이도는 AI 추정이에요/)).toBeInTheDocument();
+    expect(screen.getByText(/아직 확인한 내 상태가 없어요/)).toBeInTheDocument();
+  });
+});
+
 describe('판단 근거 표시', () => {
   it('목표와 프로젝트 순서를 보여준다 — 왜 이 순서인지 모르면 고칠 수도 없다', async () => {
     await openDraft();

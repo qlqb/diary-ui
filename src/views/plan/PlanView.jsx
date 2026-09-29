@@ -8,7 +8,7 @@
  * 그래서 이번 주 항목을 다음 주로 옮기면 이번 주 계획 화면에서 사라진다. 의도한 동작이다.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { CalendarClock, RefreshCw } from 'lucide-react';
 import { planAPI } from '../../api/api.js';
 import {
@@ -16,6 +16,29 @@ import {
 } from '../../types/execution.js';
 import { addDays, formatDateKo, formatMinutes, formatMinutesKo, toIsoDate } from '../../lib/planTime.js';
 import ExecutionItemEvidence from './ExecutionItemEvidence.jsx';
+import '../../styles/item-workspace.css';
+import PlanStrategyPanel from './PlanStrategyPanel.jsx';
+import { ItemWorkspaceContext } from '../today/itemWorkspaceContext.js';
+import { actionOf } from '../../lib/planItemText.js';
+
+/** 항목 제목. 셸 안이면 누르면 작업 공간(할 일·자료·안내·기록)이 열린다 — 오늘 화면과 같은 창이다. */
+function ItemTitle({ item }) {
+  const workspace = useContext(ItemWorkspaceContext);
+  const action = actionOf(item.description, null);
+  return (
+    <>
+      {workspace?.open ? (
+        <button type="button" className="plan-item-title exec-row-title-open" aria-label={`${item.title} 열기`}
+          onClick={() => workspace.open(item.executionItemId)}>
+          {item.title}
+        </button>
+      ) : (
+        <span className="plan-item-title">{item.title}</span>
+      )}
+      {action && <span className="plan-item-action-line">{action}</span>}
+    </>
+  );
+}
 
 export default function PlanView({ planVersionId, projectTitles = {}, onBack, onChanged, onOpenSource }) {
   const [plan, setPlan] = useState(null);
@@ -112,6 +135,9 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
         {onBack && <button type="button" className="btn-ghost btn-sm" onClick={onBack}>뒤로</button>}
       </header>
 
+      {/* 확정한 계획도 왜 이렇게 짰는지 다시 읽을 수 있어야 한다. 기본은 접어 둔다 — 여기서는 실행이 먼저다. */}
+      <PlanStrategyPanel strategy={plan.strategy} projectTitles={projectTitles} defaultOpen={false} />
+
       <p className="plan-view-progress">이번 계획: {items.length}개 중 {doneCount}개 완료</p>
 
       {error && <p className="error-text">{error}</p>}
@@ -144,7 +170,7 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
         <ul className="plan-item-list">
           {placed.map((item) => (
             <li key={item.executionItemId} className="plan-item">
-              <span className="plan-item-title">{item.title}</span>
+              <ItemTitle item={item} />
               <span className="plan-item-meta">
                 {/*
                   executionItemAPI가 내려주는 항목은 toFrontendExecutionItem을 거치며
@@ -181,7 +207,7 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
         <ul className="plan-item-list">
           {unplaced.map((item) => (
             <li key={item.executionItemId} className="plan-item">
-              <span className="plan-item-title">{item.title}</span>
+              <ItemTitle item={item} />
               <span className="plan-item-meta">
                 {item.estimatedMinutes != null && <>{item.estimatedMinutes}분</>}
                 {item.courseId != null && projectTitles[item.courseId] && <> · {projectTitles[item.courseId]}</>}

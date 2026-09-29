@@ -1,46 +1,45 @@
 /**
- * "이번 계획은 이렇게 봤어요" — 초안을 만든 판단을 사용자가 읽을 수 있게 편다.
+ * "이번 계획은 이렇게 봤어요" — 모르는 과목의 계획도 판단할 수 있게 초안을 만든 판단을 편다.
  *
- * 이게 없으면 계획은 "AI가 준 목록"이다. 왜 이 과목이 먼저인지, 왜 어떤 내용이 빠졌는지
- * 사용자가 알 수 없고, 그러면 고칠 수도 없다 — 무엇을 고쳐야 결과가 달라지는지 모르니까.
+ * 기본 화면에는 핵심만 둔다: 목표 · 다룰 범위와 순서 · 왜 이렇게 · 이 계획이 아는 내 상태 · 확인하지 못한 가정 ·
+ * 빼거나 읽지 못한 범위 · 자료 근거와 난이도의 구분. 나머지(유지한 결정·프로젝트별 이유·달라진 점·기존 항목 변경·
+ * 전체 목록)는 [자세히 보기]에서 연다. 필수 설문이나 승인 단계를 늘리지 않는다 — 읽기만 한다.
  *
- * 맨 위에는 목표·도달점·유지한 결정·프로젝트 순서·줄인 범위·이번에 달라진 이유가 온다. 가정·질문·읽지 못한 범위는
- * "확인된 사실"이 아니라는 표시와 함께 따로 둔다 — 추정이 등록된 사실과 같은 무게로 읽히면 안 된다.
- *
- * 기본은 펼침이다. 접어 두면 아무도 열지 않고, 그러면 판단층은 저장만 되고 읽히지 않는다.
- * 카드나 아이콘을 쓰지 않는다. 여기서 필요한 것은 훑어보기다.
+ * 자료에 근거했다는 것과 사용자에게 맞는 분량이라는 것은 다른 말이다. 앞의 것은 서버가 센 읽기 결과로, 뒤의 것은
+ * 사용자 상태(말함·자기평가·실제 수행)로만 말하고, 근거가 없으면 추정이라고 적는다(lib/planUnderstanding.js).
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { EXISTING_ACTION_LABEL } from '../../lib/planLabels.js';
+import {
+  buildPlanUnderstanding, fitLine, groundingLine, USER_STATE_KIND_LABEL,
+} from '../../lib/planUnderstanding.js';
 
-export default function PlanStrategyPanel({ strategy, projectTitles = {} }) {
-  const [open, setOpen] = useState(true);
+export default function PlanStrategyPanel({
+  strategy, projectTitles = {}, provenance = null, selection = null, items = [], defaultOpen = true,
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [more, setMore] = useState(false);
   const [excludedOpen, setExcludedOpen] = useState(false);
+  const u = useMemo(
+    () => buildPlanUnderstanding({ strategy, provenance, selection, items, projectTitles }),
+    [strategy, provenance, selection, items, projectTitles],
+  );
 
   if (!strategy) return null;
 
-  const courses = strategy.courses ?? [];
-  // 조각이 만들어지지 않은 것들. 판단에서 사라진 게 아니라 이번에 안 하기로 한 것이다.
-  const excluded = (strategy.topics ?? []).filter((t) => t.treatment === 'SKIP');
-  const excludedIds = new Set(excluded.map((t) => t.topicId));
-  // 학습 항목을 가리키지 않는 "줄인 범위"(자료 범위·과목 전체 등). 항목이 있는 것은 위 접힘 영역과 겹치지 않게 뺀다.
-  const deferred = (strategy.deferred ?? []).filter((d) => d.topicId == null || !excludedIds.has(d.topicId));
-  const kept = strategy.keptDecisions ?? [];
-  const changes = strategy.changes ?? [];
-  const assumptions = strategy.assumptions ?? [];
-  const questions = strategy.openQuestions ?? [];
-  const unread = strategy.unreadNotes ?? [];
-  const existing = (strategy.existingDecisions ?? []).filter((d) => d.action && d.action !== 'KEEP');
-  const keptExisting = (strategy.existingDecisions ?? []).filter((d) => !d.action || d.action === 'KEEP');
-  const hasBody = strategy.goal || strategy.strategySummary || strategy.reach || courses.length > 0 || kept.length > 0
-    || deferred.length > 0 || excluded.length > 0 || changes.length > 0 || assumptions.length > 0
-    || questions.length > 0 || unread.length > 0 || existing.length > 0;
+  const existing = u.existing.filter((d) => d.action && d.action !== 'KEEP');
+  const keptExisting = u.existing.filter((d) => !d.action || d.action === 'KEEP');
+  const uncertainCount = u.assumptions.length + u.questions.length;
+  const leftOutCount = u.skipped.length + u.deferred.length;
+  const unreadCount = u.unread.length + u.unreviewed.length;
+  const hasBody = u.goal || u.why || u.reach || u.order.length > 0 || u.kept.length > 0 || leftOutCount > 0
+    || u.changes.length > 0 || uncertainCount > 0 || unreadCount > 0 || existing.length > 0;
   if (!hasBody) return null;
 
   return (
-    <section className="plan-strategy">
+    <section className="plan-strategy" aria-label="이번 계획은 이렇게 봤어요">
       <button
         type="button"
         className="plan-strategy-toggle"
@@ -53,52 +52,101 @@ export default function PlanStrategyPanel({ strategy, projectTitles = {} }) {
 
       {open && (
         <div className="plan-strategy-body">
-          {strategy.goal && (
+          {u.goal && (
             <p className="plan-strategy-goal">
               <span className="plan-strategy-label">목표</span>
-              {strategy.goal}
+              {u.goal}
             </p>
           )}
-          {strategy.reach && (
+          {u.reach && (
             <p className="plan-strategy-summary">
               <span className="plan-strategy-label">이번 기간 도달점</span>
-              {strategy.reach}
-            </p>
-          )}
-          {strategy.strategySummary && (
-            <p className="plan-strategy-summary">
-              <span className="plan-strategy-label">요약</span>
-              {strategy.strategySummary}
+              {u.reach}
             </p>
           )}
 
-          {kept.length > 0 && (
-            <div className="plan-strategy-list">
-              <span className="plan-strategy-label">유지한 결정</span>
+          {(u.order.length > 0 || u.firstItems.length > 0) && (
+            <div className="plan-strategy-courses">
+              <span className="plan-strategy-label">프로젝트 순서</span>
+              {u.order.length > 0 && (
+                <ol>
+                  {u.order.map((course) => (
+                    <li key={course.courseId}>
+                      <span className="plan-strategy-course-name">{course.title}</span>
+                      {course.focus && <span className="plan-strategy-course-focus">{course.focus}</span>}
+                      {more && course.reason && <span className="plan-strategy-course-reason">{course.reason}</span>}
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {u.firstItems.length > 0 && (
+                <p className="plan-strategy-scope">
+                  할 일 {u.itemCount}개를 이 순서로: {u.firstItems.join(' → ')}{u.itemCount > u.firstItems.length ? ' → …' : ''}
+                </p>
+              )}
+            </div>
+          )}
+
+          {u.why && (
+            <p className="plan-strategy-summary">
+              <span className="plan-strategy-label">왜 이렇게</span>
+              {u.why}
+            </p>
+          )}
+
+          {/* 이 계획이 아는 나. 확인된 것과 추정을 같은 무게로 쓰지 않는다. */}
+          <div className="plan-strategy-list plan-strategy-state">
+            <span className="plan-strategy-label">이 계획이 참고한 내 상태</span>
+            {u.userState.length === 0 && u.historyCount === 0 && u.agreementCount === 0 ? (
+              <p>아직 확인한 내 상태가 없어요. 처음 보는 과목이어도 괜찮아요 — 해 본 결과가 다음 계획에 쓰여요.</p>
+            ) : (
+              <p>
+                {[
+                  u.userState.length > 0 ? `내가 말하거나 평가한 것 ${u.userState.length}개` : null,
+                  u.historyCount > 0 ? `실제 수행 기록 ${u.historyCount}건` : null,
+                  u.agreementCount > 0 ? `상담에서 합의한 것 ${u.agreementCount}개` : null,
+                ].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {more && u.userState.length > 0 && (
               <ul>
-                {kept.map((text) => <li key={text}>{text}</li>)}
+                {u.userState.map((s, i) => (
+                  <li key={`s-${i}`}>
+                    <span className="plan-item-tag">{USER_STATE_KIND_LABEL[s.kind]}</span> {s.text}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <p className="plan-strategy-summary plan-strategy-basis">
+            <span className="plan-strategy-label">자료 근거</span>
+            {groundingLine(u.grounding)}
+          </p>
+          <p className="plan-strategy-summary plan-strategy-basis">
+            <span className="plan-strategy-label">분량·난이도</span>
+            {fitLine(u.fit)}
+          </p>
+
+          {(uncertainCount > 0 || unreadCount > 0) && (
+            <div className="plan-strategy-list plan-strategy-uncertain">
+              <span className="plan-strategy-label">확인된 사실이 아니라 가정·질문이에요</span>
+              <ul>
+                {u.questions.map((q) => <li key={`q-${q}`} className="plan-strategy-question">물어볼 것: {q}</li>)}
+                {(more ? u.assumptions : u.assumptions.slice(0, 2)).map((a) => <li key={`a-${a}`}>가정: {a}</li>)}
+                {!more && u.assumptions.length > 2 && <li className="hint">가정 {u.assumptions.length - 2}개 더 있어요</li>}
+                {(more ? u.unread : u.unread.slice(0, 1)).map((x) => <li key={`u-${x}`}>읽지 못한 범위: {x}</li>)}
+                {u.unreviewed.length > 0 && (
+                  <li>
+                    살펴보지 못한 자료 범위 {u.unreviewed.length}곳
+                    {more && `: ${u.unreviewed.map((r) => [r.courseTitle, r.title].filter(Boolean).join(' · ')).join(', ')}`}
+                  </li>
+                )}
               </ul>
             </div>
           )}
 
-          {courses.length > 0 && (
-            <div className="plan-strategy-courses">
-              <span className="plan-strategy-label">프로젝트 순서</span>
-              <ol>
-                {courses.map((course) => (
-                  <li key={course.courseId}>
-                    <span className="plan-strategy-course-name">
-                      {projectTitles[course.courseId] ?? '프로젝트'}
-                    </span>
-                    {course.focus && <span className="plan-strategy-course-focus">{course.focus}</span>}
-                    {course.reason && <span className="plan-strategy-course-reason">{course.reason}</span>}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-
-          {(deferred.length > 0 || excluded.length > 0) && (
+          {leftOutCount > 0 && (
             <div className="plan-strategy-excluded">
               <button
                 type="button"
@@ -108,30 +156,24 @@ export default function PlanStrategyPanel({ strategy, projectTitles = {} }) {
               >
                 {excludedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 <span>
-                  {excluded.length > 0 ? `이번에는 제외한 내용 ${excluded.length}개` : ''}
-                  {excluded.length > 0 && deferred.length > 0 ? ' · ' : ''}
-                  {deferred.length > 0 ? `이번에 줄이거나 미룬 범위 ${deferred.length}개` : ''}
+                  {u.skipped.length > 0 ? `이번에는 제외한 내용 ${u.skipped.length}개` : ''}
+                  {u.skipped.length > 0 && u.deferred.length > 0 ? ' · ' : ''}
+                  {u.deferred.length > 0 ? `이번에 줄이거나 미룬 범위 ${u.deferred.length}개` : ''}
                 </span>
               </button>
               {excludedOpen && (
                 <ul>
-                  {excluded.map((topic) => (
+                  {u.skipped.map((topic) => (
                     <li key={`t-${topic.topicId}`}>
-                      <span className="plan-strategy-excluded-title">
-                        {topic.topicTitle ?? '학습 항목'}
-                      </span>
+                      <span className="plan-strategy-excluded-title">{topic.topicTitle ?? '학습 항목'}</span>
                       <span className="plan-strategy-excluded-reason">
-                        {/*
-                          서버가 되돌린 것과 모델이 그렇게 본 것을 구분해 말한다. 사용자가
-                          직접 표시해서 빠진 것인데 "AI가 그렇게 판단했다"처럼 읽히면
-                          자기가 한 일을 자기가 못 알아본다.
-                        */}
+                        {/* 사용자가 직접 표시해서 빠진 것을 "AI가 그렇게 판단했다"처럼 읽히게 두지 않는다. */}
                         {topic.reason}
                         {topic.adjustedBy === 'SERVER' && ' (표시에 따라 조정)'}
                       </span>
                     </li>
                   ))}
-                  {deferred.map((d, i) => (
+                  {u.deferred.map((d, i) => (
                     <li key={`d-${i}`}>
                       <span className="plan-strategy-excluded-title">{d.title}</span>
                       <span className="plan-strategy-excluded-reason">{d.reason}</span>
@@ -139,6 +181,13 @@ export default function PlanStrategyPanel({ strategy, projectTitles = {} }) {
                   ))}
                 </ul>
               )}
+            </div>
+          )}
+
+          {more && u.kept.length > 0 && (
+            <div className="plan-strategy-list">
+              <span className="plan-strategy-label">유지한 결정</span>
+              <ul>{u.kept.map((text) => <li key={text}>{text}</li>)}</ul>
             </div>
           )}
 
@@ -164,11 +213,12 @@ export default function PlanStrategyPanel({ strategy, projectTitles = {} }) {
             </div>
           )}
 
-          {changes.length > 0 && (
+          {/* 실행 기록·답변이 무엇을 바꿨는지. 기록에서 온 조정은 기존 계획을 덮지 않고 이 초안의 제안일 뿐이다. */}
+          {u.changes.length > 0 && (
             <div className="plan-strategy-list plan-strategy-changes">
               <span className="plan-strategy-label">이번에 달라진 점</span>
               <ul>
-                {changes.map((c, i) => (
+                {u.changes.map((c, i) => (
                   <li key={`c-${i}`}>
                     <span className="plan-strategy-excluded-title">{c.what}</span>
                     {c.why && <span className="plan-strategy-excluded-reason">{c.why}</span>}
@@ -178,16 +228,10 @@ export default function PlanStrategyPanel({ strategy, projectTitles = {} }) {
             </div>
           )}
 
-          {(assumptions.length > 0 || questions.length > 0 || unread.length > 0) && (
-            <div className="plan-strategy-list plan-strategy-uncertain">
-              <span className="plan-strategy-label">확인된 사실이 아니라 가정·질문이에요</span>
-              <ul>
-                {questions.map((q) => <li key={`q-${q}`} className="plan-strategy-question">물어볼 것: {q}</li>)}
-                {assumptions.map((a) => <li key={`a-${a}`}>가정: {a}</li>)}
-                {unread.map((u) => <li key={`u-${u}`}>읽지 못한 범위: {u}</li>)}
-              </ul>
-            </div>
-          )}
+          <button type="button" className="btn-ghost btn-sm plan-strategy-more" aria-expanded={more}
+            onClick={() => setMore((v) => !v)}>
+            {more ? '간단히 보기' : '자세히 보기'}
+          </button>
         </div>
       )}
     </section>
