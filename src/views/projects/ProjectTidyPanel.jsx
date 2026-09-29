@@ -287,6 +287,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
 
   const jobNote = describeJob(view?.job);
   const hasProposal = !!view?.proposalId && view.status === 'PROPOSED';
+  const fromMaterials = !view?.origin || view.origin === 'AI';
 
   return (
     <section className="view-section project-tidy" aria-label="이 프로젝트 자료 정리">
@@ -384,8 +385,9 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
               {' '}{view.summary?.headline}
             </p>
             {view.userRequest && <p className="view-sub-dim">요청: “{view.userRequest}”</p>}
-            <p className="view-sub-dim">{describeScope(view.scope)}</p>
-            {partialNote(view.scope) && <p className="view-sub-dim">{partialNote(view.scope)}</p>}
+            {/* 직접 조작·말로 한 요청으로 만든 안은 자료를 검토한 결과가 아니다 — 자료 범위 문구를 붙이지 않는다. */}
+            {fromMaterials && <p className="view-sub-dim">{describeScope(view.scope)}</p>}
+            {fromMaterials && partialNote(view.scope) && <p className="view-sub-dim">{partialNote(view.scope)}</p>}
             {(view.scope?.excluded ?? []).length > 0 && (
               <ul className="project-tidy-excluded">
                 {view.scope.excluded.map((item) => (
@@ -405,7 +407,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
                 onClick={() => requestTidy(true)}>다시 정리</button>
             </p>
           )}
-          {view.newMaterialCount > 0 && (
+          {fromMaterials && view.newMaterialCount > 0 && (
             <p className="project-tidy-info">
               그 사이 분석이 끝난 자료 {view.newMaterialCount}개가 있어요. 지금 보는 정리안에는 들어 있지 않아요.
               <button type="button" className="btn-ghost btn-sm" disabled={busy}
