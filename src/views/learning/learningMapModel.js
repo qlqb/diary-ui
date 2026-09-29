@@ -7,6 +7,8 @@
  *
  * ★ 주차는 서버가 준 `weeks`만 쓴다. 파일 이름의 숫자(01_intro.pdf)에서 주차를 짐작하지 않는다 —
  *   파일 번호는 올린 순서이거나 교재 장 번호일 뿐이고, 그걸 주차로 읽으면 없는 사실을 만들어 낸다.
+ *   서버의 `weeks`는 사용자가 확인한 자료 ↔ 주차 관계로만 만들어진다(추천은 들어 있지 않다). 추천을 보고
+ *   확인하는 곳은 자료 주차 확인 화면(MaterialWeekReview)이고, 여기는 `weekReview`로 "확인 필요 N개"만 안다.
  */
 
 import {
@@ -49,6 +51,7 @@ export function normalizeLearningMap(raw, courseId) {
     proposed: raw?.proposed ?? [],
     unlinked: raw?.unlinked ?? [],
     weeks: (raw?.weeks ?? []).filter((w) => w && w.label),
+    weekReview: raw?.weekReview ?? null,
     source: 'server',
   };
 }
@@ -141,6 +144,7 @@ async function buildFallback(courseId) {
     proposed: proposals,
     unlinked,
     weeks: [],
+    weekReview: null,
     source: 'fallback',
   };
 }

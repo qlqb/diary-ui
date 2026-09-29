@@ -1624,6 +1624,27 @@ export const learningMapAPI = {
     get: (courseId) => request(`/courses/${courseId}/learning-map`),
 };
 
+/**
+ * 자료 주차 확인. GET은 추천을 보여 줄 뿐이고, 자리를 정하는 것은 place(한 자료)와 applySuggestions(화면에 보인
+ * 추천 일괄)뿐이다. place의 source가 'SUGGESTION'이면 서버가 지금 추천과 대조하고, 다르면 409
+ * (E409_036, MATERIAL_WEEK_SUGGESTION_CHANGED)로 거절한다 — 화면은 다시 읽어야 한다.
+ */
+export const materialWeekAPI = {
+    review: (courseId) => request(`/courses/${courseId}/material-weeks`),
+    /** placement: 'WEEK' | 'COURSE_WIDE' | 'UNASSIGNED', weeks: WEEK일 때만, source: 'USER' | 'SUGGESTION' */
+    place: (courseId, materialId, { placement, weeks = [], source = 'USER' }) =>
+        request(`/courses/${courseId}/material-weeks/${materialId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ placement, weeks, source }),
+        }),
+    /** items: [{ materialId, placement, week }] — 화면에 보였던 추천 그대로 */
+    applySuggestions: (courseId, items) =>
+        request(`/courses/${courseId}/material-weeks/apply-suggestions`, {
+            method: 'POST',
+            body: JSON.stringify({ items }),
+        }),
+};
+
 /** 점검 활동(선택). 자기평가로 저장된다 — 완료·숙달이 아니다. 204. */
 export const selfCheckAPI = {
     submit: (courseId, items) =>

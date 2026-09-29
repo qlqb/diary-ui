@@ -6,7 +6,8 @@
  * "어디에 나오는지(위치)"로 붙는다.
  *
  * 보기는 둘이다: 주제별(기본) / 주차별. 둘은 같은 학습 항목을 다르게 늘어놓은 것일 뿐이라, 한 항목이
- * 여러 주차에 나타나도 진도·자기평가는 하나다. 주차는 서버가 준 것만 쓴다(learningMapModel 참고).
+ * 여러 주차에 나타나도 진도·자기평가는 하나다. 주차는 서버가 준 것만 쓴다(learningMapModel 참고) — 사용자가
+ * 확인한 자료의 주차다. 확인 전 추천은 지도에 없고, "자료 주차 확인"(MaterialWeekReview)에서 확인한다.
  *
  * "자동 분석 제안(승인 전)"은 아직 지도에 없는 것이다. 지도 안에 겹쳐 보여 주되 읽기 전용이고, 진도
  * 표시·조작이 없고, 글자 라벨로 구분한다. 적용은 기존 변경안 카드가 한다.
@@ -23,10 +24,12 @@ import { TOPIC_PROGRESS_STATUS_LABEL, TopicProgressStatus } from '../../types/le
 import { CHANGE_OP_LABEL, analysisStateLabel, sectionRoleLabel } from '../../lib/analysisLabels.js';
 import TopicDetail from './TopicDetail.jsx';
 import SelfCheckActivity from './SelfCheckActivity.jsx';
+import MaterialWeekReview from './MaterialWeekReview.jsx';
 import {
   SELF_CHECK_LABEL, ancestorIdsOf, flattenTopics, loadLearningMap, mapStates, searchTopics,
 } from './learningMapModel.js';
 import '../../styles/learning-map.css';
+import '../../styles/material-weeks.css';
 
 const STATUS_ICON = {
   [TopicProgressStatus.LEARNED]: CheckCircle2,
@@ -37,7 +40,7 @@ const STATUS_ICON = {
 /** 한 단계에 한 번에 그리는 형제 수. 넘으면 "더 보기"로 나눈다 — 수백 개를 첫 화면에 다 그리지 않는다. */
 const SIBLING_PAGE = 60;
 
-const UNCONFIRMED_WEEK_NOTE = '자료에 적힌 주차 — 실제 수업 진행과 다를 수 있어요';
+const UNCONFIRMED_WEEK_NOTE = '확인 전 주차 — 실제 수업 진행과 다를 수 있어요';
 const STRUCTURAL_NOTE = '병합·분할해도 완료 표시는 자동으로 옮겨지지 않아요. 주차를 옮겨도 이미 완료한 기록은 취소되지 않아요.';
 
 function prefersReducedMotion() {
@@ -85,6 +88,7 @@ export default function ProjectLearningMap({
   const [selfCheckOpen, setSelfCheckOpen] = useState(false);
   const [notice, setNotice] = useState(null);
   const [retrying, setRetrying] = useState(false);
+  const [weekReviewOpen, setWeekReviewOpen] = useState(false);
   const ticket = useRef(0);
   const rowRefs = useRef(new Map());
   const initializedFor = useRef(null);
@@ -279,6 +283,10 @@ export default function ProjectLearningMap({
         />
       )}
 
+      {model && (model.state?.materials ?? 0) > 0 && model.weekReview && (
+        <WeekReviewNotice review={model.weekReview} hasWeeks={hasWeeks} onOpen={() => setWeekReviewOpen(true)} />
+      )}
+
       {model && (topics.length > 0 || overlay.roots.length > 0) && (
         <>
           <div className="lm-toolbar">
@@ -345,7 +353,8 @@ export default function ProjectLearningMap({
                   )}
                 </>
               ) : (
-                <WeekView weeks={weeks} topics={topics} topicById={topicById} model={model} shared={shared} />
+                <WeekView weeks={weeks} topics={topics} topicById={topicById} model={model} shared={shared}
+                  onOpenReview={() => setWeekReviewOpen(true)} />
               )}
             </div>
 
@@ -366,6 +375,14 @@ export default function ProjectLearningMap({
       )}
 
       {model && (model.unlinked ?? []).length > 0 && <UnlinkedGroup unlinked={model.unlinked} query={query} />}
+
+      {weekReviewOpen && (
+        <MaterialWeekReview
+          courseId={courseId}
+          onClose={() => setWeekReviewOpen(false)}
+          onChanged={async () => { await load(); await onChanged?.(); }}
+        />
+      )}
 
       {selfCheckOpen && topics.length > 0 && (
         <SelfCheckActivity
@@ -629,22 +646,53 @@ function ProposedNode({ node, depth, shared }) {
 }
 
 /**
- * 주차별 보기. 같은 항목을 주차로 다시 묶은 것뿐이다 — 한 항목이 여러 주차에 나와도 같은 항목이고,
- * 진도는 하나다. 어느 주차에도 안 적힌 항목은 버리지 않고 맨 아래에 모은다.
+ * 자료 주차 확인 알림. 추천은 여기서 보여 주지 않는다 — 몇 개가 남았는지와 여는 길만.
+ * 확인할 것이 없으면 한 줄로 줄이고 고치는 길만 남긴다.
  */
-function WeekView({ weeks, topics, topicById, model, shared }) {
+function WeekReviewNotice({ review, hasWeeks, onOpen }) {
+  if ((review.needsReview ?? 0) > 0) {
+    return (
+      <div className="lm-state" data-state="WEEK_REVIEW" role="status">
+        <p className="lm-state-title">자료 주차 확인 필요 {review.needsReview}개</p>
+        <p className="lm-state-desc">
+          주차별 보기는 확인한 자료로만 만들어요. AI가 추천한 주차를 한 화면에서 보고, 맞으면 적용하고 다르면 옮기세요.
+        </p>
+        <button type="button" className="btn-ghost btn-sm" onClick={onOpen}>자료 주차 확인하기</button>
+      </div>
+    );
+  }
+  return (
+    <p className="lm-week-review view-dim">
+      {hasWeeks ? '모든 자료의 주차를 확인했어요.' : '확인한 자료 중 특정 주차에 놓인 것이 없어요.'}
+      <button type="button" className="btn-ghost btn-sm" onClick={onOpen}>자료 주차 고치기</button>
+    </p>
+  );
+}
+
+/**
+ * 주차별 보기. 주차 → 그 주차에 확인된 자료 → 그 자료와 직접 연결된 항목. 한 항목이 여러 주차에 나와도 같은
+ * 항목이고 진도는 하나다. 같은 주차 안에서 상위 항목 아래에 이미 보이는 항목은 따로 되풀이하지 않는다.
+ * 어느 주차에도 없는 항목은 버리지 않고 맨 아래에 모은다.
+ */
+function WeekView({ weeks, topics, topicById, model, shared, onOpenReview }) {
   const filenameById = new Map();
   flattenTopics(topics).forEach((t) => (t.materials ?? []).forEach((m) => filenameById.set(m.materialId, m.filename)));
   (model.unlinked ?? []).forEach((m) => filenameById.set(m.materialId, m.filename));
+  weeks.forEach((w) => (w.materials ?? []).forEach((m) => filenameById.set(m.materialId, m.filename)));
 
   const placed = new Set();
   weeks.forEach((w) => (w.topicIds ?? []).forEach((id) => placed.add(id)));
   const leftovers = topics.filter((t) => !flattenTopics([t]).some((n) => placed.has(n.topicId)));
+  const courseWide = model.weekReview?.courseWide ?? [];
 
   return (
     <div className="lm-weeks">
       {weeks.map((week, i) => {
-        const weekTopics = (week.topicIds ?? []).map((id) => topicById.get(id)).filter(Boolean);
+        const ids = new Set(week.topicIds ?? []);
+        // 상위 항목이 이 주차에 있으면 하위 항목은 그 아래에 이미 보인다 — 맨 위에 한 번 더 놓지 않는다.
+        const weekTopics = (week.topicIds ?? [])
+          .filter((id) => !(ancestorIdsOf(topics, id) ?? []).some((a) => a !== id && ids.has(a)))
+          .map((id) => topicById.get(id)).filter(Boolean);
         const files = (week.materialIds ?? []).map((id) => filenameById.get(id)).filter(Boolean);
         return (
           <section key={`${week.label}-${i}`} className="lm-week" aria-label={week.label}>
@@ -653,15 +701,23 @@ function WeekView({ weeks, topics, topicById, model, shared }) {
             {files.length > 0 && <p className="lm-week-files">자료: {files.join(' · ')}</p>}
             {weekTopics.length > 0
               ? <TopicList nodes={weekTopics} scope={`w${i}`} depth={0} insideMatch={false} shared={shared} />
-              : <p className="view-dim">이 주차에 연결된 주제가 아직 없어요.</p>}
+              : <p className="view-dim">이 주차 자료에 연결된 주제가 아직 없어요.</p>}
           </section>
         );
       })}
       {leftovers.length > 0 && (
-        <section className="lm-week" aria-label="주차가 적히지 않은 항목">
-          <h3 className="lm-week-title">주차가 적히지 않은 항목</h3>
+        <section className="lm-week" aria-label="주차가 정해지지 않은 항목">
+          <h3 className="lm-week-title">주차가 정해지지 않은 항목</h3>
           <TopicList nodes={leftovers} scope="wx" depth={0} insideMatch={false} shared={shared} />
         </section>
+      )}
+      {courseWide.length > 0 && (
+        <p className="lm-week-reference">
+          전체 참고자료: {courseWide.map((m) => m.filename).join(' · ')}
+          {onOpenReview && (
+            <button type="button" className="btn-ghost btn-sm" onClick={onOpenReview}>자료 주차 고치기</button>
+          )}
+        </p>
       )}
     </div>
   );

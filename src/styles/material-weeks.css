@@ -1,0 +1,115 @@
+/*
+ * 자료 주차 확인. 기준 화면은 1536×760 — 창 높이를 넘지 않고, 칸 목록만 안에서 스크롤한다.
+ * 상태는 색만으로 전하지 않는다: 카드마다 "3주차 · AI 추천/확인됨/직접 지정" 글자가 붙고, 추천 카드는 점선이다.
+ */
+.mw-backdrop {
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(17, 24, 39, 0.35);
+}
+.mw-modal {
+  display: flex; flex-direction: column;
+  width: 100%; max-width: 760px;
+  max-height: calc(100vh - 32px); /* 창보다 커지지 않는다 — 안쪽(.mw-body)만 스크롤 */
+  min-height: 0;
+  border-radius: 12px; background: var(--ws-surface); color: var(--ws-text);
+  box-shadow: 0 12px 40px rgba(17, 24, 39, 0.18);
+}
+.mw-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px 4px; }
+.mw-title { margin: 0; font-size: 16px; font-weight: 700; }
+.mw-title:focus { outline: none; }
+.mw-count { font-size: 13px; color: var(--ws-warn); font-weight: 600; }
+.mw-close { margin-left: auto; }
+.mw-desc { margin: 0; padding: 0 18px 10px; font-size: 13px; color: var(--ws-text-dim); border-bottom: 1px solid var(--ws-border); }
+
+.mw-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 18px 12px;
+}
+
+.mw-group {
+  border: 1px solid var(--ws-border); border-radius: 8px; background: var(--ws-surface);
+  padding: 6px 10px 8px;
+  transition: border-color 120ms, background 120ms;
+}
+.mw-group.is-empty { padding-bottom: 6px; }
+.mw-group.is-unassigned { border-left: 3px solid var(--ws-warn); }
+.mw-group.is-course { border-left: 3px solid var(--ws-border-strong); }
+.mw-group.is-over { border-color: var(--ws-accent); background: var(--ws-accent-soft); outline: 2px dashed var(--ws-accent); outline-offset: -3px; }
+.mw-group-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 0 0 4px; font-size: 13.5px; font-weight: 700; }
+.mw-group.is-empty .mw-group-title { margin: 0; display: inline-flex; font-weight: 600; color: var(--ws-text-dim); }
+.mw-group-count { font-weight: 400; color: var(--ws-text-faint); }
+.mw-group-hint { font-weight: 400; font-size: 12px; color: var(--ws-text-faint); }
+.mw-empty { display: inline; margin: 0 0 0 8px; font-size: 12px; color: var(--ws-text-faint); }
+
+.mw-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mw-card {
+  min-width: 0;
+  padding: 7px 9px; border: 1px solid var(--ws-border-strong); border-radius: 8px; background: var(--ws-surface);
+  cursor: grab;
+}
+.mw-card:active { cursor: grabbing; }
+.mw-card.is-dragging { opacity: 0.5; }
+/* 확인 전 추천: 점선 + 글자 라벨. 색만으로 구분하지 않는다. */
+.mw-card.is-suggested { border-style: dashed; border-color: var(--ws-draft); background: var(--ws-draft-soft); }
+.mw-card.is-needs_review { border-color: var(--ws-warn); }
+.mw-card.is-dismissed { background: var(--ws-bg); color: var(--ws-text-dim); }
+
+.mw-card-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mw-card-icon { flex: none; color: var(--ws-text-faint); }
+.mw-card-name {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; /* 긴 파일명은 줄이고 title로 전부 보인다 */
+  font-size: 13.5px; font-weight: 600;
+}
+.mw-status { flex: none; font-size: 12px; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.mw-status-suggested { background: var(--ws-draft-soft); color: var(--ws-draft); border: 1px dashed var(--ws-draft); }
+.mw-status-confirmed { background: var(--ws-ok-soft); color: var(--ws-ok); }
+.mw-status-user { background: var(--ws-accent-soft); color: var(--ws-accent-text); }
+.mw-status-needs_review { background: var(--ws-warn-soft); color: var(--ws-warn); }
+.mw-status-dismissed { background: #e7eaee; color: var(--ws-text-faint); }
+
+.mw-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; }
+.mw-select {
+  max-width: 100%; padding: 4px 6px; border: 1px solid var(--ws-border-strong); border-radius: 6px;
+  background: var(--ws-surface); color: var(--ws-text); font: inherit; font-size: 12.5px;
+}
+.mw-select:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+.mw-why-toggle { display: inline-flex; align-items: center; gap: 2px; }
+.mw-diff { margin: 5px 0 0; font-size: 12px; color: var(--ws-warn); }
+.mw-evidence { margin: 6px 0 0; padding: 6px 8px 6px 22px; border-radius: 6px; background: var(--ws-bg); font-size: 12.5px; color: var(--ws-text-dim); }
+.mw-evidence li { margin: 2px 0; overflow-wrap: anywhere; }
+.mw-evidence-kind { font-weight: 600; color: var(--ws-text); }
+
+.mw-foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 18px 14px; border-top: 1px solid var(--ws-border);
+}
+.mw-message { margin: 0; flex: 1 1 100%; }
+.mw-saving { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ws-text-dim); }
+.mw-foot-actions { display: flex; gap: 6px; margin-left: auto; }
+
+/* 자료 목록 한 줄의 주차 표시 */
+.material-week { display: inline-flex; align-items: center; gap: 4px; }
+.material-week-chip { font-size: 12px; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.material-week-chip.is-ok { background: var(--ws-ok-soft); color: var(--ws-ok); }
+.material-week-chip.is-suggested { background: var(--ws-draft-soft); color: var(--ws-draft); border: 1px dashed var(--ws-draft); }
+.material-week-chip.is-warn { background: var(--ws-warn-soft); color: var(--ws-warn); }
+.material-week-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 8px; font-size: 13px; }
+
+/* 학습 지도의 주차 확인 알림·전체 참고 */
+.lm-week-review { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lm-week-reference { margin: 8px 0 0; font-size: 13px; color: var(--ws-text-dim); }
+
+@media (max-width: 640px) {
+  .mw-backdrop { padding: 8px; }
+  .mw-modal { max-height: calc(100vh - 16px); }
+  .mw-head, .mw-desc, .mw-body, .mw-foot { padding-left: 12px; padding-right: 12px; }
+  .mw-card-main { flex-wrap: wrap; }
+  .mw-card-name { flex-basis: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mw-group { transition: none; }
+}

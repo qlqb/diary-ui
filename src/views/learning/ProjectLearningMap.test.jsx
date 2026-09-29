@@ -10,11 +10,12 @@ vi.mock('../../api/api.js', () => ({
   materialAPI: { listByCourse: vi.fn() },
   materialAnalysisStatusAPI: { overview: vi.fn(), retry: vi.fn() },
   materialStoreAPI: { file: vi.fn() },
+  materialWeekAPI: { review: vi.fn(), place: vi.fn(), applySuggestions: vi.fn() },
 }));
 
 import ProjectLearningMap from './ProjectLearningMap.jsx';
 import {
-  learningMapAPI, materialAPI, materialAnalysisStatusAPI, projectTidyAPI, selfCheckAPI, topicAPI,
+  learningMapAPI, materialAPI, materialAnalysisStatusAPI, materialWeekAPI, projectTidyAPI, selfCheckAPI, topicAPI,
 } from '../../api/api.js';
 
 const leaf = (topicId, title, extra = {}) => ({
@@ -145,23 +146,71 @@ describe('ProjectLearningMap - 주차별 보기', () => {
     expect(screen.queryByRole('tab', { name: '주차별' })).not.toBeInTheDocument();
   });
 
-  it('weeks가 있으면 같은 항목을 주차로 다시 묶어 보여 주고, 확인 안 된 주차는 그렇게 적는다', async () => {
+  it('확인된 자료의 주차로 같은 항목을 다시 묶는다 — 한 항목이 두 주차에 나올 수 있다', async () => {
     const user = userEvent.setup();
     learningMapAPI.get.mockResolvedValue(mapResponse({
       weeks: [
-        { label: '2주차', basis: 'MATERIAL_LABEL', confirmed: false, materialIds: [12], sectionIds: [201], topicIds: [1] },
-        { label: '3주차', basis: 'MATERIAL_LABEL', confirmed: false, materialIds: [11], sectionIds: [], topicIds: [1, 5] },
+        { label: '2주차', basis: 'CONFIRMED_MATERIAL', confirmed: true, weekNo: 2, materialIds: [12], sectionIds: [201],
+          topicIds: [1], materials: [{ materialId: 12, filename: 'week2_slides.pptx' }] },
+        { label: '3주차', basis: 'CONFIRMED_MATERIAL', confirmed: true, weekNo: 3, materialIds: [11], sectionIds: [],
+          topicIds: [1, 5], materials: [{ materialId: 11, filename: 'ch03_list.pdf' }] },
       ],
+      weekReview: { needsReview: 0, placed: 2, courseWide: [{ materialId: 13, filename: '자료구조.pdf' }] },
     }));
     render(<ProjectLearningMap courseId={7} />);
     await screen.findByText('연결 리스트');
 
     await user.click(screen.getByRole('tab', { name: '주차별' }));
 
-    // 한 주제가 두 주차에 모두 나온다.
-    expect(within(screen.getByRole('region', { name: '2주차' })).getByText('연결 리스트')).toBeInTheDocument();
+    const second = screen.getByRole('region', { name: '2주차' });
+    expect(within(second).getByText('연결 리스트')).toBeInTheDocument();
+    expect(within(second).getByText('자료: week2_slides.pptx')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: '3주차' })).getByText('연결 리스트')).toBeInTheDocument();
-    expect(screen.getAllByText('자료에 적힌 주차 — 실제 수업 진행과 다를 수 있어요')).toHaveLength(2);
+    // 확인된 주차에는 "확인 전" 안내가 붙지 않는다.
+    expect(screen.queryByText(/확인 전 주차/)).not.toBeInTheDocument();
+    // 강의계획서 같은 전체 참고자료는 주차 칸이 아니라 따로 적힌다.
+    expect(screen.getByText(/전체 참고자료: 자료구조\.pdf/)).toBeInTheDocument();
+  });
+
+  it('상위 항목이 같은 주차에 있으면 하위 항목을 맨 위에 한 번 더 놓지 않는다', async () => {
+    const user = userEvent.setup();
+    learningMapAPI.get.mockResolvedValue(mapResponse({
+      weeks: [{ label: '3주차', basis: 'CONFIRMED_MATERIAL', confirmed: true, weekNo: 3, materialIds: [11],
+        sectionIds: [], topicIds: [1, 2], materials: [] }],
+      weekReview: { needsReview: 0, placed: 1, courseWide: [] },
+    }));
+    render(<ProjectLearningMap courseId={7} />);
+    await screen.findByText('연결 리스트');
+    await user.click(screen.getByRole('tab', { name: '주차별' }));
+
+    const week = screen.getByRole('region', { name: '3주차' });
+    const topLevel = within(week).getAllByRole('list')[0];
+    expect(within(topLevel).getAllByText('연결 리스트')).toHaveLength(1);
+    // 「단순 연결 리스트」는 「연결 리스트」 아래(펼치면)에만 있고 맨 위 줄에는 없다.
+    expect([...topLevel.children].map((li) => li.querySelector('.lm-title')?.textContent)).toEqual(['연결 리스트']);
+  });
+});
+
+describe('ProjectLearningMap - 자료 주차 확인', () => {
+  it('확인 전 자료가 있으면 개수와 확인하는 길을 보이고, 추천은 지도에 넣지 않는다', async () => {
+    const user = userEvent.setup();
+    learningMapAPI.get.mockResolvedValue(mapResponse({ weekReview: { needsReview: 3, placed: 0, courseWide: [] } }));
+    materialWeekAPI.review.mockResolvedValue({
+      courseId: 7, courseTitle: '자료구조', weekCount: 15, needsReview: 3,
+      items: [{ materialId: 11, filename: 'ch03_list.pdf', materialType: 'PROFESSOR_SLIDE', analysisState: 'DONE',
+        assignment: null, suggestionDiffers: false,
+        suggestion: { placement: 'WEEK', week: 3, confidence: 'HIGH', bulkApplicable: true,
+          options: [{ placement: 'WEEK', week: 3 }], evidence: [{ kind: 'FILENAME_WEEK', detail: '파일명: 3주차' }] } }],
+    });
+    render(<ProjectLearningMap courseId={7} />);
+
+    expect(await screen.findByText('자료 주차 확인 필요 3개')).toBeInTheDocument();
+    // 추천이 있어도 주차 탭은 없다 — 확인된 주차가 없으니까.
+    expect(screen.queryByRole('tab', { name: '주차별' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '자료 주차 확인하기' }));
+    const dialog = await screen.findByRole('dialog', { name: '자료 주차 확인' });
+    expect(within(dialog).getByText('3주차 · AI 추천')).toBeInTheDocument();
   });
 });
 

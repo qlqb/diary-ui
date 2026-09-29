@@ -21,6 +21,8 @@ import ExecutionRow from '../../components/ExecutionRow.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
 import ProjectLearningMap from '../learning/ProjectLearningMap.jsx';
 import MaterialReview from '../learning/MaterialReview.jsx';
+import MaterialWeekReview from '../learning/MaterialWeekReview.jsx';
+import { weekApi } from '../learning/materialWeekApi.js';
 import AssignmentSection from './AssignmentSection.jsx';
 import ProjectTidyPanel from './ProjectTidyPanel.jsx';
 import AnalysisBatchCard from '../materials/AnalysisBatchCard.jsx';
@@ -47,6 +49,10 @@ import { formatDateKo, toIsoDate } from '../../lib/planTime.js';
 import { describeEstimate, estimateBasisNote, formatBytes, UPLOAD_TIME_NOTE } from '../../lib/analysisBatch.js';
 import '../../styles/learning-map.css';
 import '../../styles/project-tidy.css';
+import '../../styles/material-weeks.css';
+import {
+  currentSlotKey, materialWeekChip, slotOptions, slotRequest,
+} from '../../lib/materialWeeks.js';
 
 /**
  * 교재 정보 한 줄.
@@ -414,6 +420,7 @@ export default function ProjectWorkspace({
               onChanged={load}
               onAsk={onAsk}
               onProposalsChanged={() => setProposalRefresh((v) => v + 1)}
+              onWeeksChanged={() => setMapRefresh((v) => v + 1)}
             />
           </div>
 
@@ -545,7 +552,9 @@ function latestDraft(history) {
   return (history ?? []).find((a) => a.status === 'DRAFT') ?? null;
 }
 
-function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, onAsk, onProposalsChanged = null }) {
+function MaterialsSection({
+  courseId, materials, materialsCourseId, onChanged, onAsk, onProposalsChanged = null, onWeeksChanged = null,
+}) {
   const [error, setError] = useState(null);
   /*
    * 자동 분석 상태(자료별). 서버 작업 표가 원본이고 화면은 읽기만 한다. 진행 중인 자료가 있을 때만
@@ -623,6 +632,47 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
   const hydrationRef = useRef(0);
 
   const materialIds = materials.map((m) => m.materialId).join(',');
+
+  /*
+   * 자료 주차. 추천은 서버가 계산해 주고, 여기서는 확정 자리·추천을 한 줄 칩으로 보이고 선택 상자로 바로 고치게 한다.
+   * 한 화면 일괄 확인은 MaterialWeekReview가 한다. 분석이 끝나면(도는 자료 수가 줄면) 추천이 새로 생기므로 다시 읽는다.
+   */
+  const [weekReview, setWeekReview] = useState(null);
+  const [weekReviewOpen, setWeekReviewOpen] = useState(false);
+  const [weekBusyId, setWeekBusyId] = useState(null);
+  const weekTicket = useRef(0);
+  const analyzingCount = Object.values(analysisStatus).filter((st) => isAnalysisInProgress(st.state)).length;
+  const loadWeeks = useCallback(async () => {
+    const api = weekApi();
+    if (materialsCourseId !== courseId || !api?.review) return;
+    const mine = weekTicket.current + 1;
+    weekTicket.current = mine;
+    try {
+      const next = await api.review(courseId);
+      if (weekTicket.current === mine) setWeekReview(next);
+    } catch {
+      // 주차를 못 읽어도 자료 목록은 그대로 쓴다.
+    }
+  }, [courseId, materialsCourseId]);
+  useEffect(() => { loadWeeks(); }, [loadWeeks, materialIds, analyzingCount]);
+  const weekItemById = new Map((weekReview?.items ?? []).map((i) => [i.materialId, i]));
+
+  const changeWeek = async (materialId, key) => {
+    const item = weekItemById.get(materialId);
+    const request = item ? slotRequest(item, key) : null;
+    if (!request) return;
+    setWeekBusyId(materialId);
+    setError(null);
+    try {
+      setWeekReview(await weekApi().place(courseId, materialId, request));
+      onWeeksChanged?.();
+    } catch (err) {
+      setError(err.status === 409 ? '그 사이 주차 추천이 바뀌었어요. 다시 골라 주세요.' : (err.message || '주차를 바꾸지 못했어요.'));
+      await loadWeeks();
+    } finally {
+      setWeekBusyId(null);
+    }
+  };
 
   /*
    * 검토 중이던 초안을 화면 진입 때 되살린다.
@@ -764,6 +814,21 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
 
       {error && <p className="view-error">{error}</p>}
 
+      {weekReview && materials.length > 0 && (
+        <p className="material-week-head">
+          {weekReview.needsReview > 0
+            ? <span className="material-week-chip is-warn">주차 확인 필요 {weekReview.needsReview}개</span>
+            : <span className="view-dim">모든 자료의 주차를 확인했어요</span>}
+          <button type="button" className="btn-ghost btn-sm" onClick={() => setWeekReviewOpen(true)}>
+            자료 주차 확인
+          </button>
+        </p>
+      )}
+      {weekReviewOpen && (
+        <MaterialWeekReview courseId={courseId} onClose={() => setWeekReviewOpen(false)}
+          onChanged={async () => { await loadWeeks(); onWeeksChanged?.(); }} />
+      )}
+
       {/*
         한도에 닿아 기다리는 것은 실패가 아니다. 언제 이어지는지를 말하고, 그동안에도 상담·계획은
         된다는 것을 같은 자리에서 말한다.
@@ -799,6 +864,11 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
                 label={`${m.originalFilename}의 자료 역할`}
                 onChange={(t) => handleRoleChange(m.materialId, t)}
               />
+              {weekItemById.has(m.materialId) && (
+                <MaterialWeekControl item={weekItemById.get(m.materialId)} filename={m.originalFilename}
+                  weekCount={weekReview?.weekCount} busy={weekBusyId === m.materialId}
+                  onChange={(key) => changeWeek(m.materialId, key)} />
+              )}
               {m.extractionStatus === ExtractionStatus.SUCCESS ? (
                 analysisStatus[m.materialId]
                   ? <AnalysisStatusChip status={analysisStatus[m.materialId]} busy={busyId === m.materialId}
@@ -909,6 +979,26 @@ function MaterialsSection({ courseId, materials, materialsCourseId, onChanged, o
         />
       )}
     </section>
+  );
+}
+
+/**
+ * 자료 한 줄의 주차: 칩(확인됨/직접 지정/AI 추천/확인 필요)과 선택 상자. 추천은 선택된 값처럼 보이지 않는다 —
+ * 확인 전이면 선택 상자는 "주차 선택"이고, 추천은 칩에만 적힌다. 고르는 순간 저장된다.
+ */
+function MaterialWeekControl({ item, filename, weekCount, busy, onChange }) {
+  const chip = materialWeekChip(item);
+  const value = currentSlotKey(item);
+  return (
+    <span className="material-week">
+      {chip && <span className={`material-week-chip is-${chip.tone}`}>{chip.text}</span>}
+      <select className="mw-select" value={value} disabled={busy} aria-label={`${filename}의 주차`}
+        title="여러 주차에 놓인 자료는 여기서 고르면 한 주차로 바뀌어요. 여러 주차는 자료 주차 확인에서 더해요."
+        onChange={(e) => onChange(e.target.value)}>
+        {value === '' && <option value="" disabled>주차 선택</option>}
+        {slotOptions(weekCount).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </span>
   );
 }
 
