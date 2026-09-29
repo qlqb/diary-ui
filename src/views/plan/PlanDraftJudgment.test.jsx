@@ -129,9 +129,18 @@ describe('할 일·완료 기준·시작 자료', () => {
   });
 
   it('판단 영역은 자료 근거와 난이도를 따로 말한다 — 기록이 없으면 추정이라고', async () => {
+    // 초안 화면은 그 회차에 준 정보(출처)를 불러온다. 사용자 상태·실행 기록이 하나도 없었던 회차다.
+    planAPI.draftProvenance = vi.fn().mockResolvedValue({ providedSources: [], items: [] });
     await openDraft(WITH_ACTION);
+    await screen.findByText(/아직 확인한 내 상태가 없어요/);
     expect(screen.getByText(/실제로 해 본 기록이 아직 없어 분량·난이도는 AI 추정이에요/)).toBeInTheDocument();
-    expect(screen.getByText(/아직 확인한 내 상태가 없어요/)).toBeInTheDocument();
+    delete planAPI.draftProvenance;
+  });
+
+  it('출처를 불러오지 못한 화면에서는 참고한 상태가 없다고 단정하지 않는다', async () => {
+    await openDraft(WITH_ACTION);
+    expect(screen.getByText(/이 화면에서는 다시 불러오지 않아요/)).toBeInTheDocument();
+    expect(screen.queryByText(/아직 확인한 내 상태가 없어요/)).not.toBeInTheDocument();
   });
 });
 

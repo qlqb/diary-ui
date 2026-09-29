@@ -99,7 +99,9 @@ export default function PlanStrategyPanel({
           {/* 이 계획이 아는 나. 확인된 것과 추정을 같은 무게로 쓰지 않는다. */}
           <div className="plan-strategy-list plan-strategy-state">
             <span className="plan-strategy-label">이 계획이 참고한 내 상태</span>
-            {u.userState.length === 0 && u.historyCount === 0 && u.agreementCount === 0 ? (
+            {!u.stateKnown ? (
+              <p>이 화면에서는 다시 불러오지 않아요. 항목의 [근거 보기]에서 계획을 만들 때 참고한 정보를 볼 수 있어요.</p>
+            ) : u.userState.length === 0 && u.historyCount === 0 && u.agreementCount === 0 ? (
               <p>아직 확인한 내 상태가 없어요. 처음 보는 과목이어도 괜찮아요 — 해 본 결과가 다음 계획에 쓰여요.</p>
             ) : (
               <p>
@@ -121,10 +123,12 @@ export default function PlanStrategyPanel({
             )}
           </div>
 
-          <p className="plan-strategy-summary plan-strategy-basis">
-            <span className="plan-strategy-label">자료 근거</span>
-            {groundingLine(u.grounding)}
-          </p>
+          {u.grounding.known && (
+            <p className="plan-strategy-summary plan-strategy-basis">
+              <span className="plan-strategy-label">자료 근거</span>
+              {groundingLine(u.grounding)}
+            </p>
+          )}
           <p className="plan-strategy-summary plan-strategy-basis">
             <span className="plan-strategy-label">분량·난이도</span>
             {fitLine(u.fit)}

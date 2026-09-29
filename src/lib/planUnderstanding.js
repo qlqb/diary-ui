@@ -96,7 +96,9 @@ export function buildPlanUnderstanding({ strategy, provenance, selection, items 
       insufficient: !!selection?.insufficientEvidence,
       known: !!selection,
     },
-    fit: hasPerformance ? 'RECORDED' : hasSelfReport ? 'SELF_REPORT' : 'UNKNOWN',
+    // 출처(provenance)를 받지 않은 화면(확정 계획)에서는 "참고한 상태가 없다"고 단정하지 않는다.
+    stateKnown: !!provenance,
+    fit: !provenance ? 'NOT_LOADED' : hasPerformance ? 'RECORDED' : hasSelfReport ? 'SELF_REPORT' : 'UNKNOWN',
     changes: strategy?.changes ?? [],
     kept: strategy?.keptDecisions ?? [],
     existing: strategy?.existingDecisions ?? [],
@@ -117,6 +119,7 @@ export function groundingLine(g) {
 /** 적합성 한 줄. 자료를 읽은 것과 사용자가 해낼 수 있는 것을 구분한다. */
 export function fitLine(fit) {
   if (fit === 'RECORDED') return '분량·난이도는 실제 수행 기록을 참고한 추정이에요. 한 번의 결과로 과목 전체를 판단하지 않아요.';
+  if (fit === 'NOT_LOADED') return '분량·난이도는 계획을 만들 때의 추정이에요. 무엇을 참고했는지는 항목의 [근거 보기]에서 확인할 수 있어요.';
   if (fit === 'SELF_REPORT') return '분량·난이도는 내가 말한 상태를 참고한 추정이에요. 실제로 해 본 기록은 아직 없어요.';
   return '이 과목을 실제로 해 본 기록이 아직 없어 분량·난이도는 AI 추정이에요. 해 보면서 기록하면 다음 계획에서 조정돼요.';
 }
