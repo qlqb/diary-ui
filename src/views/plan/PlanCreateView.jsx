@@ -67,6 +67,7 @@ export default function PlanCreateView({
   const [startDate, setStartDate] = useState(todayIso);
   const [endDate, setEndDate] = useState(addDays(todayIso, 6));
   const [intensity, setIntensity] = useState(null);
+  const [purpose, setPurpose] = useState(null);
   const [intensityOpen, setIntensityOpen] = useState(false);
   const [instruction, setInstruction] = useState('');
 
@@ -248,7 +249,7 @@ export default function PlanCreateView({
     try {
       const result = await planAPI.createDraft({
         requestKey,
-        startDate, endDate, intensity,
+        startDate, endDate, intensity, purpose,
         instruction: instruction.trim() || null,
         // 프로젝트 화면에서 들어왔으면 그 프로젝트만 대상으로 한다. 안 넘기면 서버가
         // 전체 ACTIVE 프로젝트를 대상으로 잡아, 누른 버튼과 결과가 어긋난다.
@@ -461,6 +462,8 @@ export default function PlanCreateView({
             firstPlan={!hasHistory}
           />
 
+          <PurposePicker purpose={purpose} onSelect={(value) => { setPurpose(value); clearDraft(); }} />
+
           <label className="plan-instruction">
             <span>덧붙일 말 (선택)</span>
             <input
@@ -578,6 +581,34 @@ export default function PlanCreateView({
  * 강도는 "남는 시간의 몇 %까지를 공부 예산(상한)으로 잡을지"다. 초안이 있으면 그 기간의 실제 숫자
  * (추정 남는 시간 중 예산)를 함께 보여준다 — 라벨만으로는 `집중`이 얼마나 집중인지 모른다.
  */
+/**
+ * 계획 목적(선택). 목적마다 범위의 근거가 다르다 — 복습은 실제 수업 진행, 예습은 예정·다음 범위, 시험은 확인된 시험 범위,
+ * 독학은 고른 교재 범위. 고르지 않으면 상담에서 말한 목적을 쓰고, 그것도 없으면 가정을 밝힌다.
+ */
+const PURPOSE_OPTIONS = [
+  ['REVIEW', '복습·따라잡기'],
+  ['PREVIEW', '예습'],
+  ['EXAM', '시험 준비'],
+  ['SELF_STUDY', '독학·훑기'],
+];
+
+function PurposePicker({ purpose, onSelect }) {
+  return (
+    <fieldset className="plan-purpose">
+      <legend>이번 계획의 목적 (선택)</legend>
+      <div className="plan-purpose-options">
+        {PURPOSE_OPTIONS.map(([value, label]) => (
+          <button key={value} type="button" aria-pressed={purpose === value}
+            className={purpose === value ? 'chip chip-ok' : 'chip chip-status'}
+            onClick={() => onSelect(purpose === value ? null : value)}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 function IntensityPicker({ intensity, draft, open, onToggle, onSelect, firstPlan }) {
   const shown = intensity ?? draft?.intensity;
 

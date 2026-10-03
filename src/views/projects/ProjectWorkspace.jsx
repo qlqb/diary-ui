@@ -426,7 +426,8 @@ export default function ProjectWorkspace({
             />
           </div>
 
-          <TextbookPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken} onChanged={load} />
+          <TextbookPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken} onChanged={load}
+            onLookupSettled={() => setProposalRefresh((v) => v + 1)} />
 
           <ProjectTidyPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken}
             onApplied={load} onOpenMaterials={() => revealIn('work', materialsRef)} />
@@ -483,6 +484,7 @@ function RenameForm({ project, onCancel, onSaved }) {
     textbookEdition: project?.textbookEdition ?? '',
   });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   const setField = (key) => (e) => setTextbook((prev) => ({ ...prev, [key]: e.target.value }));
 
@@ -492,6 +494,7 @@ function RenameForm({ project, onCancel, onSaved }) {
       onSubmit={async (e) => {
         e.preventDefault();
         setSaving(true);
+        setSaveError(null);
         try {
           await courseAPI.update(project.courseId, {
             title: title.trim(),
@@ -501,8 +504,12 @@ function RenameForm({ project, onCancel, onSaved }) {
             textbookPublisher: textbook.textbookPublisher.trim() || null,
             textbookIsbn: textbook.textbookIsbn.trim() || null,
             textbookEdition: textbook.textbookEdition.trim() || null,
+            // 이 창을 연 때의 교재 판. 그 사이 다른 곳(웹에서 판 선택 등)에서 교재가 바뀌었으면 서버가 409로 멈춘다.
+            expectedTextbookVersion: project.textbookVersion ?? 0,
           });
           await onSaved();
+        } catch (err) {
+          setSaveError(err.message || '저장하지 못했어요.');
         } finally {
           setSaving(false);
         }
@@ -530,6 +537,7 @@ function RenameForm({ project, onCancel, onSaved }) {
       <p className="project-edit-hint">
         같은 제목의 교재가 여럿이라 저자와 출판사까지 있어야 어느 책인지 알 수 있어요.
       </p>
+      {saveError && <p className="view-error" role="alert">{saveError}</p>}
 
       <div className="project-edit-row">
         <button type="submit" className="btn-primary" disabled={saving || !title.trim()}>저장</button>

@@ -52,6 +52,8 @@ export function normalizeLearningMap(raw, courseId) {
     unlinked: raw?.unlinked ?? [],
     weeks: (raw?.weeks ?? []).filter((w) => w && w.label),
     weekReview: raw?.weekReview ?? null,
+    // 지도가 어느 교재 기준인지(지금 쓰는 교재 한 줄). 없으면 null.
+    textbook: raw?.textbook ?? null,
     source: 'server',
   };
 }

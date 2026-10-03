@@ -1336,7 +1336,7 @@ export const planAPI = {
     createDraft: ({
         startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null,
         familiarityAnswer = null, familiarityTopicIds = null, excludeTopicIds = null, requestedMaterialIds = null,
-        requestKey = null,
+        requestKey = null, purpose = null,
     }) => {
         return request('/plans/draft', {
             method: 'POST',
@@ -1351,6 +1351,8 @@ export const planAPI = {
                 excludeTopicIds,
                 // 이번 요청에서 사용자가 지정한 자료(자료함의 [이 자료로 계획]). 연결 출처와 다른 것이다.
                 requestedMaterialIds,
+                // 계획 목적(선택): REVIEW·PREVIEW·EXAM·SELF_STUDY. 목적마다 범위의 근거가 다르다. 없으면 상담 합의를 본다.
+                ...(purpose ? { purpose } : {}),
             }),
         });
     },
@@ -1660,9 +1662,32 @@ export const structureAPI = {
  */
 export const textbookAPI = {
     get: (courseId) => request(`/courses/${courseId}/textbook`),
-    apply: (courseId, { materialId, values, expected }) =>
+    apply: (courseId, { materialId, values, expected, expectedVersion }) =>
         request(`/courses/${courseId}/textbook/apply`, {
-            method: 'POST', body: JSON.stringify({ materialId, values, expected }),
+            method: 'POST', body: JSON.stringify({ materialId, values, expected, expectedVersion }),
+        }),
+    /** 강의계획서에 적힌 교재 하나를 지금 교재로(판 대조). */
+    applyClue: (courseId, { materialId, title, expectedVersion }) =>
+        request(`/courses/${courseId}/textbook/clue/apply`, {
+            method: 'POST', body: JSON.stringify({ materialId, title, expectedVersion }),
+        }),
+    /** 웹에서 찾은 판 중 하나를 지금 교재로(판 대조, 그 조회의 후보만). */
+    choose: (courseId, { lookupId, revisionId, expectedVersion }) =>
+        request(`/courses/${courseId}/textbook/web/choose`, {
+            method: 'POST', body: JSON.stringify({ lookupId, revisionId, expectedVersion }),
+        }),
+    /** 지금 근거로 다시 찾기(서버 백그라운드). */
+    retry: (courseId) => request(`/courses/${courseId}/textbook/web/retry`, { method: 'POST' }),
+    /** 사용자가 준 도서 상세 페이지 링크로 찾기. */
+    link: (courseId, url) =>
+        request(`/courses/${courseId}/textbook/web/link`, { method: 'POST', body: JSON.stringify({ url }) }),
+    /** 교재 단서를 외부로 보내 찾을지. */
+    setEnabled: (courseId, enabled) =>
+        request(`/courses/${courseId}/textbook/web/enabled`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+    /** 어느 책인지 적혀 있지 않은 업로드 목차를 지금 교재의 목차로 잇는다. */
+    linkToc: (courseId, { materialId, expectedVersion }) =>
+        request(`/courses/${courseId}/textbook/toc-link`, {
+            method: 'POST', body: JSON.stringify({ materialId, expectedVersion }),
         }),
 };
 

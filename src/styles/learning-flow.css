@@ -13,6 +13,8 @@
 
 /* 교재 */
 .textbook-panel .section-title { display: flex; align-items: center; gap: 6px; }
+/* 조회 상태는 글자로 읽힌다 — 본문과 같은 크기 */
+.textbook-panel .chip-status { font-size: 14px; }
 .textbook-current { margin: 0 0 4px; font-size: 14px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .textbook-next { margin: 4px 0; font-size: 14px; color: var(--ws-text); padding: 8px 10px; border-radius: 8px;
   background: var(--ws-bg); border: 1px solid var(--ws-border); }
@@ -24,6 +26,21 @@
 .textbook-field { display: inline-block; min-width: 56px; font-weight: 600; color: var(--ws-text-dim); }
 .textbook-conflict { color: var(--ws-warn); font-weight: 600; }
 .textbook-quote { display: block; padding-left: 24px; }
+.textbook-block { margin: 6px 0 10px; padding: 8px 0; border-bottom: 1px solid var(--ws-border); }
+.textbook-block-head { margin: 0 0 4px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.textbook-block p { font-size: 14px; }
+.textbook-source { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.textbook-link { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-size: 14px; }
+.textbook-clues, .textbook-editions { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.textbook-clues li, .textbook-editions li { font-size: 14px; line-height: 1.5; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.textbook-edition { display: inline; }
+.textbook-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.textbook-toggle { font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.textbook-link-form, .textbook-edit { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.textbook-link-form input { flex: 1 1 320px; font-size: 14px; }
+.textbook-edit input { flex: 1 1 160px; font-size: 14px; }
+.textbook-edit p { flex-basis: 100%; margin: 0; }
+.textbook-alternatives { margin: 4px 0; }
 
 /* 학습 구조 조정 요청 */
 .project-adjust { margin: 8px 0 10px; padding: 10px 12px; border: 1px solid var(--ws-border); border-radius: 8px; background: var(--ws-bg); }

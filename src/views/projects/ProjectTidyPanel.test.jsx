@@ -9,6 +9,7 @@
  *  - 새 자료가 끝나도 지금 보는 안은 그대로다. 다시 만드는 것은 사용자가 누를 때다.
  *  - 트리가 바뀌었으면 적용을 막고 이유를 말한다(정리안을 숨기지 않는다).
  */
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -93,6 +94,28 @@ beforeEach(() => {
 });
 
 describe('정리를 시작하기 전', () => {
+  it('교재 목차로 만든 안은 목차 근거와 적용 시 기록할 교재를 말한다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({
+      tocLabel: '웹 목차(예스24 · 10/4 조회 · 페이지에 실린 목차 전체)',
+      recordsTextbook: '「New English Conversation Arts 1」 · 형설출판사 · ISBN 9788947288132 · 2026-01-30 발행',
+    }));
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/교재 목차 근거: 웹 목차\(예스24/)).toBeInTheDocument();
+    expect(screen.getByText(/수업 진도나 밀린 일로 보지 않아요/)).toBeInTheDocument();
+    expect(screen.getByText(/적용하면 지금 교재로 「New English Conversation Arts 1」/)).toBeInTheDocument();
+  });
+
+  it('안을 만든 뒤 교재가 바뀌었으면 목차 변경은 적용하지 않는다고 말하고, 새 목차는 사용자가 반영한다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view({ tocStale: true, newTocAvailable: true }));
+    projectTidyAPI.request.mockResolvedValue(view());
+    render(<ProjectTidyPanel courseId={6} />);
+
+    expect(await screen.findByText(/교재나 교재 목차가 바뀌었어요/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '지금 교재로 다시 정리' }));
+    await waitFor(() => expect(projectTidyAPI.request).toHaveBeenCalled());
+  });
+
   it('쓸 수 있는 자료가 없으면 버튼이 열리지 않고 이유를 말한다', async () => {
     projectTidyAPI.get.mockResolvedValue(empty({ analyzingMaterialCount: 2 }));
     render(<ProjectTidyPanel courseId={6} />);
@@ -550,5 +573,15 @@ describe('학습 구조 조정 요청과 전후 보기', () => {
     expect(screen.getByText(/「4장 큐」에 걸린 기록: 남은 할 일 2 · 끝낸 것 1 · 진도 기록 있음 — 기록은 옮기거나 지우지 않아요/))
       .toBeInTheDocument();
     expect(screen.getAllByText('내 요청').length).toBeGreaterThan(0);
+  });
+  it('다시 붙어도(StrictMode·탭 전환) 조회가 끝나면 "불러오는 중"에 멈추지 않는다', async () => {
+    projectTidyAPI.get.mockResolvedValue(view());
+    const first = render(<StrictMode><ProjectTidyPanel courseId={6} /></StrictMode>);
+    expect(await screen.findByText('원형 큐')).toBeInTheDocument();
+    first.unmount();
+
+    render(<StrictMode><ProjectTidyPanel courseId={6} /></StrictMode>);
+    expect(await screen.findByText('원형 큐')).toBeInTheDocument();
+    expect(screen.queryByText(/불러오는 중/)).not.toBeInTheDocument();
   });
 });

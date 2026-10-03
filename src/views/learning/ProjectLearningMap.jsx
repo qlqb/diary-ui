@@ -253,6 +253,10 @@ export default function ProjectLearningMap({
         </span>
       </div>
 
+      {model?.textbook && (
+        <p className="view-sub-dim lm-textbook">지금 교재: {model.textbook}</p>
+      )}
+
       {/* 지도 상태와 무관하게 늘 보인다. 지도를 정리해야 상담할 수 있다는 인상을 주지 않는다. */}
       <p className="lm-optional">
         지도를 정리하지 않아도 상담과 계획은 바로 할 수 있어요.
@@ -628,6 +632,16 @@ function TopicNode({ topic, scope, depth, insideMatch, shared }) {
             )}
             {topic.scopeLabel != null && (
               <span className="chip chip-status">{topic.scopeLabel || '이번 계획'} 범위에서 뺌</span>
+            )}
+            {topic.priorTextbook && (
+              <span className="chip chip-status" title="교재를 바꾸기 전 책의 목차에서 온 항목이에요. 기록은 그대로이고, 지금 교재의 범위로 세지 않아요.">
+                이전 교재 목차
+              </span>
+            )}
+            {!topic.priorTextbook && topic.tocOrigin === 'WEB' && (
+              <span className="chip chip-status" title="서점 페이지의 목차에서 온 항목이에요. 목차 제목·쪽만 확인했고 본문은 보지 않았어요.">
+                웹 목차
+              </span>
             )}
             {topic.mergedDoneItems > 0 && (
               <span className="chip chip-warn" title="병합으로 보관된 항목에 남아 있는 기록이에요. 이 항목의 상태는 직접 확인해 주세요.">
