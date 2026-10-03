@@ -389,3 +389,38 @@
   .sheet-left .sheet-panel,
   .sheet-right .sheet-panel { animation: none !important; transition: none !important; }
 }
+
+/* ===== 상담 답변의 "확인한 자료" =====
+   접힌 한 줄로 시작한다. 펼쳐도 최대 높이 안에서만 스크롤해 입력창과 주요 버튼을 밀어내지 않는다(1536×760 기준). */
+.consult-evidence {
+  margin-top: 6px;
+  font-size: 12px;
+  border-top: 1px dashed var(--ws-border, #d9d9de);
+  padding-top: 4px;
+}
+.consult-evidence > summary {
+  cursor: pointer;
+  color: var(--ws-text-dim, #666);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  list-style: none;
+}
+.consult-evidence > summary::-webkit-details-marker { display: none; }
+.consult-evidence[open] > summary { margin-bottom: 4px; }
+.consult-evidence-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.consult-evidence[open] { max-height: 260px; overflow-y: auto; }
+.consult-evidence-heading { margin: 6px 0 2px; color: var(--ws-text-dim, #666); font-weight: 600; }
+.consult-evidence-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.consult-evidence-source, .consult-evidence-gaps li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+}
+.consult-evidence-kind { color: var(--ws-text-dim, #666); }
+.consult-evidence-source.is-used .consult-evidence-kind { color: var(--ws-accent-text, #2d4fbf); font-weight: 600; }
+.consult-evidence-title { word-break: break-all; }
+.consult-evidence-meta { color: var(--ws-text-dim, #666); }
+.consult-evidence-reading { display: flex; align-items: center; gap: 6px; color: var(--ws-text-dim, #666); }
+.consult-chip-input { border-style: dashed; }

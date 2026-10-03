@@ -28,6 +28,8 @@ import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
 import ScheduleImportReviewModal from './ScheduleImportReviewModal.jsx';
 import ConsultQuestionCard from './ConsultQuestionCard.jsx';
 import ConsultUnderstandingCard from './ConsultUnderstandingCard.jsx';
+import ConsultEvidence from './ConsultEvidence.jsx';
+import { evidenceOf } from './consultLabels.js';
 import { planStageLabel } from './consultLabels.js';
 import { isDismissed } from './dismissedDrafts.js';
 import { PLAN_INTENSITY_LABEL } from '../types/execution.js';
@@ -283,6 +285,8 @@ export default function AiPanel({
         content: m.content,
         responseType: m.responseType,
         proposalId: m.proposalId,
+        // 이 답변이 확인한 자료. 새로고침·재접속 뒤에도 같은 출처가 보인다(서버가 메시지에 저장해 둔 것).
+        evidence: m.role === 'ASSISTANT' ? evidenceOf(m.consult) : null,
         streaming: false,
       })));
 
@@ -464,7 +468,14 @@ export default function AiPanel({
             setMessages((prev) => [...prev, { key: streamingKey, role: 'ASSISTANT', content: '', streaming: true }]);
           } else if (eventName === 'message.delta') {
             setMessages((prev) => prev.map((m) =>
-              (m.key === streamingKey ? { ...m, content: m.content + (data?.text ?? '') } : m)));
+              (m.key === streamingKey ? { ...m, content: m.content + (data?.text ?? ''), reading: null } : m)));
+          } else if (eventName === 'evidence.reading') {
+            /*
+             * AI가 자료를 더 읽는 중이다. 앞서 흘러온 "…확인해 볼게요"는 답이 아니므로 지우고, 서버가 실제로 읽는 대상을
+             * 보여 준다. 최종 답변은 이어지는 delta다.
+             */
+            setMessages((prev) => prev.map((m) =>
+              (m.key === streamingKey ? { ...m, content: '', reading: data?.label || '자료를 더 확인하는 중' } : m)));
           } else if (eventName === 'offer.ready') {
             setCurrentOffer(data?.offerAction ?? { label: '이 내용으로 초안 만들기' });
           } else if (eventName === 'proposal.ready') {
@@ -487,7 +498,10 @@ export default function AiPanel({
           } else if (eventName === 'message.completed') {
             if (data?.userMessageId) lastUserMessageIdRef.current = data.userMessageId;
             setMessages((prev) => prev.map((m) => (m.key === streamingKey
-              ? { ...m, content: data.reply ?? m.content, responseType: data.responseType, streaming: false }
+              ? {
+                ...m, content: data.reply ?? m.content, responseType: data.responseType, streaming: false, reading: null,
+                evidence: evidenceOf(data?.consult),
+              }
               : m)));
             /*
              * 상담 카드. 질문이 있으면 예전 quickReplies보다 그쪽이 우선이다 — 같은 질문을 두 모양으로
@@ -544,13 +558,14 @@ export default function AiPanel({
    * 질문 카드의 선택지·건너뛰기. 자유 입력과 같은 보내기 경로를 지난다 — 고른 라벨이 내 말로 기록에 남고,
    * 어느 질문의 어떤 선택지였는지만 answer로 덧붙인다. 입력창에 쓰던 글은 그대로 둔다.
    */
-  const handleQuestionAnswer = async ({ questionId, choiceIds, skipped, text }) => {
+  const handleQuestionAnswer = async ({ questionId, choiceIds, skipped, lookup, text }) => {
     if (sending) return;
     await runTurn({
       message: text,
       requestedAction: 'AUTO',
       idempotencyKey: newIdempotencyKey(),
-      answer: { questionId, choiceIds: choiceIds ?? [], skipped: Boolean(skipped) },
+      // lookup: "내 자료에서 찾아봐" — 서버가 자료 확인을 넓힌다. 선택지의 뜻은 서버가 저장된 질문에서 다시 정한다.
+      answer: { questionId, choiceIds: choiceIds ?? [], skipped: Boolean(skipped), lookup: Boolean(lookup) },
     }, { optimisticUserText: text });
   };
 
@@ -562,8 +577,11 @@ export default function AiPanel({
       { optimisticUserText: text });
   };
 
-  const focusInput = useCallback(() => {
+  /** 입력 안내 선택지("시험 날짜 적기")를 누르면 보내지 않고 입력창을 연다. 안내는 자리표시 글로만 보인다. */
+  const [inputHint, setInputHint] = useState(null);
+  const focusInput = useCallback((hint) => {
     setView('chat');
+    setInputHint(typeof hint === 'string' && hint ? hint : null);
     inputRef.current?.focus();
   }, []);
 
@@ -928,7 +946,14 @@ export default function AiPanel({
 
             {visibleMessages.map((m) => (
               <div key={m.key} className={`ai-bubble ai-bubble-${m.role.toLowerCase()}`}>
-                <p>{m.content}{m.streaming && <span className="ai-cursor" aria-hidden="true" />}</p>
+                {m.reading && !m.content ? (
+                  <p className="consult-evidence-reading" role="status">
+                    <Loader2 size={13} className="spin" aria-hidden="true" /> {m.reading}
+                  </p>
+                ) : (
+                  <p>{m.content}{m.streaming && <span className="ai-cursor" aria-hidden="true" />}</p>
+                )}
+                {!m.streaming && m.evidence && <ConsultEvidence evidence={m.evidence} />}
               </div>
             ))}
 
@@ -1130,7 +1155,7 @@ export default function AiPanel({
             <textarea
               ref={inputRef}
               className="ai-textarea"
-              placeholder={scope.placeholder}
+              placeholder={inputHint ? `${inputHint} — 여기에 적어 주세요` : scope.placeholder}
               value={inputText}
               onChange={(e) => typeInput(e.target.value)}
               onPaste={handlePaste}

@@ -130,7 +130,7 @@ describe('질문 카드', () => {
 
     await user.click(await screen.findByRole('button', { name: '이 질문 건너뛰기' }));
     await waitFor(() => expect(conversationAPI.sendMessage).toHaveBeenCalledTimes(2));
-    expect(conversationAPI.sendMessage.mock.calls[1][1].answer).toEqual({ questionId: 'q1', choiceIds: [], skipped: true });
+    expect(conversationAPI.sendMessage.mock.calls[1][1].answer).toEqual({ questionId: 'q1', choiceIds: [], skipped: true, lookup: false });
 
     await user.click(await screen.findByRole('button', { name: '지금까지 얘기로 계획해줘' }));
     await waitFor(() => expect(conversationAPI.sendMessage).toHaveBeenCalledTimes(3));

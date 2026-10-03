@@ -7,10 +7,14 @@
  *   위로 올리고, 보내기는 패널이 한다. 고른 라벨이 대화 기록에 내 말로 남는다.
  * ★ 답하지 않을 길을 늘 둔다: 둘 다 아님 / 잘 모르겠어 / 건너뛰기 / 지금까지 얘기로 계획 / 나중에.
  *   "나중에 이어하기"는 아무것도 보내지 않는다. 카드를 접고 조용히 한 줄만 남긴다.
+ * ★ 선택지의 뜻(kind)은 서버가 정한다. 답(kind 없음)은 누르면 내 답으로 간다. 입력 안내(INPUT, "시험 날짜 적기")는 답이
+ *   아니라서 보내지 않고 입력창만 연다 — 예전에는 "과목명과 날짜 말하기"가 답으로 가서 같은 질문이 되풀이됐다. 자료 찾기
+ *   (LOOKUP)와 "내 자료에서 찾아봐"는 AI가 자료를 더 넓게 확인하게 한다.
  */
 
 import { useState } from 'react';
 import { HelpCircle } from 'lucide-react';
+import { LOOKUP_TEXT } from './consultLabels.js';
 
 export default function ConsultQuestionCard({
   question, disabled = false, onAnswer, onPlanNow, onFocusInput,
@@ -19,8 +23,11 @@ export default function ConsultQuestionCard({
   const [later, setLater] = useState(false);
 
   if (!question?.text) return null;
-  const choices = question.choices ?? [];
-  const multi = Boolean(question.multiSelect);
+  const allChoices = question.choices ?? [];
+  const choices = allChoices.filter((c) => !c.kind || c.kind === 'ANSWER');
+  const inputChoices = allChoices.filter((c) => c.kind === 'INPUT');
+  const lookupChoices = allChoices.filter((c) => c.kind === 'LOOKUP');
+  const multi = Boolean(question.multiSelect) && choices.length > 1;
 
   if (later) {
     return (
@@ -32,9 +39,9 @@ export default function ConsultQuestionCard({
     );
   }
 
-  const send = (choiceIds, text, skipped = false) => {
+  const send = (choiceIds, text, skipped = false, lookup = false) => {
     if (disabled) return;
-    onAnswer?.({ questionId: question.id, choiceIds, skipped, text });
+    onAnswer?.({ questionId: question.id, choiceIds, skipped, lookup, text });
   };
 
   const toggle = (choice) => {
@@ -79,6 +86,22 @@ export default function ConsultQuestionCard({
           ))}
         </div>
       )}
+      {(inputChoices.length > 0 || lookupChoices.length > 0) && (
+        <div className="consult-question-choices" role="group" aria-label="답하는 다른 방법">
+          {inputChoices.map((choice) => (
+            <button key={choice.id} type="button" className="chip consult-chip consult-chip-input"
+              onClick={() => onFocusInput?.(choice.label)}>
+              ✎ {choice.label}
+            </button>
+          ))}
+          {lookupChoices.map((choice) => (
+            <button key={choice.id} type="button" className="chip consult-chip consult-chip-lookup" disabled={disabled}
+              onClick={() => send([choice.id], choice.label)}>
+              {choice.label}
+            </button>
+          ))}
+        </div>
+      )}
       {multi && choices.length > 0 && (
         <div className="consult-question-multi">
           <span className="ai-hint">여러 개 고를 수 있어요 · {picked.size}개 고름</span>
@@ -104,7 +127,11 @@ export default function ConsultQuestionCard({
           직접 말하기
         </button>
         <button type="button" className="btn-ghost btn-sm" disabled={disabled}
-          onClick={() => send([], '이 질문은 건너뛸게', true)}>
+          onClick={() => send([], LOOKUP_TEXT, false, true)}>
+          내 자료에서 찾아봐
+        </button>
+        <button type="button" className="btn-ghost btn-sm" disabled={disabled}
+          onClick={() => send([], '이 질문은 건너뛸게요.', true)}>
           이 질문 건너뛰기
         </button>
         <button type="button" className="btn-ghost btn-sm" disabled={disabled} onClick={() => onPlanNow?.()}>

@@ -57,3 +57,17 @@ export const PLAN_PANE_STATE_LABEL = {
   APPLIED: '적용됨',
   STALE: '갱신 필요',
 };
+
+/** 서버가 대화 기록에 남기는 문장과 같다(ConsultTurnService.LOOKUP_MESSAGE) — 새로고침 전후로 같은 말이 보인다. */
+export const LOOKUP_TEXT = '이 질문에 필요한 내용은 내 자료에서 찾아서 확인해 줘.';
+
+/** 상담 턴의 consult에서 "확인한 자료"를 꺼낸다. 서버가 이 필드를 모르면 null — 있는 것만 그린다. */
+export function evidenceOf(consult) {
+  const evidence = consult?.evidence;
+  if (!evidence || typeof evidence !== 'object') return null;
+  return {
+    summary: evidence.summary ?? '',
+    sources: Array.isArray(evidence.sources) ? evidence.sources : [],
+    gaps: Array.isArray(evidence.gaps) ? evidence.gaps : [],
+  };
+}
