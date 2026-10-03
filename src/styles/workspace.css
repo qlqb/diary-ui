@@ -1280,6 +1280,13 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .grid-block.is-draft.is-dragging { cursor: grabbing; opacity: 0.75; }
 .grid-block.is-draft.is-excluded { opacity: 0.45; border-color: var(--ws-border-strong); color: var(--ws-text-faint); }
 .grid-block.is-move { background: #fff; }
+.grid-block.is-draft.is-readonly { cursor: default; touch-action: auto; }
+
+/* 계획 초안의 주간 블록 미리보기. 좁은 상담 칸에서도 일곱 칸이 다 보이게 글씨와 높이를 줄인다. */
+.plan-week-preview { margin-top: 6px; }
+.plan-week-preview .week-grid-wrap { margin-bottom: 4px; }
+.plan-week-preview .week-grid-body { max-height: 420px; }
+.plan-week-preview .grid-block-title { overflow: hidden; text-overflow: ellipsis; }
 
 /* ===================== 적용 바 ===================== */
 

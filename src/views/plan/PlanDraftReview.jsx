@@ -35,6 +35,7 @@ import { actionOf, startSourceLine } from '../../lib/planItemText.js';
 import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
 import PlanItemDetail from './PlanItemDetail.jsx';
 import PlanMaterialSelection from './PlanMaterialSelection.jsx';
+import PlanWeekPreview from './PlanWeekPreview.jsx';
 
 import '../../styles/learning-flow.css';
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
@@ -121,6 +122,8 @@ export default function PlanDraftReview({
    */
   const [previewFailed, setPreviewFailed] = useState(false);
   const [previewReload, setPreviewReload] = useState(0);
+  /** 주간 블록 격자. 목록과 같은 미리보기를 자리로 보여줄 뿐이라 기본으로 펼친다. */
+  const [weekOpen, setWeekOpen] = useState(true);
   /** 직접 고친 예상 시간(proposalItemId → 분). 원래 값과 같아지면 지운다. */
   const [minutesEdits, setMinutesEdits] = useState(() => restored.minutes ?? new Map());
   const [minutesOpen, setMinutesOpen] = useState(() => new Set());
@@ -641,6 +644,19 @@ export default function PlanDraftReview({
           정확한 시각은 처음 7일({formatDateKo(preview.horizonStart)} ~ {formatDateKo(preview.horizonEnd)})만 미리 계산했어요.
           이번 주 이후 항목은 해당 주가 가까워지면 배치됩니다.
         </p>
+      )}
+
+      {preview && (preview.placedItems ?? []).length > 0 && (
+        <div className="plan-group plan-week-toggle">
+          <div className="plan-group-head">
+            <button type="button" className="plan-group-toggle" onClick={() => setWeekOpen((v) => !v)}
+              aria-expanded={weekOpen}>
+              {weekOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <span className="plan-group-title">주간 블록으로 보기</span>
+            </button>
+          </div>
+          {weekOpen && <PlanWeekPreview preview={preview} items={items} excluded={excluded} />}
+        </div>
       )}
 
       {adjustments.length > 0 && (

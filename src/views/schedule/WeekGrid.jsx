@@ -310,13 +310,14 @@ export default function WeekGrid({
               .map((card) => (
                 <div
                   key={card.proposalItemId}
-                  className={`grid-block is-draft${card.excluded ? ' is-excluded' : ''}${draggingId === card.proposalItemId ? ' is-dragging' : ''}`}
+                  className={`grid-block is-draft${onPatchCard ? '' : ' is-readonly'}${card.excluded ? ' is-excluded' : ''}${draggingId === card.proposalItemId ? ' is-dragging' : ''}`}
                   style={{ top: topOf(card.startTime), height: heightOf(card.startTime, card.endTime) }}
-                  role="button"
-                  tabIndex={0}
-                  title={`${card.title} — 끌어서 옮길 수 있어요`}
+                  role={onPatchCard ? 'button' : undefined}
+                  tabIndex={onPatchCard ? 0 : undefined}
+                  title={onPatchCard ? `${card.title} — 끌어서 옮길 수 있어요` : `${card.title} · ${card.startTime}~${card.endTime}`}
                   onPointerDown={(e) => {
-                    if (card.excluded) return;
+                    // onPatchCard가 없으면 보기 전용이다(계획 탭 미리보기).
+                    if (card.excluded || !onPatchCard) return;
                     e.currentTarget.setPointerCapture?.(e.pointerId);
                     const blockRect = e.currentTarget.getBoundingClientRect();
                     dragRef.current = { proposalItemId: card.proposalItemId, offsetY: e.clientY - blockRect.top };

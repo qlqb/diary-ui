@@ -7,7 +7,7 @@
  * 백엔드 주소. 기본은 로컬 8080이고, 다른 포트에서 띄운 서버를 붙일 때만
  * VITE_API_BASE_URL로 덮어쓴다(예: 개발 중 두 인스턴스를 동시에 띄우는 경우).
  */
-const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? 'http://localhost:8080/api';
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? 'http://localhost:8081/api';
 
 const TOKEN_KEY = 'token';
 
