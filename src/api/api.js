@@ -1755,6 +1755,17 @@ contextAPI.confirm = contextAPI.confirm ?? ((contextId) =>
     request(`/contexts/${contextId}/confirm`, { method: 'POST' }));
 contextAPI.remove = contextAPI.remove ?? ((contextId) =>
     request(`/contexts/${contextId}`, { method: 'DELETE' }));
+/** 고치기(종류·단원·도움 수준까지). 비운 칸은 서버가 그대로 둔다. topicId 0은 단원 연결 끊기. */
+contextAPI.edit = contextAPI.edit ?? ((contextId, { content, kind, topicId, help, label }) =>
+    request(`/contexts/${contextId}`, {
+        method: 'PATCH', body: JSON.stringify({ content, kind, topicId, help, label }),
+    }));
+
+// ===== study-memory =====
+/** 프로젝트 사실 카드 — 상담·계획이 받는 것과 같은 "확인된 상태". 읽기 전용(고치기는 contextAPI). */
+export const studyStateAPI = {
+    get: (courseId) => request(`/courses/${courseId}/study-state`),
+};
 // ===== /consult-workspace (agent B) =====
 
 // ===== consult-workspace (agent A) =====

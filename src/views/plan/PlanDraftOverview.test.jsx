@@ -205,6 +205,42 @@ describe('낡은 초안', () => {
 });
 
 describe('항목 카드', () => {
+  it('학습 목표는 서버가 정한 근거와 함께 보이고, 목차에서 추론한 목표는 그렇다고 말한다', async () => {
+    const draft = {
+      ...DRAFT,
+      proposal: {
+        proposalId: 77,
+        items: [
+          {
+            proposalItemId: 11, title: 'have to 예약 문장 말하기', expectedMinutes: 20, courseId: 9, priority: 'SHOULD',
+            evidence: { origin: 'AI_PRACTICE' }, learningGoal: 'have to로 해야 할 일 말하기', learningGoalBasis: 'TOC_AI',
+          },
+          {
+            proposalItemId: 12, title: '주말 질문', expectedMinutes: 20, courseId: 9, priority: 'SHOULD',
+            learningGoal: '과거시제로 주말 질문하기', learningGoalBasis: 'USER',
+          },
+          { proposalItemId: 13, title: '목표 없는 항목', expectedMinutes: 20, courseId: 9, priority: 'SHOULD' },
+        ],
+      },
+    };
+    render(<PlanDraftReview draft={draft} todayIso="2026-09-19" projectTitles={{ 9: '영어회화' }} />);
+    await screen.findByRole('region', { name: '초안 요약' });
+
+    const first = screen.getByText('have to 예약 문장 말하기').closest('li');
+    expect(within(first).getByText('have to로 해야 할 일 말하기')).toBeInTheDocument();
+    const basis = within(first).getByText('목차에서 추론');
+    expect(basis).toHaveAttribute('title', expect.stringContaining('단원 제목만 보고 추론했어요'));
+    expect(within(first).getByText('AI가 만든 연습')).toBeInTheDocument();
+    expect(within(first).getByText(/교재 문제가 아니에요/)).toBeInTheDocument();
+
+    const second = screen.getByText('주말 질문').closest('li');
+    expect(within(second).getByText('내가 정한 목표')).toBeInTheDocument();
+
+    const third = screen.getByText('목표 없는 항목').closest('li');
+    expect(within(third).queryByText('목표')).not.toBeInTheDocument();
+    expect(screen.queryByText(/TOC_AI|USER/)).not.toBeInTheDocument();
+  });
+
   it('출처 라벨·위치 안내·꼭 하는 이유·마감 출처를 따로 말하고, 마감이 없으면 미확인이라고 한다', async () => {
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" projectTitles={{ 6: '자료구조' }} />);
     await screen.findByRole('region', { name: '초안 요약' });
@@ -218,7 +254,7 @@ describe('항목 카드', () => {
     expect(within(first).getByText(/화요일 수업 전 \(9\/22 14:00\) · 수업 시각/)).toBeInTheDocument();
 
     const second = screen.getByText('복잡도 연습').closest('li');
-    expect(within(second).getByText('AI가 만든 추가 연습')).toBeInTheDocument();
+    expect(within(second).getByText('AI가 만든 연습')).toBeInTheDocument();
     expect(within(second).getByText(/9\/24 23:59까지 · AI가 제안한 목표 시각 — 실제 마감 아님/)).toBeInTheDocument();
 
     const third = screen.getByText('발표 준비').closest('li');
