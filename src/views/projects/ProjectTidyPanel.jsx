@@ -30,6 +30,9 @@ import '../../styles/learning-flow.css';
 
 export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied = null, onOpenMaterials = null }) {
   const [view, setView] = useState(null);
+  // 지금 그려진 정리안. 다시 읽을 때 "불러오는 중"을 쓸지(첫 조회인지) 고르는 데만 쓴다.
+  const viewRef = useRef(null);
+  viewRef.current = view;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -91,10 +94,9 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
   useEffect(() => {
     // 다시 읽는 동안 화면을 비우지 않는다. 검토 중인 정리안이 깜빡이며 사라지면,
     // 사용자는 자기가 고치던 것이 날아갔다고 읽는다. 첫 조회일 때만 "불러오는 중"을 쓴다.
-    setView((current) => {
-      if (!current) setLoading(true);
-      return current;
-    });
+    // 갱신 함수 안에서 다른 상태를 바꾸지 않는다 — React가 갱신 함수를 나중에 다시 돌리면(StrictMode·재계산)
+    // 조회가 끝난 뒤에 "불러오는 중"이 되살아나 화면이 멈춘다. 지금 보이는 정리안은 ref로 본다.
+    if (!viewRef.current) setLoading(true);
     load();
     return () => { ticketRef.current += 1; };
   }, [load, refreshToken]);
@@ -405,6 +407,32 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
               이 정리안을 만든 뒤 학습 구조가 바뀌었어요. 그대로 적용하지 않아요 —
               <button type="button" className="btn-ghost btn-sm" disabled={busy}
                 onClick={() => requestTidy(true)}>다시 정리</button>
+            </p>
+          )}
+          {view.tocLabel && !view.tocStale && (
+            <p className="project-tidy-info">
+              교재 목차 근거: {view.tocLabel}. 목차는 책이 다루는 범위예요 — 수업 진도나 밀린 일로 보지 않아요.
+            </p>
+          )}
+          {view.tocStale && (
+            <p className="project-tidy-warn" role="alert">
+              이 정리안을 만든 뒤 교재나 교재 목차가 바뀌었어요. 목차에서 온 변경은 적용하지 않아요(나머지는 골라 적용할 수 있어요) —
+              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                onClick={() => requestTidy(true)}>지금 교재로 다시 정리</button>
+            </p>
+          )}
+          {!view.tocStale && view.newTocAvailable && (
+            <p className="project-tidy-info">
+              이 정리안에 들어 있지 않은 새 교재 목차가 있어요. 지금 검토 중인 안은 그대로 두었어요.
+              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                onClick={() => requestTidy(true)}>
+                <RefreshCw size={12} /> 새 목차로 다시 정리
+              </button>
+            </p>
+          )}
+          {view.recordsTextbook && (
+            <p className="project-tidy-info">
+              목차에서 온 변경을 적용하면 지금 교재로 {view.recordsTextbook}을(를) 기록해요. 다른 책이면 교재 구역에서 먼저 고쳐 주세요.
             </p>
           )}
           {fromMaterials && view.newMaterialCount > 0 && (
