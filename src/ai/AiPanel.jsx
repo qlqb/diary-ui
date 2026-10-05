@@ -1065,9 +1065,11 @@ export default function AiPanel({
                       const p = photoInfo[id];
                       return (
                         <li key={id} className="ai-bubble-photo">
-                          <span className="chip chip-status">
+                          {/* 제목에 단원 제목이 이미 들어 있으면 단원은 다시 쓰지 않고, 추정 여부와 목차 순번만 덧붙인다. */}
+                          <span className="chip chip-status" title={p?.topic ? photoTopicText(p.topic) : undefined}>
                             {p?.title ?? '교재 사진'}
-                            {p?.topic ? ` · ${photoTopicText(p.topic)}${p.link === 'GUESSED' ? '(추정)' : ''}` : ''}
+                            {p?.topic && !(p.title ?? '').includes(p.topic.title) ? ` · ${photoTopicText(p.topic)}` : ''}
+                            {p?.link === 'GUESSED' ? ' · 단원 추정' : ''}
                           </span>
                           {p && (p.originalAvailable ? (
                             <>
