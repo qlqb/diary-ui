@@ -16,7 +16,7 @@ import {
   FileText, Upload, Loader2, ArrowLeft, Link2, Trash2, X,
   Plus, Check, AlertCircle, UploadCloud, Sparkles, RotateCcw,
 } from 'lucide-react';
-import { materialAnalysisStatusAPI, materialStoreAPI, zipImportAPI } from '../../api/api.js';
+import { consultPhotoAPI, materialAnalysisStatusAPI, materialStoreAPI, zipImportAPI } from '../../api/api.js';
 import AnalysisStatusChip from '../../components/AnalysisStatusChip.jsx';
 import AnalysisOverviewBar from './AnalysisOverviewBar.jsx';
 import useAnalysisOverview from './useAnalysisOverview.js';
@@ -326,6 +326,17 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
   const [deleteError, setDeleteError] = useState(null);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
+
+  /** 상담 사진의 원본만 지운다(읽은 글·단원 연결은 남는다). */
+  const deletePhotoOriginal = async (materialId) => {
+    try {
+      const updated = await consultPhotoAPI.deleteOriginal(materialId);
+      setAllMaterials((prev) => prev.map((x) => (x.materialId === materialId
+        ? { ...x, originalAvailable: Boolean(updated?.originalAvailable) } : x)));
+    } catch (err) {
+      setError(err.message || '원본을 지우지 못했어요.');
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1012,6 +1023,21 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
                         {m.extractionStatus === ExtractionStatus.SUCCESS && m.extractionWarning && (
                             <span className="chip chip-warn" title={m.extractionWarning}>일부만 읽음</span>
                         )}
+                        {m.origin === 'CONSULT_PHOTO' && (
+                            <>
+                              <span className="chip chip-status"
+                                    title="상담에서 올린 교재 사진이에요. 원본은 30일 뒤 지워지고 읽은 글은 남아요.">
+                                상담 사진
+                              </span>
+                              {m.originalAvailable ? (
+                                  <button type="button" className="btn-ghost btn-sm"
+                                          onClick={() => deletePhotoOriginal(m.materialId)}
+                                          title="읽은 글과 단원 연결은 남아요">
+                                    원본만 지우기
+                                  </button>
+                              ) : <span className="chip chip-warn">원본 지워짐 · 읽은 글은 남음</span>}
+                            </>
+                        )}
                         {m.extractionStatus === ExtractionStatus.SUCCESS && analysis.byMaterialId.get(m.materialId) && (
                             <AnalysisStatusChip status={analysis.byMaterialId.get(m.materialId)}
                                 limit={analysis.overview?.limit ?? null}
@@ -1021,11 +1047,13 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
                           추출 상태와 무관하게 열 수 있다. 텍스트를 못 뽑은 자료일수록
                           사람이 직접 열어 봐야 한다.
                         */}
-                        <MaterialFileLink
-                            materialId={m.materialId}
-                            filename={m.originalFilename}
-                            contentType={m.contentType}
-                        />
+                        {(m.origin !== 'CONSULT_PHOTO' || m.originalAvailable) && (
+                            <MaterialFileLink
+                                materialId={m.materialId}
+                                filename={m.originalFilename}
+                                contentType={m.contentType}
+                            />
+                        )}
                         {/*
                           이 자료 중심으로 계획 만들기. 이번 계획 요청의 지정일 뿐이다 — 토픽 연결을 새로 만들지 않고,
                           다른 자료를 검토 대상에서 없애지도 않는다. 분석이 끝나지 않았으면 서버가 그렇게 알려준다.
