@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { UNDERSTANDING_EVIDENCE_LABEL } from './consultLabels.js';
+import { FACT_KIND_LABEL } from '../lib/studyLabels.js';
 
 export default function ConsultUnderstandingCard({ lines = [], onEdit, onRestate }) {
   const [editingId, setEditingId] = useState(null);
@@ -77,6 +78,9 @@ export default function ConsultUnderstandingCard({ lines = [], onEdit, onRestate
                     {lineState?.status === 'fixed'
                       ? UNDERSTANDING_EVIDENCE_LABEL.STATED
                       : (UNDERSTANDING_EVIDENCE_LABEL[line.evidenceType] ?? '근거 미확인')}
+                    {/* 종류·단원(진도·막힌 곳·해결 …). 진도와 내 이해를 다른 사실로 읽게 한다. */}
+                    {FACT_KIND_LABEL[line.kind] ? ` · ${FACT_KIND_LABEL[line.kind]}` : ''}
+                    {line.topicTitle ? ` · ${line.topicTitle}` : ''}
                     {line.scopeLabel ? ` · ${line.scopeLabel}` : ''}
                     {line.isNew && lineState?.status !== 'fixed' ? ' · 이번에 새로 이해함' : ''}
                   </span>

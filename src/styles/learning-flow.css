@@ -78,3 +78,19 @@
 .lm-corrections p, .lm-corrections ul { margin: 2px 0; }
 .lm-corrections ul { list-style: none; padding: 0; }
 .lm-corrections-label { font-weight: 700; color: var(--ws-text-dim); margin-right: 6px; }
+
+/* ===== 프로젝트 사실 카드(이 프로젝트에서 기억하는 것) — 본문 14px 이상 ===== */
+.study-state .section-desc { font-size: 14px; color: var(--ws-text-dim); margin: 2px 0 8px; }
+.study-state-textbook { font-size: 14px; margin: 4px 0 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.study-state-group { margin-top: 10px; }
+.study-state-group-title { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+.study-state-group-desc { font-size: 13px; margin: 0 0 4px; }
+.study-state-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.study-state-item { border: 1px solid var(--ws-border); border-radius: 8px; padding: 8px 10px; background: var(--ws-surface); }
+.study-state-text { font-size: 14px; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.study-state-meta { font-size: 13px; color: var(--ws-text-dim); margin: 4px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.study-state-edit { display: flex; flex-direction: column; gap: 6px; }
+.study-state-edit textarea { font-size: 14px; width: 100%; }
+.study-state-edit-fields { display: flex; flex-wrap: wrap; gap: 10px; font-size: 14px; }
+.study-state-notice, .study-state-stale { font-size: 14px; margin: 4px 0; }
+.plan-item-goal { margin: 2px 0 0 24px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

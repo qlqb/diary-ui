@@ -199,7 +199,7 @@ export const NEXT_ACTION_HINT = {
 /** 항목이 어디서 나왔는가. 자료에 있던 과제와 AI가 지어낸 연습을 같은 것으로 읽히게 두지 않는다. */
 export const ITEM_ORIGIN_LABEL = {
   SOURCE_TASK: '자료에 있는 과제·실습',
-  AI_PRACTICE: 'AI가 만든 추가 연습',
+  AI_PRACTICE: 'AI가 만든 연습',
   USER_REQUEST: '내가 요청한 준비 작업',
 };
 

@@ -693,6 +693,8 @@ export default function MainShell({ user, onLogout }) {
           variant={consultActive ? 'workspace' : 'side'}
           onConsultState={setConsultState}
           onDraftStale={consultDraft.markStale}
+          /* 상담이 기억을 남기면 프로젝트 화면의 사실 카드가 다시 읽는다(전체 새로고침은 하지 않는다). */
+          onMemoryChanged={() => setRefreshToken((v) => v + 1)}
           draftNotice={consultActive && layout !== 'inline' ? draftNotice : null}
           onOpenScopePane={consultActive && layout !== 'inline' ? () => setOpenPane('scope') : undefined}
           onOpenPreviewPane={consultActive && layout !== 'inline' ? () => setOpenPane('preview') : undefined}

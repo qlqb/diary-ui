@@ -27,6 +27,7 @@ import {
   formatEstimate,
 } from '../../lib/planLabels.js';
 import { buildEvidenceSummary } from '../../lib/planEvidence.js';
+import { GOAL_BASIS_LABEL, GOAL_BASIS_TITLE } from '../../lib/studyLabels.js';
 import { acquirePreview, previewInputKey, replacePreview, storedOrRecompute } from '../../ai/previewSolveCache.js';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import PlanDraftOverview from './PlanDraftOverview.jsx';
@@ -998,7 +999,11 @@ function PlanDraftGroup({
  * ★ 마감은 출처와 함께 따로 적는다. AI가 잡은 목표 시각은 실제 마감이 아니다. 없으면 "마감 미확인"이다.
  */
 function ItemFacts({ item, evidence, provenance, projectTitles, classAt, onMaterialOpenError }) {
-  const origin = ITEM_ORIGIN_LABEL[evidence?.origin ?? item.evidence?.origin ?? item.origin] ?? null;
+  const originKey = evidence?.origin ?? item.evidence?.origin ?? item.origin;
+  const origin = ITEM_ORIGIN_LABEL[originKey] ?? null;
+  // 학습 목표와 그 근거(서버 판정). 목차 제목만 보고 추론한 목표는 그렇다고 적는다 — 교재 본문을 확인한 것처럼 읽히지 않게.
+  const goal = item.learningGoal ?? null;
+  const goalBasis = GOAL_BASIS_LABEL[item.learningGoalBasis] ?? null;
   const deadline = describeDeadline(item.deadlineAt, classAt, item.deadlineSource);
   const must = item.priority === 'MUST';
   // 할 일은 완료 기준과 함께 보인다. 설명은 "행동 · 완료: 기준"으로 합쳐 저장돼 있어 꼬리만 뗀다.
@@ -1014,7 +1019,22 @@ function ItemFacts({ item, evidence, provenance, projectTitles, classAt, onMater
 
   return (
     <>
-      {origin && <p className="plan-item-origin"><span className="plan-item-tag">{origin}</span></p>}
+      {origin && (
+        <p className="plan-item-origin">
+          <span className="plan-item-tag">{origin}</span>
+          {originKey === 'AI_PRACTICE' && <span className="view-dim"> 교재 문제가 아니에요</span>}
+        </p>
+      )}
+
+      {goal && (
+        <p className="plan-item-goal">
+          <span className="plan-item-done-label">목표</span>
+          <span>{goal}</span>
+          {goalBasis && (
+            <span className="chip chip-status" title={GOAL_BASIS_TITLE[item.learningGoalBasis]}>{goalBasis}</span>
+          )}
+        </p>
+      )}
 
       {action && (
         <p className="plan-item-action">

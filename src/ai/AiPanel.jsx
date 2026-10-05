@@ -139,6 +139,8 @@ export default function AiPanel({
   onConsultState,
   /** 답이 열린 초안에 영향을 줬다. draftIds가 null이면 "지금 열린 초안"을 뜻한다. */
   onDraftStale,
+  /** 상담이 프로젝트 기억(진도·막힌 곳…)을 저장하거나 고쳤다 — 사실 카드가 다시 읽게 셸에 알린다. */
+  onMemoryChanged,
   /** 좁은 화면에서 입력창 위에 늘 보이는 한 줄(포함·빠진 프로젝트, 가정 여부). 누르면 미리보기가 열린다. */
   draftNotice = null,
   onOpenScopePane,
@@ -510,6 +512,7 @@ export default function AiPanel({
             const consult = consultOf(data);
             setConsultQuestion(consult?.question ?? null);
             setConsultUnderstanding(consult?.understanding ?? []);
+            if ((consult?.understanding ?? []).some((u) => u.source === 'MEMORY' && u.isNew)) onMemoryChanged?.();
             if (consult?.direction) {
               setConsultDirection({ ...consult.direction, fresh: true });
               // 방향이 바뀌어 열린 초안이 낡았다. 초안을 지우지 않고 "이전 버전"으로 표시만 한다.
@@ -594,6 +597,7 @@ export default function AiPanel({
       const response = await consultContextAPI.update(line.id, { content });
       const staleIds = response?.staleDraftIds ?? [];
       if (staleIds.length > 0) onDraftStale?.(staleIds, 'UNDERSTANDING');
+      onMemoryChanged?.();
       return { ok: true };
     } catch (err) {
       return { ok: false, message: err?.message || '고치지 못했어요. 다시 시도해 주세요.' };
