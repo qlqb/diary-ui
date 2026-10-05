@@ -59,6 +59,8 @@ const KIND_BY_CONTENT_TYPE = [
 
 /** 목록에 보이는 형식 이름. 파일명 확장자를 먼저 보고, 없으면 content type으로 짐작한다. */
 export function materialFileKind(filename, contentType) {
+  // 상담에서 올린 교재 사진(파일명은 "교재 사진 p.24 · …"라 확장자가 없다).
+  if (String(contentType ?? '').toLowerCase().startsWith('image/')) return '사진';
   const ext = materialExtension(filename);
   if (MATERIAL_EXTENSIONS.includes(ext) || ext === ARCHIVE_EXTENSION) return ext.toUpperCase();
   const type = String(contentType ?? '').toLowerCase();

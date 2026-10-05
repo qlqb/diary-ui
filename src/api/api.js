@@ -125,7 +125,11 @@ async function requestMultipart(url, formData) {
     }
 
     if (!response.ok) {
-        throw new Error(data?.message || data?.error || `요청 실패: ${response.status}`);
+        const error = new Error(data?.message || data?.error || `요청 실패: ${response.status}`);
+        // request()와 같은 필드 — 화면이 상태별(진행 중 409·한도 429)로 다르게 다룬다.
+        error.status = response.status;
+        error.code = data?.code ?? null;
+        throw error;
     }
 
     return data;
@@ -841,6 +845,39 @@ export const scheduleImportAPI = {
             method: 'POST',
             body: JSON.stringify(body),
         });
+    },
+};
+
+/**
+ * 상담 교재 사진. 한 장씩 올린다(장마다 uploadKey — 응답을 잃으면 같은 키로 결과를 다시 받는다).
+ * 원본 사진은 30일 뒤 지워지고 읽은 글은 남는다.
+ */
+export const consultPhotoAPI = {
+    /** 사진 한 장을 올려 글자를 읽는다. 모델 호출이라 십여 초 걸린다. */
+    upload: (conversationId, file, uploadKey) => {
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('uploadKey', uploadKey);
+        return requestMultipart(`/ai/conversations/${conversationId}/photos`, formData);
+    },
+    /** 같은 키의 결과(처리 중이면 409). */
+    result: (conversationId, uploadKey) => {
+        return request(`/ai/conversations/${conversationId}/photos?uploadKey=${encodeURIComponent(uploadKey)}`);
+    },
+    /** 이 대화에 올린 사진들(기록 복원). */
+    list: (conversationId) => {
+        return request(`/ai/conversations/${conversationId}/photos`);
+    },
+    /** 단원 확인·변경. topicId가 null이면 연결을 푼다. */
+    setTopic: (photoId, topicId) => {
+        return request(`/materials/${photoId}/photo-topic`, {
+            method: 'PUT',
+            body: JSON.stringify({ topicId }),
+        });
+    },
+    /** 원본 사진만 지운다(읽은 글·단원 연결은 남는다). */
+    deleteOriginal: (photoId) => {
+        return request(`/materials/${photoId}/original`, { method: 'DELETE' });
     },
 };
 

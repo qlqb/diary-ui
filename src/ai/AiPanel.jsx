@@ -18,12 +18,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Sparkles, Loader2, Send, List, Plus, MessageCircle, ArrowLeft, PanelRightClose, CircleCheck, Trash2,
-  ImagePlus, FolderOpen, ListChecks, BrainCircuit,
+  ImagePlus, FolderOpen, ListChecks, BrainCircuit, BookOpen, CalendarDays,
 } from 'lucide-react';
 import {
   conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI, scheduleImportAPI, planAPI,
-  consultContextAPI,
+  consultContextAPI, consultPhotoAPI, materialStoreAPI,
 } from '../api/api.js';
+import ConsultPhotoTray from './ConsultPhotoTray.jsx';
+import { photoTopicText } from '../lib/studyLabels.js';
+import { useConsultPhotos } from './useConsultPhotos.js';
 import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
 import ScheduleImportReviewModal from './ScheduleImportReviewModal.jsx';
 import ConsultQuestionCard from './ConsultQuestionCard.jsx';
@@ -204,6 +207,16 @@ export default function AiPanel({
   const bodyRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const photoInputRef = useRef(null);
+  /** 첨부 메뉴(과목 대화에서만 — 교재 사진 / 일정표). */
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  /** 과목 대화에 붙여넣은 이미지: 교재 사진으로 볼지 일정표로 가져올지 묻는 동안 들고 있다. */
+  const [pastedImage, setPastedImage] = useState(null);
+  /** 메시지에 붙인 사진 id → 사진 정보(말풍선 아래 칩). */
+  const [photoInfo, setPhotoInfo] = useState({});
+  const [photoNotice, setPhotoNotice] = useState(null);
+  /** 새 대화·대화 선택마다 올린다 — 대화 id가 그대로여도(새 대화 → 새 대화) 사진 트레이를 비운다. */
+  const [photoResetKey, setPhotoResetKey] = useState(0);
   const abortControllerRef = useRef(null);
   const activeStreamConversationIdRef = useRef(null);
   const lastUserMessageIdRef = useRef(null);
@@ -269,6 +282,7 @@ export default function AiPanel({
     abortControllerRef.current?.abort();
     activeStreamConversationIdRef.current = null;
     const myToken = ++loadTokenRef.current;
+    setPhotoResetKey((k) => k + 1);
 
     setView('chat');
     setActiveConversationId(conversationId);
@@ -289,8 +303,15 @@ export default function AiPanel({
         proposalId: m.proposalId,
         // 이 답변이 확인한 자료. 새로고침·재접속 뒤에도 같은 출처가 보인다(서버가 메시지에 저장해 둔 것).
         evidence: m.role === 'ASSISTANT' ? evidenceOf(m.consult) : null,
+        photoIds: m.photoIds ?? [],
         streaming: false,
       })));
+      if (history.some((m) => (m.photoIds ?? []).length > 0)) {
+        consultPhotoAPI.list(conversationId).then((list) => {
+          if (loadTokenRef.current !== myToken) return;
+          setPhotoInfo(Object.fromEntries((list ?? []).map((p) => [p.photoId, p])));
+        }).catch(() => {});
+      }
 
       const lastUser = [...history].reverse().find((m) => m.role === 'USER');
       if (lastUser) lastUserMessageIdRef.current = lastUser.messageId;
@@ -376,6 +397,7 @@ export default function AiPanel({
     abortControllerRef.current?.abort();
     activeStreamConversationIdRef.current = null;
     loadTokenRef.current += 1;
+    setPhotoResetKey((k) => k + 1);
     setView('chat');
     setActiveConversationId(null);
     resetTurnState();
@@ -425,7 +447,7 @@ export default function AiPanel({
     }
   };
 
-  const runTurn = async (payload, { optimisticUserText } = {}) => {
+  const runTurn = async (payload, { optimisticUserText, photoIds, onAccepted } = {}) => {
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -442,8 +464,13 @@ export default function AiPanel({
     // 내가 보낸 직후에는 바닥으로 데려간다 — 방금 보낸 말과 그 답이 보여야 한다.
     nearBottomRef.current = true;
 
+    const optimisticKey = `u-${Date.now()}`;
+    // 서버가 사용자 메시지를 저장했다(message.started — 첨부 사진도 같은 트랜잭션에 남았다).
+    let accepted = false;
     if (optimisticUserText) {
-      setMessages((prev) => [...prev, { key: `u-${Date.now()}`, role: 'USER', content: optimisticUserText, streaming: false }]);
+      setMessages((prev) => [...prev, {
+        key: optimisticKey, role: 'USER', content: optimisticUserText, photoIds: photoIds ?? [], streaming: false,
+      }]);
     }
 
     const streamingKey = `a-${Date.now()}`;
@@ -467,6 +494,8 @@ export default function AiPanel({
 
           if (eventName === 'message.started') {
             started = true;
+            accepted = true;
+            onAccepted?.();
             setMessages((prev) => [...prev, { key: streamingKey, role: 'ASSISTANT', content: '', streaming: true }]);
           } else if (eventName === 'message.delta') {
             setMessages((prev) => prev.map((m) =>
@@ -540,11 +569,27 @@ export default function AiPanel({
       if (abortControllerRef.current === controller) abortControllerRef.current = null;
       if (activeStreamConversationIdRef.current === targetConversationId) setSending(false);
     }
+    // 저장되지 않은 메시지의 사진 칩은 거둔다(사진은 트레이에 그대로 있어 다시 보낼 수 있다).
+    if (!accepted && (photoIds ?? []).length > 0) {
+      setMessages((prev) => prev.map((m) => (m.key === optimisticKey ? { ...m, photoIds: [] } : m)));
+    }
+    return accepted;
   };
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || sending) return;
+    if (sending) return;
+    if (photos.busy) {
+      setPhotoNotice('사진을 다 읽은 뒤에 보낼 수 있어요.');
+      return;
+    }
+    const photoIds = photos.readyIds;
+    if (!text) {
+      // 사진만으로는 보내지 않는다 — 무엇을 볼지는 사용자의 말이어야 한다(그 말로 기억을 만든다).
+      if (photoIds.length > 0) setPhotoNotice('사진에서 무엇을 볼까요? 한 줄 적어 주세요.');
+      return;
+    }
+    setPhotoNotice(null);
     typeInput('');
     /*
      * 질문 카드가 떠 있을 때 직접 쓴 답도 그 질문의 답이다. 선택지를 고르지 않았다는 것만 다르다 —
@@ -552,9 +597,45 @@ export default function AiPanel({
      */
     const answer = consultQuestion?.id != null
       ? { questionId: consultQuestion.id, choiceIds: [], skipped: false } : null;
-    await runTurn({
+    // 사진은 자유 입력 턴에만 붙는다(질문 카드의 답에는 붙이지 않는다 — 서버도 막는다).
+    const withPhotos = photoIds.length > 0 && !answer;
+    if (withPhotos) {
+      setPhotoInfo((prev) => ({
+        ...prev,
+        ...Object.fromEntries(photos.items.filter((it) => it.photo?.photoId).map((it) => [it.photo.photoId, it.photo])),
+      }));
+    }
+    const accepted = await runTurn({
       message: text, requestedAction: 'AUTO', idempotencyKey: newIdempotencyKey(), ...(answer ? { answer } : {}),
-    }, { optimisticUserText: text });
+      ...(withPhotos ? { photoIds } : {}),
+    }, {
+      optimisticUserText: text,
+      photoIds: withPhotos ? photoIds : [],
+      // 서버가 메시지를 저장한 순간(답을 기다리기 전에) 보낸 사진을 트레이에서 뺀다 — 이미 보낸 사진을 [빼기]로 지우지 못하게.
+      // 보내기에 실패하면 사진은 트레이에 그대로 남아 다시 보낼 수 있다.
+      onAccepted: withPhotos ? () => photos.clearSent(photoIds) : undefined,
+    });
+    if (withPhotos && accepted) photos.clearSent(photoIds);
+  };
+
+  /** 말풍선 아래 사진 칩의 원본 열기·지우기. 원본이 지워져도 읽은 글은 남는다. */
+  const openPhotoOriginal = async (photoId) => {
+    try {
+      const blob = await materialStoreAPI.file(photoId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      setPhotoNotice(err.message || '원본을 열지 못했어요.');
+    }
+  };
+  const deletePhotoOriginal = async (photoId) => {
+    try {
+      const updated = await consultPhotoAPI.deleteOriginal(photoId);
+      setPhotoInfo((prev) => ({ ...prev, [photoId]: updated }));
+    } catch (err) {
+      setPhotoNotice(err.message || '원본을 지우지 못했어요.');
+    }
   };
 
   /**
@@ -736,6 +817,21 @@ export default function AiPanel({
     })
     .map((s) => s.suggestionId);
 
+  /** 사진을 올리려면 대화가 있어야 한다(사진은 그 대화의 자료가 된다). 없으면 만든다. */
+  const ensureConversation = useCallback(async () => {
+    if (activeConversationId) return activeConversationId;
+    // 만드는 사이 다른 대화·새 대화로 옮겼으면 이 대화를 열지 않는다(사진도 올리지 않는다 — 훅이 null을 받으면 멈춘다).
+    const token = loadTokenRef.current;
+    const created = await conversationAPI.create(scope.conversationScope, scope.courseId ?? null);
+    if (loadTokenRef.current !== token) return null;
+    setActiveConversationId(created.conversationId);
+    inputKeyRef.current = inputDraftKey(created.conversationId, '');
+    return created.conversationId;
+  }, [activeConversationId, scope]);
+
+  const photos = useConsultPhotos({ conversationId: activeConversationId, ensureConversation, resetKey: photoResetKey });
+  const coursePhotos = Boolean(scope.courseId);
+
   const handleImageChosen = useCallback(async (file) => {
     if (!file || importing) return;
     setImportError(null);
@@ -769,8 +865,13 @@ export default function AiPanel({
     const file = item.getAsFile();
     if (!file) return;
     event.preventDefault();
+    // 과목 대화에서는 교재 사진일 수도 있다 — 묻는다. 그 밖에는 예전처럼 일정표로 읽는다.
+    if (coursePhotos) {
+      setPastedImage(file);
+      return;
+    }
     handleImageChosen(file);
-  }, [handleImageChosen]);
+  }, [handleImageChosen, coursePhotos]);
 
   const handleImportConfirm = async ({ conversationId, ...body }) => {
     const created = await scheduleImportAPI.confirm(conversationId, {
@@ -958,6 +1059,34 @@ export default function AiPanel({
                   <p>{m.content}{m.streaming && <span className="ai-cursor" aria-hidden="true" />}</p>
                 )}
                 {!m.streaming && m.evidence && <ConsultEvidence evidence={m.evidence} />}
+                {(m.photoIds ?? []).length > 0 && (
+                  <ul className="ai-bubble-photos" aria-label="붙인 교재 사진">
+                    {m.photoIds.map((id) => {
+                      const p = photoInfo[id];
+                      return (
+                        <li key={id} className="ai-bubble-photo">
+                          {/* 제목에 단원 제목이 이미 들어 있으면 단원은 다시 쓰지 않고, 추정 여부와 목차 순번만 덧붙인다. */}
+                          <span className="chip chip-status" title={p?.topic ? photoTopicText(p.topic) : undefined}>
+                            {p?.title ?? '교재 사진'}
+                            {p?.topic && !(p.title ?? '').includes(p.topic.title) ? ` · ${photoTopicText(p.topic)}` : ''}
+                            {p?.link === 'GUESSED' ? ' · 단원 추정' : ''}
+                          </span>
+                          {p && (p.originalAvailable ? (
+                            <>
+                              <button type="button" className="btn-ghost btn-sm" onClick={() => openPhotoOriginal(id)}>
+                                원본 보기
+                              </button>
+                              <button type="button" className="btn-ghost btn-sm" onClick={() => deletePhotoOriginal(id)}
+                                title="읽은 글은 남아요">
+                                원본 지우기
+                              </button>
+                            </>
+                          ) : <span className="ai-photo-gone">원본은 지워졌어요(읽은 글은 남아요)</span>)}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             ))}
 
@@ -1132,6 +1261,28 @@ export default function AiPanel({
             </button>
           )}
 
+          <ConsultPhotoTray
+            items={photos.items}
+            notice={photos.notice ?? photoNotice}
+            onRetry={photos.retry}
+            onRemove={photos.remove}
+            onTopic={photos.setTopic}
+          />
+          {pastedImage && (
+            <div className="ai-paste-choice" role="group" aria-label="붙여넣은 이미지">
+              <span>붙여넣은 이미지를 어떻게 할까요?</span>
+              <button type="button" className="btn-ghost btn-sm"
+                onClick={() => { photos.add([pastedImage]); setPastedImage(null); }}>
+                교재 사진으로 보기
+              </button>
+              <button type="button" className="btn-ghost btn-sm"
+                onClick={() => { handleImageChosen(pastedImage); setPastedImage(null); }}>
+                일정표로 가져오기
+              </button>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => setPastedImage(null)}>취소</button>
+            </div>
+          )}
+
           <footer className="ai-panel-foot">
             <input
               ref={fileInputRef}
@@ -1146,16 +1297,60 @@ export default function AiPanel({
                 handleImageChosen(file);
               }}
             />
-            <button
-              type="button"
-              className="btn-ghost ai-attach"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={sending || loadingHistory || importing}
-              aria-label="일정표 이미지 첨부"
-              title="근무표 같은 일정표 이미지를 넣으면 일정 후보로 만들어요"
-            >
-              {importing ? <Loader2 size={15} className="spin" /> : <ImagePlus size={15} />}
-            </button>
+            {coursePhotos && (
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                hidden
+                aria-label="교재 사진 고르기"
+                onChange={(e) => {
+                  const files = [...(e.target.files ?? [])];
+                  e.target.value = '';
+                  photos.add(files);
+                }}
+              />
+            )}
+            {coursePhotos ? (
+              <div className="ai-attach-wrap">
+                <button
+                  type="button"
+                  className="btn-ghost ai-attach"
+                  onClick={() => setAttachMenuOpen((o) => !o)}
+                  disabled={sending || loadingHistory || importing}
+                  aria-label="사진 첨부"
+                  aria-haspopup="menu"
+                  aria-expanded={attachMenuOpen}
+                  title="교재 사진을 같이 보거나, 일정표 사진을 일정 후보로 가져와요"
+                >
+                  {importing || photos.busy ? <Loader2 size={15} className="spin" /> : <ImagePlus size={15} />}
+                </button>
+                {attachMenuOpen && (
+                  <div className="ai-attach-menu" role="menu">
+                    <button type="button" role="menuitem"
+                      onClick={() => { setAttachMenuOpen(false); photoInputRef.current?.click(); }}>
+                      <BookOpen size={14} aria-hidden="true" /> 교재 사진 같이 보기
+                    </button>
+                    <button type="button" role="menuitem"
+                      onClick={() => { setAttachMenuOpen(false); fileInputRef.current?.click(); }}>
+                      <CalendarDays size={14} aria-hidden="true" /> 일정표 가져오기
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn-ghost ai-attach"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending || loadingHistory || importing}
+                aria-label="일정표 이미지 첨부"
+                title="근무표 같은 일정표 이미지를 넣으면 일정 후보로 만들어요. 교재 사진은 과목 대화에서 올릴 수 있어요"
+              >
+                {importing ? <Loader2 size={15} className="spin" /> : <ImagePlus size={15} />}
+              </button>
+            )}
             <textarea
               ref={inputRef}
               className="ai-textarea"
@@ -1177,7 +1372,7 @@ export default function AiPanel({
               type="button"
               className="btn-primary ai-send"
               onClick={handleSend}
-              disabled={sending || loadingHistory || !inputText.trim()}
+              disabled={sending || loadingHistory || (!inputText.trim() && photos.readyIds.length === 0)}
               aria-label="보내기"
             >
               {sending ? <Loader2 size={15} className="spin" /> : <Send size={15} />}

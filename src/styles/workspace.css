@@ -1493,6 +1493,88 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 /* 이미지 첨부. 보내기 버튼과 크기를 맞추되 강조하지 않는다 — 대화가 주 경로다. */
 .ai-attach { width: 40px; height: 40px; padding: 0; flex-shrink: 0; }
 
+/* ===== 상담 교재 사진(첨부 메뉴·트레이·말풍선 칩) ===== */
+.ai-attach-wrap { position: relative; flex-shrink: 0; }
+.ai-attach-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 176px;
+  padding: 4px;
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.12);
+}
+.ai-attach-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ws-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.ai-attach-menu button:hover, .ai-attach-menu button:focus-visible { background: var(--ws-accent-soft); }
+
+.ai-photo-tray { padding: 8px 16px 0; border-top: 1px solid var(--ws-border); }
+.ai-photo-note { margin: 0 0 6px; font-size: 12px; color: var(--ws-text-faint); }
+.ai-photo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ai-photo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  background: var(--ws-surface);
+}
+.ai-photo-thumb {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--ws-bg);
+}
+.ai-photo-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ai-photo-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--ws-text); overflow-wrap: anywhere; }
+.ai-photo-status { margin: 0; font-size: 12px; color: var(--ws-text-dim); display: flex; align-items: center; gap: 4px; }
+.ai-photo-topic { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ai-photo-topic-select { max-width: 100%; font-size: 12px; padding: 4px 6px; }
+.ai-photo-text summary { font-size: 12px; color: var(--ws-text-dim); cursor: pointer; }
+.ai-photo-text pre {
+  margin: 4px 0 0;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.5 inherit;
+  color: var(--ws-text);
+}
+.ai-photo-remove { width: 28px; height: 28px; padding: 0; flex-shrink: 0; }
+
+.ai-paste-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px 0;
+  font-size: 13px;
+  color: var(--ws-text-dim);
+}
+
+.ai-bubble-photos { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ai-bubble-photo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ai-photo-gone { font-size: 12px; color: var(--ws-text-faint); }
+
 .ai-import-status {
   display: flex;
   align-items: center;

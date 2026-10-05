@@ -50,6 +50,12 @@ export function topicChipText(fact) {
   return fact.topicTocSeq ? `${title} · 목차 ${fact.topicTocSeq}번째` : title;
 }
 
+/** 상담 사진의 단원 칩 글자("Unit 3 … · 목차 3번째"). 사진 응답의 topic({ topicId, title, sourceTocSeq })을 받는다. */
+export function photoTopicText(topic) {
+  if (!topic) return null;
+  return topicChipText({ topicId: topic.topicId, topicTitle: topic.title, topicTocSeq: topic.sourceTocSeq });
+}
+
 /** "10월 5일" */
 export function formatSaidDay(value) {
   if (!value) return null;
