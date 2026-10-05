@@ -18,6 +18,7 @@ import { BookOpen, ChevronDown, ChevronRight, ExternalLink, Loader2, RotateCcw }
 import { courseAPI, textbookAPI } from '../../api/api.js';
 
 import '../../styles/learning-flow.css';
+import { countBelow, tocTree } from '../../lib/tocTree.js';
 
 const FIELD_LABEL = { title: '제목', author: '저자', publisher: '출판사', isbn: 'ISBN', edition: '판' };
 const SOURCE_LABEL = { USER: '직접 적음', MATERIAL: '자료에서 찾아 적용함', WEB: '웹에서 판을 확인함' };
@@ -214,19 +215,12 @@ export default function TextbookPanel({ courseId, refreshToken = 0, onChanged, o
               <p className="view-sub-dim">
                 {toc.label ?? (toc.filename ? `「${toc.filename}」 목차` : '교재 목차')} · 항목 {toc.entryCount}개
                 {toc.kind === 'WEB' && toc.coverage === 'PARTIAL' && ' · 일부만 확보했어요'}
+                {toc.kind === 'WEB' && toc.unread > 0 && ` · 목차로 읽지 못한 줄 ${toc.unread}개`}
               </p>
               <button type="button" className="collapse-head" aria-expanded={tocOpen} onClick={() => setTocOpen((v) => !v)}>
                 {tocOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />} 목차 보기
               </button>
-              {tocOpen && (
-                <ol className="textbook-toc">
-                  {toc.entries.map((e, i) => (
-                    <li key={i} style={{ paddingLeft: `${Math.max(0, e.level - 1) * 16}px` }}>
-                      {e.number} {e.title}{e.page ? <span className="view-sub-dim"> · p.{e.page}</span> : null}
-                    </li>
-                  ))}
-                </ol>
-              )}
+              {tocOpen && <TocTreeList nodes={tocTree(toc.entries)} />}
             </div>
           ) : null}
 
@@ -456,5 +450,39 @@ function TextbookEditForm({ current, busy, onCancel, onSave }) {
         <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>취소</button>
       </div>
     </form>
+  );
+}
+
+/**
+ * 목차 트리. 장(최상위)만 보이고 하위항목은 접혀 있다 — 눌러 펼친다. 깊이 단계를 자르지 않는다.
+ */
+function TocTreeList({ nodes, depth = 0 }) {
+  return (
+    <ol className={depth === 0 ? 'textbook-toc' : 'textbook-toc-children'}>
+      {nodes.map((node) => <TocTreeNode key={node.key} node={node} depth={depth} />)}
+    </ol>
+  );
+}
+
+function TocTreeNode({ node, depth }) {
+  const [open, setOpen] = useState(false);
+  const { entry } = node;
+  const below = countBelow(node);
+  const label = (
+    <>
+      {entry.number ? `${entry.number} ` : ''}{entry.title}
+      {entry.page ? <span className="view-sub-dim"> · p.{entry.page}</span> : null}
+    </>
+  );
+  return (
+    <li className="textbook-toc-item">
+      {node.children.length > 0 ? (
+        <button type="button" className="textbook-toc-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {label}
+          {!open && <span className="view-sub-dim"> · 하위 {below}개</span>}
+        </button>
+      ) : <span className="textbook-toc-leaf">{label}</span>}
+      {open && node.children.length > 0 && <TocTreeList nodes={node.children} depth={depth + 1} />}
+    </li>
   );
 }
