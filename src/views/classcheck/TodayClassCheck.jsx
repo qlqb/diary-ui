@@ -16,6 +16,7 @@ export default function TodayClassCheck({ projectTitles = {} }) {
   const [views, setViews] = useState(null);
   const [skipped, setSkipped] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null); // { text, alert }
   const ticket = useRef(0);
   const courseIds = Object.keys(projectTitles).join(',');
@@ -26,12 +27,15 @@ export default function TodayClassCheck({ projectTitles = {} }) {
     ticket.current = mine;
     const api = classApi();
     if (!api?.pending || !courseIds) { setViews({ byCourse: {}, at: Date.now() }); return true; }
+    setLoading(true);
     const next = {};
     let ok = true;
     await Promise.all(courseIds.split(',').map(async (id) => {
       try { next[id] = await api.pending(Number(id), 2); } catch { ok = false; /* 그 과목만 건너뛴다 */ }
     }));
-    if (ticket.current === mine) setViews({ byCourse: next, at: Date.now() });
+    if (ticket.current !== mine) return true; // 더 늦게 시작한 조회가 그린다
+    setViews({ byCourse: next, at: Date.now() });
+    setLoading(false);
     return ok;
   }, [courseIds]);
 
@@ -76,7 +80,7 @@ export default function TodayClassCheck({ projectTitles = {} }) {
       {notice && <p className={notice.alert ? 'view-error' : 'view-notice'} role={notice.alert ? 'alert' : 'status'}>{notice.text}</p>}
       {current && (
         <ClassCheckSession key={`${current.courseId}-${sessionViewKey(current.session)}`}
-          title={projectTitles[current.courseId]} session={current.session} options={current.options} busy={busy}
+          title={projectTitles[current.courseId]} session={current.session} options={current.options} busy={busy || loading}
           onConfirm={confirm} onLater={later} />
       )}
     </section>

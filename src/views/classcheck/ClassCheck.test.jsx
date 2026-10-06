@@ -137,6 +137,40 @@ describe('수업 확인', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '모두 맞아요' })).toBeEnabled());
   });
 
+  it('저장 뒤 조회가 겹쳐도 가장 늦은 조회가 끝날 때까지 막는다', async () => {
+    let finishLate;
+    classSessionAPI.pending
+      .mockResolvedValueOnce(VIEW)
+      .mockImplementationOnce(() => new Promise((resolve) => { finishLate = () => resolve(VIEW); }));
+    const { rerender } = render(<ClassCheckPanel courseId={7} refreshToken={0} />);
+    await screen.findByRole('button', { name: '모두 맞아요' });
+    rerender(<ClassCheckPanel courseId={7} refreshToken={1} />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '모두 맞아요' })).toBeDisabled());
+    finishLate();
+    await waitFor(() => expect(screen.getByRole('button', { name: '모두 맞아요' })).toBeEnabled());
+  });
+
+  it('목록이 바뀌어 사라진 선택은 상한에 세지 않는다', async () => {
+    const many = Array.from({ length: 31 }, (_, i) => ({ ...S1, ref: `s:${100 + i}`, sectionId: 100 + i, title: `구간 ${i}` }));
+    classSessionAPI.pending.mockResolvedValue({ ...VIEW, sessions: [session('2026-10-06', [])], options: many });
+    const { rerender } = render(<ClassCheckPanel courseId={7} refreshToken={0} />);
+    const boxes = await screen.findAllByRole('checkbox', { name: /구간/ });
+    for (const box of boxes.slice(0, 30)) await userEvent.click(box);
+    expect(screen.getByRole('checkbox', { name: /구간 30/ })).toBeDisabled();
+
+    classSessionAPI.pending.mockResolvedValue({ ...VIEW, sessions: [session('2026-10-06', [])], options: many.slice(1) });
+    rerender(<ClassCheckPanel courseId={7} refreshToken={1} />);
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /구간 30/ })).toBeEnabled());
+  });
+
+  it('다시 불러오기가 성공하면 실패 알림을 지운다', async () => {
+    classSessionAPI.pending.mockRejectedValueOnce(new Error('네트워크'));
+    render(<ClassCheckPanel courseId={7} />);
+    await userEvent.click(await screen.findByRole('button', { name: '다시 불러오기' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
   it('모두 맞아요는 한 번에 20회차까지 보낸다', async () => {
     const many = Array.from({ length: 21 }, (_, i) => ({ ...session(`2026-09-${String(i + 1).padStart(2, '0')}`) }));
     classSessionAPI.pending.mockResolvedValue({ ...VIEW, sessions: many });

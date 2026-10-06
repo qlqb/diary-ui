@@ -36,13 +36,15 @@ export default function ClassCheckSession({ title, session, options = [], busy =
     wasEditing.current = editing;
   }, [editing]);
 
+  // 고를 수 있는 것에 남아 있는 선택만 센다(목록이 바뀌어 사라진 선택은 버린다)
   const selected = choices.filter((o) => picked.has(o.ref));
   const full = selected.length >= MAX_SOURCES;
 
   const toggle = (ref) => {
     setOther(null);
     setPicked((prev) => {
-      const next = new Set(prev);
+      const valid = new Set(choices.map((o) => o.ref));
+      const next = new Set([...prev].filter((r) => valid.has(r)));
       if (next.has(ref)) next.delete(ref);
       else if (next.size < MAX_SOURCES) next.add(ref);
       return next;
