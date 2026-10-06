@@ -23,6 +23,7 @@ import ProjectLearningMap from '../learning/ProjectLearningMap.jsx';
 import MaterialReview from '../learning/MaterialReview.jsx';
 import TextbookPanel from './TextbookPanel.jsx';
 import StudyStatePanel from './StudyStatePanel.jsx';
+import ClassCheckPanel from '../classcheck/ClassCheckPanel.jsx';
 import MaterialWeekReview from '../learning/MaterialWeekReview.jsx';
 import { weekApi } from '../learning/materialWeekApi.js';
 import AssignmentSection from './AssignmentSection.jsx';
@@ -431,6 +432,8 @@ export default function ProjectWorkspace({
             onLookupSettled={() => setProposalRefresh((v) => v + 1)} />
 
           <StudyStatePanel courseId={courseId} refreshToken={proposalRefresh + refreshToken} />
+
+          <ClassCheckPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken} />
 
           <ProjectTidyPanel courseId={courseId} refreshToken={proposalRefresh + refreshToken}
             onApplied={load} onOpenMaterials={() => revealIn('work', materialsRef)} />

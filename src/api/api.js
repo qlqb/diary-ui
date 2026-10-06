@@ -1772,6 +1772,25 @@ export const materialWeekAPI = {
         }),
 };
 
+/**
+ * 수업 확인(학습 이벤트 1단계). 끝난 수업 중 아직 확인하지 않은 회차를 묻고, 회차마다 "다룬 수업자료 구간"을 받는다.
+ * 확인 요청 전체가 한 트랜잭션이다 — 409면 다른 곳에서 먼저 바뀐 것이니 pending을 다시 읽는다.
+ */
+export const classSessionAPI = {
+    pending: (courseId, days = 14) => request(`/courses/${courseId}/class-sessions/pending?days=${days}`),
+    /** items: [{ routineId, sourceDate, expectedRevision, action: 'COVERED'|'UNKNOWN_CONTENT'|'CANCELLED'|'ABSENT', sources }] */
+    confirm: (courseId, items) =>
+        request('/class-sessions', {
+            method: 'PUT',
+            body: JSON.stringify({ courseId, items }),
+        }),
+    setPrompt: (courseId, enabled) =>
+        request(`/courses/${courseId}/class-prompt`, {
+            method: 'PATCH',
+            body: JSON.stringify({ enabled }),
+        }),
+};
+
 /** 점검 활동(선택). 자기평가로 저장된다 — 완료·숙달이 아니다. 204. */
 export const selfCheckAPI = {
     submit: (courseId, items) =>

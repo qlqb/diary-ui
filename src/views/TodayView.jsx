@@ -27,6 +27,7 @@ import { blockingEntries, buildTodayTimeline, classifyTimeline } from '../lib/to
 import { formatDateKo, formatMinutes, minutesOf, nowMinutes, toHHmm, todayString } from '../lib/datetime.js';
 import { assignmentAPI, executionItemAPI } from '../api/api.js';
 import { dueWithin, formatDueWithWeekday, isOverdue } from '../lib/analysisLabels.js';
+import TodayClassCheck from './classcheck/TodayClassCheck.jsx';
 
 export default function TodayView({
   items, occurrences, commitments, loading, error, notice, onRefresh, projectTitles,
@@ -351,6 +352,9 @@ export default function TodayView({
 
           <TodayAssignments assignments={dueAssignments} today={today} busyId={assignmentBusy}
             onComplete={completeAssignment} projectTitles={projectTitles} />
+
+          {/* 끝난 수업을 한 번 탭으로 확인(수업 진도의 근거). 못 읽으면 카드만 안 보인다. */}
+          {!rescheduling && <TodayClassCheck projectTitles={projectTitles} />}
 
           {!rescheduling && (
           <section className="view-section">
