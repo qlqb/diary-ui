@@ -1,0 +1,17 @@
+/* 수업 확인(오늘 카드·프로젝트 이번 주 확인) */
+.class-check {
+  border: 1px solid var(--ws-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+.class-check-title { margin: 0 0 6px; font-size: 14px; font-weight: 600; color: var(--ws-text, #111827); overflow-wrap: anywhere; }
+.class-check-defaults,
+.class-check-options { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.class-check-defaults li { font-size: 13px; color: var(--ws-text, #111827); overflow-wrap: anywhere; }
+.class-check-defaults li::before { content: '✓ '; color: var(--ws-accent, #6366f1); }
+.class-check-options li { font-size: 13px; overflow-wrap: anywhere; }
+.class-check-options label { cursor: pointer; }
+.class-check-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.class-check-toggle { font-size: 12px; color: var(--ws-text-dim, #6b7280); margin-left: auto; cursor: pointer; }
