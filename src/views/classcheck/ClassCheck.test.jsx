@@ -100,8 +100,64 @@ describe('수업 확인', () => {
     expect(await screen.findByText('네트워크 · 10/5(월) 09:00 수업 어디까지 했어요?')).toBeInTheDocument();
   });
 
-  it('최근 회차 고르기는 저장소를 못 써도 동작한다', () => {
-    const picked = latestPending({ 7: VIEW });
-    expect(picked.session.sourceDate).toBe('2026-10-06');
+  it('보강은 옮긴 날의 날짜·요일·시각으로 보인다', () => {
+    expect(sessionLabel({ routineId: 3, sourceDate: '2026-10-05', startAt: '2026-10-06T14:00:00', moved: true }))
+      .toBe('10/6(화) 14:00 · 보강');
+  });
+
+  it('409면 다시 불러온 새 상태를 그리고, 다시 불러오지 못하면 다시 불러오기를 보인다', async () => {
+    classSessionAPI.confirm.mockRejectedValue(Object.assign(new Error('충돌'), { status: 409 }));
+    classSessionAPI.pending
+      .mockResolvedValueOnce(VIEW)
+      .mockResolvedValueOnce({ ...VIEW, sessions: [session('2026-10-06', [S2], 1)] });
+    render(<ClassCheckPanel courseId={7} />);
+    await userEvent.click((await screen.findByLabelText(/10\/5\(월\)/)).querySelector('button'));
+
+    expect(await screen.findByText('다른 곳에서 먼저 바뀌었어요. 다시 불러왔어요.')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/10\/5\(월\)/)).not.toBeInTheDocument();
+
+    classSessionAPI.pending.mockRejectedValue(new Error('네트워크'));
+    await userEvent.click(screen.getByRole('button', { name: '맞아요' }));
+    expect(await screen.findByRole('button', { name: '다시 불러오기' })).toBeInTheDocument();
+    expect(screen.getByText('다른 곳에서 먼저 바뀌었어요. 수업 확인을 다시 불러오지 못했어요.')).toHaveAttribute('role', 'alert');
+  });
+
+  it('저장 뒤 다시 불러올 때까지 조작을 막는다', async () => {
+    let finishReload;
+    classSessionAPI.pending
+      .mockResolvedValueOnce(VIEW)
+      .mockImplementationOnce(() => new Promise((resolve) => { finishReload = () => resolve(VIEW); }));
+    render(<ClassCheckPanel courseId={7} />);
+    const first = await screen.findByLabelText(/10\/5\(월\)/);
+    await userEvent.click(first.querySelector('button'));
+
+    await waitFor(() => expect(classSessionAPI.confirm).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: '모두 맞아요' })).toBeDisabled();
+    finishReload();
+    await waitFor(() => expect(screen.getByRole('button', { name: '모두 맞아요' })).toBeEnabled());
+  });
+
+  it('모두 맞아요는 한 번에 20회차까지 보낸다', async () => {
+    const many = Array.from({ length: 21 }, (_, i) => ({ ...session(`2026-09-${String(i + 1).padStart(2, '0')}`) }));
+    classSessionAPI.pending.mockResolvedValue({ ...VIEW, sessions: many });
+    render(<ClassCheckPanel courseId={7} />);
+    await userEvent.click(await screen.findByRole('button', { name: '20개 맞아요' }));
+
+    await waitFor(() => expect(classSessionAPI.confirm).toHaveBeenCalledTimes(1));
+    expect(classSessionAPI.confirm.mock.calls[0][1]).toHaveLength(20);
+  });
+
+  it('저장소를 못 써도 나중에는 이번 화면에서 다음 회차로 넘어간다', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('막힘'); });
+    render(<TodayClassCheck projectTitles={{ 7: '네트워크' }} />);
+    await userEvent.click(await screen.findByRole('button', { name: '나중에' }));
+
+    expect(await screen.findByText('네트워크 · 10/5(월) 09:00 수업 어디까지 했어요?')).toBeInTheDocument();
+    spy.mockRestore();
+  });
+
+  it('최근 회차 고르기는 접은 것을 건너뛴다', () => {
+    expect(latestPending({ 7: VIEW }).session.sourceDate).toBe('2026-10-06');
+    expect(latestPending({ 7: VIEW }, Date.now(), new Set(['7:3:2026-10-06'])).session.sourceDate).toBe('2026-10-05');
   });
 });
