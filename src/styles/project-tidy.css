@@ -1,0 +1,251 @@
+/*
+ * 자료 분석 묶음 진행 + 프로젝트 자료 정리.
+ *
+ * 1536×760 기준으로 짠다. 요약과 주요 액션은 스크롤 없이 보이고, 길어지는 것(자리 목록,
+ * 변경 목록)만 안에서 스크롤한다 — 페이지 전체가 길어지면 [적용] 버튼이 화면 밖으로 나간다.
+ *
+ * 색으로만 상태를 구분하지 않는다. 모든 상태에 글자가 함께 있다(단계 이름, 사유, 칩 텍스트).
+ * 본문은 14px 이상, 보조 문구도 12px 아래로 내리지 않는다.
+ */
+
+/* ===== 분석 묶음 ===== */
+
+.analysis-batch {
+  margin: 10px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--ws-border);
+  border-left: 3px solid var(--ws-accent);
+  border-radius: 8px;
+  background: var(--ws-surface);
+}
+.analysis-batch.is-finished { border-left-color: var(--ws-ok); }
+.analysis-batch-head { display: flex; align-items: flex-start; gap: 8px; }
+.analysis-batch-title { margin: 0; font-size: 14.5px; font-weight: 600; }
+.analysis-batch-count { font-weight: 500; color: var(--ws-text-dim); }
+.analysis-batch-sub { margin: 2px 0 0; font-size: 13px; color: var(--ws-text-dim); }
+/* 결과 카드를 닫는 작은 버튼. 아이콘만 있으므로 aria-label로 이름을 준다. */
+.batch-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--ws-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ws-text-dim);
+  cursor: pointer;
+}
+.batch-close:hover { background: #f0f2f5; color: var(--ws-text); }
+
+.analysis-batch-bar {
+  margin: 8px 0 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ws-border);
+  overflow: hidden;
+}
+.analysis-batch-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ws-accent);
+  transition: width 240ms ease;
+}
+.analysis-batch.is-finished .analysis-batch-bar-fill { background: var(--ws-ok); }
+
+.analysis-batch-meta { margin: 0; font-size: 13px; color: var(--ws-text); }
+.analysis-batch-note { margin: 2px 0 0; font-size: 12px; color: var(--ws-text-dim); }
+
+.analysis-batch-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* 자료가 많아도 카드가 화면을 삼키지 않게 한다. 요약·버튼은 늘 보여야 한다. */
+  max-height: 232px;
+  overflow-y: auto;
+}
+.batch-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border-top: 1px solid var(--ws-border);
+  font-size: 13px;
+}
+.batch-item:first-child { border-top: none; }
+.batch-item-icon { flex: 0 0 auto; color: var(--ws-text-dim); }
+.batch-item-icon.is-done { color: var(--ws-ok); }
+.batch-item-icon.is-problem { color: var(--ws-warn); }
+.batch-item-name {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-item-size { flex: 0 0 auto; font-size: 12px; color: var(--ws-text-dim); }
+.batch-item-stage { flex: 0 0 auto; font-size: 12.5px; color: var(--ws-text-dim); }
+.batch-item.is-done .batch-item-stage { color: var(--ws-ok); }
+.batch-item.is-failed .batch-item-stage,
+.batch-item.is-upload_failed .batch-item-stage { color: var(--ws-warn); }
+.batch-item-message {
+  flex-basis: 100%;
+  margin: 2px 0 0 20px;
+  font-size: 12px;
+  color: var(--ws-text-dim);
+  overflow-wrap: anywhere;
+}
+
+.analysis-batch-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+/* 시작 전 예상 시간 한 줄. */
+.upload-estimate { flex-basis: 100%; margin: 4px 0 0; font-size: 12.5px; color: var(--ws-text-dim); }
+.upload-estimate-strong { color: var(--ws-text); font-weight: 600; }
+
+/* ===== 프로젝트 자료 정리 ===== */
+
+.project-tidy-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.project-tidy-head .section-title { margin: 0; }
+.project-tidy-head .btn-primary { margin-left: auto; }
+
+.project-tidy-summary {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  background: var(--ws-surface);
+}
+.project-tidy-headline { margin: 0; font-size: 14.5px; font-weight: 600; }
+.project-tidy-excluded { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12.5px; }
+.project-tidy-excluded li { padding: 2px 0; color: var(--ws-text-dim); overflow-wrap: anywhere; }
+
+.project-tidy-warn,
+.project-tidy-info {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--ws-warn);
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--ws-warn-soft);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.project-tidy-info {
+  border-left-color: var(--ws-accent);
+  background: var(--ws-accent-soft);
+  color: var(--ws-text);
+}
+
+.project-tidy-groups {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* 항목이 많은 프로젝트에서도 아래 액션이 화면 안에 남게 한다. */
+  max-height: 340px;
+  overflow-y: auto;
+}
+.project-tidy-group {
+  padding: 8px 10px;
+  border: 1px solid var(--ws-border);
+  border-radius: 8px;
+  background: var(--ws-surface);
+}
+.project-tidy-group .collapse-head { width: 100%; display: flex; align-items: center; gap: 6px; }
+.project-tidy-group-title { font-weight: 600; overflow-wrap: anywhere; }
+.project-tidy-group-count { margin-left: auto; font-size: 12.5px; color: var(--ws-text-dim); }
+
+.project-tidy-brief { list-style: none; margin: 4px 0 0; padding-left: 20px; font-size: 13px; }
+.project-tidy-brief li { padding: 2px 0; overflow-wrap: anywhere; }
+.project-tidy-brief li.is-excluded { text-decoration: line-through; color: var(--ws-text-dim); }
+
+.project-tidy-changes {
+  list-style: none;
+  margin: 6px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.project-tidy-change { font-size: 13.5px; }
+.project-tidy-change.is-structural { padding-left: 6px; border-left: 2px solid var(--ws-warn); }
+.project-tidy-change.is-excluded .project-tidy-change-text {
+  text-decoration: line-through;
+  color: var(--ws-text-dim);
+}
+.project-tidy-change-head { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
+.project-tidy-change-text { overflow-wrap: anywhere; }
+.project-tidy-title-input { margin: 4px 0 0 22px; width: min(420px, 100%); font-size: 14px; }
+.project-tidy-reason { margin: 2px 0 0 22px; font-size: 12.5px; color: var(--ws-text-dim); overflow-wrap: anywhere; }
+.project-tidy-confirm {
+  margin: 4px 0 0 22px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--ws-warn);
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--ws-warn-soft);
+}
+.project-tidy-confirm p { margin: 2px 0; }
+/* 색만으로 "확인 필요"를 말하지 않는다 — 머리글에 글자와 아이콘이 함께 있다. */
+.project-tidy-confirm-head { display: flex; align-items: center; gap: 4px; font-weight: 600; }
+.project-tidy-confirm-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.project-tidy-evidence-toggle { margin: 4px 0 0 22px; }
+.project-tidy-evidence { list-style: none; margin: 4px 0 0 22px; padding: 0; font-size: 12.5px; }
+.project-tidy-evidence li { padding: 4px 0; border-top: 1px solid var(--ws-border); }
+.project-tidy-evidence-source { font-weight: 600; margin-right: 6px; }
+.project-tidy-evidence-title { color: var(--ws-text-dim); }
+.project-tidy-evidence-excerpt {
+  margin: 2px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--ws-border);
+  color: var(--ws-text-dim);
+  overflow-wrap: anywhere;
+}
+
+.project-tidy-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.project-tidy-save { font-size: 12.5px; color: var(--ws-text-dim); }
+.project-tidy-save.is-problem { color: var(--ws-warn); font-weight: 600; }
+.project-tidy-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+/*
+  저장 실패와 충돌.
+
+  둘 다 "고친 내용은 살아 있다"를 말해야 하는 자리다. 색만으로 구분하지 않는다 —
+  글자와 아이콘이 함께 있고, 해결 버튼이 문장 안에 있다.
+*/
+.project-tidy-save-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.project-tidy-conflicts {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--ws-warn);
+  border-radius: 8px;
+  background: var(--ws-warn-soft);
+  /* 충돌이 여러 개여도 요약과 액션은 화면에 남아야 한다. */
+  max-height: 180px;
+  overflow-y: auto;
+}
+.project-tidy-conflicts li + li { margin-top: 8px; border-top: 1px solid var(--ws-border); padding-top: 8px; }
+.project-tidy-conflict-what { margin: 0; font-size: 13px; font-weight: 600; }
+
+/* 근거 원문 열기. 열 수 없는 근거는 흐리게 두되 글자로 이유를 말한다 — 색만으로 구분하지 않는다. */
+.project-tidy-evidence li.is-unavailable .project-tidy-evidence-source { color: var(--ws-text-dim); }
+.project-tidy-evidence-note { margin: 2px 0 0; font-size: 12.5px; color: var(--ws-warn); }
+.project-tidy-evidence-open { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; }
