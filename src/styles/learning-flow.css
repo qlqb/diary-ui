@@ -11,6 +11,20 @@
 .plan-strategy-state p { margin: 2px 0; font-size: 14px; }
 .plan-strategy-more { margin-top: 6px; }
 
+/* 말한 범위(서버 판정) */
+.plan-scope-report { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--ws-border); border-radius: 8px;
+  background: var(--ws-surface); }
+.plan-scope-head { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.plan-scope-notice { margin: 0 0 6px; font-size: 14px; color: var(--ws-text); font-weight: 600; }
+.plan-scope-issue { color: var(--ws-danger); }
+.plan-scope-issue-line { margin: 0 0 6px; }
+.plan-scope-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.plan-scope-title, .plan-scope-goal { margin: 0; font-size: 14px; }
+.plan-scope-parts { list-style: none; margin: 4px 0 0; padding-left: 12px; font-size: 14px; display: flex;
+  flex-direction: column; gap: 2px; }
+.plan-scope-part-label { font-weight: 600; }
+.plan-scope-part.is-done .plan-scope-part-label { color: var(--ws-ok); }
+
 /* 교재 */
 .textbook-panel .section-title { display: flex; align-items: center; gap: 6px; }
 /* 조회 상태는 글자로 읽힌다 — 본문과 같은 크기 */

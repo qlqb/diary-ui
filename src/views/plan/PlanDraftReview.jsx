@@ -32,6 +32,7 @@ import { acquirePreview, previewInputKey, replacePreview, storedOrRecompute } fr
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import PlanDraftOverview from './PlanDraftOverview.jsx';
 import PlanStrategyPanel from './PlanStrategyPanel.jsx';
+import PlanScopeReport from './PlanScopeReport.jsx';
 import { actionOf, startSourceLine } from '../../lib/planItemText.js';
 import PlanProvenancePanel, { ItemEvidence } from './PlanProvenance.jsx';
 import PlanItemDetail from './PlanItemDetail.jsx';
@@ -603,6 +604,9 @@ export default function PlanDraftReview({
             onClick={() => setDetailAll(true)}>자세히</button>
         </p>
       </div>
+
+      {/* 말한 범위가 담겼는지가 판단보다 먼저 온다 — 완료 표시는 서버 판정으로 정한다. */}
+      <PlanScopeReport report={current.scopeReport} />
 
       {/* 판단은 조각보다 먼저 온다. 무엇을 하는지보다 왜 그렇게 보는지가 먼저 읽혀야 한다. */}
       <PlanStrategyPanel strategy={strategy} projectTitles={projectTitles} provenance={provenance}
