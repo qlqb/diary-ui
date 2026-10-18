@@ -637,7 +637,7 @@ describe('올릴 수 있는 형식', () => {
     materialStoreAPI.list.mockResolvedValue([]);
     const { container } = render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
     const input = container.querySelector('input[type="file"]');
-    expect(input).toHaveAttribute('accept', '.pdf,.pptx,.hwp,.hwpx,.ipynb,.sh,.zip');
+    expect(input).toHaveAttribute('accept', '.pdf,.pptx,.hwp,.hwpx,.ipynb,.sh,.cpp,.cc,.cxx,.h,.hpp,.zip');
 
     // 브라우저는 hwp·ipynb의 type을 비워 보내기도 한다. 화면은 확장자로만 거른다.
     const files = [
@@ -651,7 +651,7 @@ describe('올릴 수 있는 형식', () => {
     });
 
     expect(screen.getByRole('button', { name: /3개 분석 시작/ })).toBeInTheDocument();
-    expect(screen.getByText('PDF·PPTX·HWP·HWPX·IPYNB·SH·ZIP만 올릴 수 있어요')).toBeInTheDocument();
+    expect(screen.getByText('PDF·PPTX·HWP·HWPX·IPYNB·SH·C++·ZIP만 올릴 수 있어요')).toBeInTheDocument();
   });
 });
 

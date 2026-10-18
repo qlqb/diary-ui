@@ -5,8 +5,20 @@ import {
 } from './materialFormats.js';
 
 describe('materialFormats', () => {
-  it('accept 값에 자료 여섯 형식과 압축이 있다', () => {
-    expect(MATERIAL_ACCEPT).toBe('.pdf,.pptx,.hwp,.hwpx,.ipynb,.sh,.zip');
+  it('accept 값에 자료 형식과 압축이 있다', () => {
+    expect(MATERIAL_ACCEPT).toBe('.pdf,.pptx,.hwp,.hwpx,.ipynb,.sh,.cpp,.cc,.cxx,.h,.hpp,.zip');
+  });
+
+  it('C++ 소스·헤더는 텍스트 자료로 받는다', () => {
+    for (const name of ['main.cpp', 'Stack.CC', 'list.cxx', 'stack.h', 'stack.hpp']) {
+      expect(isAllowedMaterialFile(name)).toBe(true);
+    }
+    expect(materialFileKind('main.cpp', null)).toBe('CPP');
+    expect(materialFileKind('stack.h', 'text/plain')).toBe('H');
+    expect(materialFileKind('자료', 'text/x-c++src')).toBe('CPP');
+    // 컴파일 결과물은 받지 않는다.
+    expect(isAcceptedFile('main.o')).toBe(false);
+    expect(isAcceptedFile('main.exe')).toBe(false);
   });
 
   it('셸 스크립트(.sh)는 텍스트 자료로 받는다', () => {

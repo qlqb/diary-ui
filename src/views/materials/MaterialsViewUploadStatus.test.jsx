@@ -114,7 +114,7 @@ describe('업로드 결과 요약', () => {
 
   it('셸 스크립트는 실행하지 않는다고 안내한다', async () => {
     render(<MaterialsView projects={[]} onProjectsChanged={vi.fn()} />);
-    expect(await screen.findByText('셸 스크립트(.sh)는 실행하지 않고 텍스트 자료로만 읽어요')).toBeInTheDocument();
+    expect(await screen.findByText('셸 스크립트(.sh)·C++ 코드(.cpp·.h 등)는 실행하지 않고 텍스트 자료로만 읽어요')).toBeInTheDocument();
   });
 });
 
