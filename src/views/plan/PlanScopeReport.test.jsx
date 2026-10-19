@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
-import PlanScopeReport from './PlanScopeReport.jsx';
+import PlanScopeReport, { studyTimeLabel } from './PlanScopeReport.jsx';
 
 /** 서버가 판정한 "말한 범위"를 글자로 보인다. 완료 표시는 서버 문장(notice)이 정한다. */
 const REPORT = {
@@ -57,5 +57,24 @@ describe('PlanScopeReport', () => {
     expect(container).toBeEmptyDOMElement();
     const { container: none } = render(<PlanScopeReport report={null} />);
     expect(none).toBeEmptyDOMElement();
+  });
+});
+
+describe('PlanScopeReport 말한 시간', () => {
+  it('범위가 없어도 확인된 시간이 있으면 시간과 원문 구절을 보인다', () => {
+    render(<PlanScopeReport report={{
+      status: 'EXTRACTED', scopes: [], parts: [],
+      studyTime: { minutes: null, perDay: true, from: null, until: '16:00', quote: '오늘 오후4시까지 가능해' },
+    }} />);
+    const panel = screen.getByRole('region', { name: '말한 범위' });
+    expect(within(panel).getByText('말한 시간')).toBeInTheDocument();
+    expect(within(panel).getByText('~16:00')).toBeInTheDocument();
+    expect(panel.textContent).toContain('오늘 오후4시까지 가능해');
+  });
+
+  it('시간 라벨은 분량과 시간대를 함께 적는다', () => {
+    expect(studyTimeLabel({ minutes: 60, perDay: true })).toBe('하루 60분');
+    expect(studyTimeLabel({ minutes: null, from: '20:00', until: '24:00' })).toBe('20:00~24:00');
+    expect(studyTimeLabel(null)).toBeNull();
   });
 });

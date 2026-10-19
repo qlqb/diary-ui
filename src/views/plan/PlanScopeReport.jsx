@@ -26,14 +26,24 @@ const ACQUISITION_LABEL = {
 
 const SATISFIED = new Set(['ITEM', 'PRACTICE_WITH_USER_MATERIAL', 'ALREADY_PREPARED']);
 
+/** 확인된 쓸 수 있는 시간을 한 줄로. 예: "~16:00", "20:00~24:00", "하루 60분". */
+export function studyTimeLabel(time) {
+  if (!time) return null;
+  const parts = [];
+  if (time.minutes != null) parts.push(`${time.perDay ? '하루 ' : '전체 '}${time.minutes}분`);
+  if (time.from || time.until) parts.push(`${time.from ?? ''}~${time.until ?? ''}`);
+  return parts.join(' · ');
+}
+
 function roleLabel(scope) {
   if (!scope.verified) return '확인 필요';
   return scope.role === 'OPTIONAL' ? '가능하면' : '꼭';
 }
 
 export default function PlanScopeReport({ report }) {
-  // 범위를 말하지 않았으면 그리지 않는다. 범위를 판정하지 못했으면(추출 실패 등) 서버 문장만이라도 보인다.
-  if (!report || (!(report.scopes ?? []).length && !report.notice)) return null;
+  // 범위도 시간도 말하지 않았으면 그리지 않는다. 범위를 판정하지 못했으면(추출 실패 등) 서버 문장만이라도 보인다.
+  const scopes = report?.scopes ?? [];
+  if (!report || (!scopes.length && !report.notice && !report.studyTime)) return null;
   const states = new Map((report.parts ?? []).map((p) => [p.partId, p]));
   const failedCheck = (report.issues ?? []).length > 0;
 
@@ -44,13 +54,21 @@ export default function PlanScopeReport({ report }) {
         {failedCheck && <span className="chip-status plan-scope-issue">검증 미통과</span>}
       </p>
       {report.notice && <p className="plan-scope-notice">{report.notice}</p>}
+      {report.studyTime && (
+        <p className="plan-scope-time">
+          <span className="chip-status">말한 시간</span>
+          {' '}
+          <strong>{studyTimeLabel(report.studyTime)}</strong>
+          {report.studyTime.quote && <span className="view-dim"> · &ldquo;{report.studyTime.quote}&rdquo;</span>}
+        </p>
+      )}
       {failedCheck && (
         <p className="hint plan-scope-issue-line">
           꼭 하기로 한 범위가 남았는데 &apos;가능하면&apos; 범위가 들어갔고, 계획이 그 이유를 남기지 않았어요.
         </p>
       )}
       <ul className="plan-scope-list">
-        {report.scopes.map((scope) => (
+        {scopes.map((scope) => (
           <li key={scope.scopeId} className="plan-scope-item">
             <p className="plan-scope-title">
               <span className="chip-status">{roleLabel(scope)}</span>

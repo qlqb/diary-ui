@@ -114,3 +114,7 @@
 .study-state-edit-fields { display: flex; flex-wrap: wrap; gap: 10px; font-size: 14px; }
 .study-state-notice, .study-state-stale { font-size: 14px; margin: 4px 0; }
 .plan-item-goal { margin: 2px 0 0 24px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.plan-scope-time {
+  margin: 4px 0 8px;
+}
