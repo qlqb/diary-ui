@@ -57,7 +57,8 @@ export default function PlanWeekPreview({ preview, items, excluded }) {
         title: titleById.get(p.proposalItemId),
         scheduledDate: p.scheduledDate,
         startTime: toHHmm(p.scheduledStartAt),
-        endTime: toHHmm(p.scheduledEndAt),
+        // 다음 날 00:00에 끝나면 24:00으로 그린다 — 시각만 떼면 00:00이 돼 길이가 음수가 된다.
+        endTime: String(p.scheduledEndAt ?? '').slice(0, 10) > String(p.scheduledDate ?? '') ? '24:00' : toHHmm(p.scheduledEndAt),
         excluded: excluded.has(p.proposalItemId),
       }));
   }, [preview, items, excluded]);

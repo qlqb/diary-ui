@@ -606,6 +606,15 @@ export default function PlanDraftReview({
       </div>
 
       {/* 말한 범위가 담겼는지가 판단보다 먼저 온다 — 완료 표시는 서버 판정으로 정한다. */}
+      {(current.scenarioChanges ?? []).length > 0 && (
+        <section className="plan-scope-report" aria-label="이 계획이 기대는 변경">
+          <p className="plan-scope-head"><span className="plan-strategy-label">이 계획이 기대는 변경</span></p>
+          <p className="hint">아직 적용 전이에요. 확정하면 이 변경이 계획과 함께 적용돼요. 상담에서 이 변경을 빼면 계획을 다시 만들어야 해요.</p>
+          <ul className="plan-scope-list">
+            {current.scenarioChanges.map((c) => <li key={c} className="plan-scope-item">{c}</li>)}
+          </ul>
+        </section>
+      )}
       <PlanScopeReport report={current.scopeReport} />
 
       {/* 판단은 조각보다 먼저 온다. 무엇을 하는지보다 왜 그렇게 보는지가 먼저 읽혀야 한다. */}
