@@ -21,13 +21,14 @@ import {
   ImagePlus, FolderOpen, ListChecks, BrainCircuit, BookOpen, CalendarDays,
 } from 'lucide-react';
 import {
-  conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI, scheduleImportAPI, planAPI,
+  conversationAPI, proposalAPI, contextSuggestionAPI, scheduleSuggestionAPI, changeBundleAPI, scheduleImportAPI, planAPI,
   consultContextAPI, consultPhotoAPI, materialStoreAPI,
 } from '../api/api.js';
 import ConsultPhotoTray from './ConsultPhotoTray.jsx';
 import { photoTopicText } from '../lib/studyLabels.js';
 import { useConsultPhotos } from './useConsultPhotos.js';
 import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
+import ChangeBundleCard from './ChangeBundleCard.jsx';
 import ScheduleImportReviewModal from './ScheduleImportReviewModal.jsx';
 import ConsultQuestionCard from './ConsultQuestionCard.jsx';
 import ConsultUnderstandingCard from './ConsultUnderstandingCard.jsx';
@@ -189,6 +190,8 @@ export default function AiPanel({
    * 카드도 버튼도 적용 결과도 다르다.
    */
   const [scheduleSuggestions, setScheduleSuggestions] = useState([]);
+  /** 상담이 제안한 변경 묶음(적용 전 포함 — 적용한 묶음도 결과를 보이려고 남긴다). */
+  const [changeBundles, setChangeBundles] = useState([]);
   const [scheduleActionState, setScheduleActionState] = useState({});
   const [contextActionState, setContextActionState] = useState({});
   const [appliedNotice, setAppliedNotice] = useState(false);
@@ -270,6 +273,7 @@ export default function AiPanel({
     nearBottomRef.current = true;
     setContextSuggestions([]);
     setScheduleSuggestions([]);
+    setChangeBundles([]);
     setScheduleActionState({});
     setContextActionState({});
     setSendError(null);
@@ -383,6 +387,9 @@ export default function AiPanel({
         if (loadTokenRef.current === myToken) setContextSuggestions(pending ?? []);
         const pendingSchedule = await conversationAPI.getScheduleSuggestions(conversationId);
         if (loadTokenRef.current === myToken) setScheduleSuggestions(pendingSchedule ?? []);
+        // 저장된 묶음으로 카드를 복원한다(도구 호출을 다시 실행하지 않는다). 닫힌 묶음은 다시 보이지 않는다.
+        const bundles = await changeBundleAPI.byConversation(conversationId);
+        if (loadTokenRef.current === myToken) setChangeBundles((bundles ?? []).filter((b) => b.status === 'PROPOSED'));
       } catch { /* 후보 복원 실패는 대화 표시를 막지 않는다 */ }
     } catch (err) {
       if (loadTokenRef.current === myToken) {
@@ -500,6 +507,12 @@ export default function AiPanel({
           } else if (eventName === 'message.delta') {
             setMessages((prev) => prev.map((m) =>
               (m.key === streamingKey ? { ...m, content: m.content + (data?.text ?? ''), reading: null } : m)));
+          } else if (eventName === 'tool.progress') {
+            // 도구 단계: 서버가 실제로 하는 확인(일정 확인 중 등). 답변은 이 단계가 끝난 뒤 흘러온다.
+            setMessages((prev) => prev.map((m) =>
+              (m.key === streamingKey ? { ...m, reading: data?.label || '확인 중' } : m)));
+          } else if (eventName === 'change_bundle.ready') {
+            setChangeBundles((prev) => [...prev.filter((b) => b.bundleId !== data?.bundleId), data]);
           } else if (eventName === 'evidence.reading') {
             /*
              * AI가 자료를 더 읽는 중이다. 앞서 흘러온 "…확인해 볼게요"는 답이 아니므로 지우고, 서버가 실제로 읽는 대상을
@@ -1107,6 +1120,10 @@ export default function AiPanel({
               </div>
             )}
             {batchState?.status === 'error' && <p className="ai-error">{batchState.message}</p>}
+
+            {changeBundles.map((bundle) => (
+              <ChangeBundleCard key={bundle.bundleId} bundle={bundle} onApplied={() => onScheduleApplied?.()} />
+            ))}
 
             {scheduleSuggestions.map((suggestion) => (
               <ScheduleSuggestionCard

@@ -792,6 +792,27 @@ export const contextAPI = {
  * apply에 editedPayload를 실으면 사용자가 카드에서 고친 값으로 만들어진다. 없으면
  * 서버에 저장된 원본 후보를 그대로 쓴다.
  */
+/**
+ * 상담이 제안한 변경 묶음(적용 전). 적용 요청은 기대 리비전·선택·멱등 키를 보낸다 — 같은 키로 다시 보내면 저장된 결과가 온다.
+ */
+export const changeBundleAPI = {
+    get: (bundleId) => request(`/ai/change-bundles/${bundleId}`),
+    byConversation: (conversationId) => request(`/ai/conversations/${conversationId}/change-bundles`),
+    select: (bundleId, expectedRevision, selectedItemIds) => request(`/ai/change-bundles/${bundleId}/selection`, {
+        method: 'PUT',
+        body: JSON.stringify({ expectedRevision, selectedItemIds }),
+    }),
+    refresh: (bundleId, expectedRevision) => request(`/ai/change-bundles/${bundleId}/refresh`, {
+        method: 'POST',
+        body: JSON.stringify({ expectedRevision }),
+    }),
+    apply: (bundleId, expectedRevision, selectedItemIds, idempotencyKey) => request(`/ai/change-bundles/${bundleId}/apply`, {
+        method: 'POST',
+        body: JSON.stringify({ expectedRevision, selectedItemIds, idempotencyKey }),
+    }),
+    dismiss: (bundleId) => request(`/ai/change-bundles/${bundleId}/dismiss`, { method: 'POST' }),
+};
+
 export const scheduleSuggestionAPI = {
     apply: (suggestionId, editedPayload = null) => {
         return request(`/ai/schedule-suggestions/${suggestionId}/apply`, {
