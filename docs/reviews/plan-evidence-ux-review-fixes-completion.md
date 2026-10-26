@@ -1,5 +1,5 @@
 task: plan-evidence-ux-review-fixes-v1
-status: READY_FOR_REVIEW
+status: MERGED  # 2026-10-25 정리: 기능은 dev-playground에 합쳐짐
 api_revision: ff591b604a367ba24adbfb39cb5f4f838a43980a
 ui_code_revision: ad4195d0715c6a4d321cf0b21f1d0577c18c1bda
 spec_deviations: 일반 Chrome이 이 세션에 연결돼 있지 않아 새 탭 PDF 실제 렌더링·복귀는 확인하지 못했다(앱 내장 패널은 새 탭을 막음). 파일 요청 성공(각 행이 자기 materialId를 200으로 받음)과 검토 상태 유지만 확인했다. 나머지 없음.

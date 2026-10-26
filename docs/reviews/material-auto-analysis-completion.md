@@ -1,5 +1,5 @@
 task: material-auto-analysis-v1
-status: READY_FOR_REVIEW
+status: MERGED  # 2026-10-25 정리: 기능은 dev-playground에 합쳐짐
 api_revision: 1f414dd
 ui_code_revision: 4a05ea6
 spec_deviations: 새 탭 PDF 렌더링은 앱 내장 패널이 window.open을 막아 이번에도 실제 렌더링을 확인하지 못했다(파일 요청 200과 버튼 동작만). 도서 메타데이터 조회(전체 쪽수·판본)는 붙이지 않았다. 상담 경로의 자료 발췌(앞 3,000자)는 그대로다. 나머지는 §6 "차이" 참고.

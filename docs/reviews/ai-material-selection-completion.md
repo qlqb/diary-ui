@@ -1,5 +1,5 @@
 task: ai-material-selection
-status: READY_FOR_REVIEW
+status: MERGED  # 2026-10-25 정리: 기능은 dev-playground에 합쳐짐
 api_base: 679680b (dev-playground)
 ui_base: 400942c (dev-playground)
 spec_deviations: 판단 경로(plan.draft.generator=JUDGMENT|V1)는 AI 자료 선택에 연결하지 않았다(기본값 AI만). 상담 패널에는 자료를 고르는 화면이 없어 상담의 자료 지정은 대화 문장의 파일 이름 해석으로만 된다. 실패한 초안 요청의 사용 기록은 트랜잭션과 함께 롤백된다.

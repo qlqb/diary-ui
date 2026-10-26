@@ -1,5 +1,5 @@
 task: analysis-race-plan-selection
-status: READY_FOR_REVIEW
+status: MERGED  # 2026-10-25 정리: 기능은 dev-playground에 합쳐짐
 api_revision: 679680b
 ui_code_revision: 659552d
 spec_deviations: 「자세히」의 오래된 안내 다시 만들기는 실화면에서 stale 상태를 만들 수 없어(원문·항목이 바뀌어야 함) 단위·컴포넌트 테스트로만 확인했다. "사용자가 자료를 연결한 항목"(origin=USER)을 만드는 화면이 아직 없어 그 갈래는 계약과 테스트만 있다.

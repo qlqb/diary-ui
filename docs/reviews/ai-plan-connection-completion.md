@@ -1,5 +1,5 @@
 task: ai-plan-connection
-status: READY_FOR_REVIEW
+status: MERGED  # 2026-10-25 정리: 기능은 dev-playground에 합쳐짐
 api_base: 22ccd69 (dev-playground) + feat/ai-material-selection 824ddf0
 ui_base: 7d0c275 (dev-playground) + feat/ai-material-selection d52d73f
 spec_deviations: (2026-09-18 후속 반영 — §6) 판단 경로(plan.draft.generator=JUDGMENT|V1) 미연결. 상담의 기간 되묻기("이번 주"가 오늘부터인지 달력 주인지)는 기존 규칙 그대로라 사용자가 날짜로 답해야 OFFER가 나온다. 자료 선택 재사용 지문에 상담 내용은 넣지 않는다(합의는 계획 호출 입력). 반복 3회 평가는 하지 않았다(시나리오 6 × 1회 + 결함 수정 뒤 2개 재실행).

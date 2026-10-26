@@ -1,5 +1,5 @@
 task: plan-evidence-ux-v1
-status: READY_FOR_REVIEW
+status: MERGED  # 2026-10-25 정리: 기능은 dev-playground에 합쳐짐
 api_revision: b760133981a7f974f4fd4bd767ee7cef5003ef7f
 ui_code_revision: 067f8f297506987f0a369e3e5bd4f61294cc6831
 spec_deviations: 페이지 이동 버튼("해당 부분 열기") 미구현 — 4.3 계약의 낮은 단계("원본 자료 열기 · N주차 확인")로 낮춤(12.4). 브라우저 새 탭 열림은 앱 내장 패널에서 확인 불가(응답 헤더·요청으로 대체). 미리보기 그대로 확정 테스트 1건은 배치 결과가 없어 skip(기존 assumeTrue). 실행 순서(6절 결함 수정 → UX)는 지켰고 저장소당 커밋 2개.
