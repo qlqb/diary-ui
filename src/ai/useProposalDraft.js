@@ -183,7 +183,8 @@ export function useProposalDraft({ onApplied } = {}) {
         placementType: hasTime ? 'TIME_FIXED' : (card.scheduledDate ? 'DATE_ONLY' : 'UNSCHEDULED'),
         scheduledDate: card.scheduledDate,
         scheduledStartAt: hasTime ? `${card.scheduledDate}T${card.startTime}:00` : null,
-        scheduledEndAt: hasTime ? `${card.scheduledDate}T${card.endTime}:00` : null,
+        // 끝이 24:00(자정)이면 다음 날 00:00이다 — 시작 날짜를 그대로 붙이면 끝이 시작보다 앞이 된다.
+        scheduledEndAt: hasTime ? endAtOf(card.scheduledDate, card.endTime) : null,
       };
     });
     const excludedItemIds = draft.cards.filter((c) => c.excluded).map((c) => c.proposalItemId);
@@ -223,4 +224,17 @@ export function adjustmentFor(draft, executionItemId) {
   return draft.cards.find(
     (card) => card.operation !== 'CREATE' && card.targetExecutionItemId === executionItemId,
   ) ?? null;
+}
+
+/** 날짜와 끝 시각(HH:mm)으로 끝 시각을 만든다. 24:00·00:00은 다음 날 00:00이다(같은 날 끝이 시작보다 앞이 되지 않게). */
+export function endAtOf(date, endTime) {
+  if (endTime === '24:00' || endTime === '00:00') {
+    const next = new Date(`${date}T00:00:00`);
+    next.setDate(next.getDate() + 1);
+    const y = next.getFullYear();
+    const m = String(next.getMonth() + 1).padStart(2, '0');
+    const d = String(next.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}T00:00:00`;
+  }
+  return `${date}T${endTime}:00`;
 }

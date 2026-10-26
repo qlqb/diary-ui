@@ -35,6 +35,73 @@ export function studyTimeLabel(time) {
   return parts.join(' · ');
 }
 
+const hhmm = (t) => (t ? String(t).slice(0, 5) : '');
+
+/** 해석한 구간 하나. 자정을 넘으면 그렇게 말한다("22:00~다음 날 01:00", "~24:00"). */
+export function rangeLabel(range) {
+  if (!range) return '';
+  const end = range.end == null ? '24:00'
+    : range.endsNextDay ? (hhmm(range.end) === '00:00' ? '24:00' : `다음 날 ${hhmm(range.end)}`) : hhmm(range.end);
+  return `${hhmm(range.start)}~${end}`;
+}
+
+const ISSUE_TEXT = {
+  NOT_FOUND: '말한 문장에서 이 구절을 찾지 못했어요',
+  VALUE_MISMATCH: '정리한 시각이 말한 문장과 달라요',
+  UNREADABLE: '시간대를 읽지 못했어요',
+  AMBIGUOUS_UNIT: '하루 몫인지 전체 몫인지 확인이 필요해요',
+  LATER_TIME_UNUSED: '나중에 말한 시간 표현은 반영하지 않았어요',
+};
+
+/**
+ * 이번 초안이 쓴 말한 시간(범위·제외·분량)과 그 계산. 확인하지 못한 시간도 숨기지 않는다 — 말한 시간이 아무 설명 없이 기본 시간으로
+ * 바뀌는 일이 없게. 범위(가능한 시간)와 실제 공부량을 따로 보인다.
+ */
+export function StudyTimeCondition({ condition, budget }) {
+  if (!condition) return null;
+  const adopted = condition.status === 'ADOPTED';
+  const ambiguous = condition.status === 'AMBIGUOUS';
+  const windows = condition.windows ?? [];
+  const exclusions = condition.exclusions ?? [];
+  return (
+    <div className="plan-scope-time" aria-label="말한 시간">
+      <p>
+        <span className="chip-status">{adopted ? '말한 시간' : ambiguous ? '말한 시간 · 확인 필요' : '말한 시간 · 확인 못 함'}</span>
+        {' '}
+        {windows.length > 0 && <strong>{windows.map(rangeLabel).join(', ')}</strong>}
+        {exclusions.length > 0 && (
+          <span> · 제외 {exclusions.map((x) => `${x.label ? `${x.label} ` : ''}${rangeLabel(x)}`).join(', ')}</span>
+        )}
+        {condition.minutes != null && <span> · {condition.per === 'PLAN' ? '총' : '하루'} {condition.minutes}분</span>}
+      </p>
+      {!adopted && !ambiguous && (
+        <p className="hint plan-scope-issue-line">말한 시간을 확인하지 못해 기본 시간으로 계산했어요. 다시 말해 주시면 그 시간으로 만들게요.</p>
+      )}
+      {budget && (adopted || ambiguous) && (
+        <p className="view-dim">
+          {budget.requestedMinutes != null && `요청 ${budget.requestedMinutes}분 · `}
+          들어갈 수 있는 시간 {budget.capacityMinutes}분 · 이번 목표 {budget.targetMinutes}분
+          {budget.breakReserveMinutes > 0 && ` · 휴식 여유 ${budget.breakReserveMinutes}분을 남겼어요`}
+          {budget.placedMinutes != null && ` · 실제 배치 ${budget.placedMinutes}분`}
+        </p>
+      )}
+      {budget?.shortfallMinutes > 0 && (
+        <p className="hint plan-scope-issue-line">요청한 시간 중 {budget.shortfallMinutes}분은 들어갈 자리가 없어요.</p>
+      )}
+      {(budget?.conflicts ?? []).length > 0 && (
+        <p className="hint">말한 시간과 겹친 일정: {budget.conflicts.join(', ')}</p>
+      )}
+      {(condition.notes ?? []).map((note) => <p key={note} className="view-dim">{note}</p>)}
+      {(condition.issues ?? []).map((issue) => (
+        <p key={`${issue.code}-${issue.quote}`} className="hint">
+          {ISSUE_TEXT[issue.code] ?? issue.detail}
+          {issue.quote && <span className="view-dim"> · &ldquo;{issue.quote}&rdquo;</span>}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function roleLabel(scope) {
   if (!scope.verified) return '확인 필요';
   return scope.role === 'OPTIONAL' ? '가능하면' : '꼭';
@@ -43,7 +110,7 @@ function roleLabel(scope) {
 export default function PlanScopeReport({ report }) {
   // 범위도 시간도 말하지 않았으면 그리지 않는다. 범위를 판정하지 못했으면(추출 실패 등) 서버 문장만이라도 보인다.
   const scopes = report?.scopes ?? [];
-  if (!report || (!scopes.length && !report.notice && !report.studyTime)) return null;
+  if (!report || (!scopes.length && !report.notice && !report.studyTime && !report.timeCondition)) return null;
   const states = new Map((report.parts ?? []).map((p) => [p.partId, p]));
   const failedCheck = (report.issues ?? []).length > 0;
 
@@ -54,7 +121,8 @@ export default function PlanScopeReport({ report }) {
         {failedCheck && <span className="chip-status plan-scope-issue">검증 미통과</span>}
       </p>
       {report.notice && <p className="plan-scope-notice">{report.notice}</p>}
-      {report.studyTime && (
+      <StudyTimeCondition condition={report.timeCondition} budget={report.timeBudget} />
+      {!report.timeCondition && report.studyTime && (
         <p className="plan-scope-time">
           <span className="chip-status">말한 시간</span>
           {' '}

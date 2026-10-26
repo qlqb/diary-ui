@@ -12,14 +12,14 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { formatDateShort, hhmmOf, minutesOf, toHHmm, weekdayKo } from '../../lib/datetime.js';
 
-const START_HOUR = 6;
+/** 격자의 기본 시작 시각. 새벽(00~06시) 블록이 있는 주는 0시부터 그린다(자정 넘김 공부·근무를 숨기지 않는다). */
+const DEFAULT_START_HOUR = 6;
 const END_HOUR = 24;
 const HOUR_PX = 40;
 const SNAP_MINUTES = 15;
-const GRID_HEIGHT = (END_HOUR - START_HOUR) * HOUR_PX;
 
-function topOf(hhmm) {
-  return ((minutesOf(hhmm) - START_HOUR * 60) / 60) * HOUR_PX;
+function topOf(hhmm, startHour = DEFAULT_START_HOUR) {
+  return ((minutesOf(hhmm) - startHour * 60) / 60) * HOUR_PX;
 }
 
 function heightOf(startHHmm, endHHmm) {
@@ -78,8 +78,8 @@ function assignLanes(entries) {
   return placed.map((entry) => ({ ...entry, laneCount }));
 }
 
-function clampSegment(segment) {
-  const start = Math.max(minutesOf(segment.startTime), START_HOUR * 60);
+function clampSegment(segment, startHour = DEFAULT_START_HOUR) {
+  const start = Math.max(minutesOf(segment.startTime), startHour * 60);
   const end = Math.min(minutesOf(segment.endTime), END_HOUR * 60);
   if (end <= start) return null;
   return { ...segment, startTime: hhmmOf(start), endTime: end === END_HOUR * 60 ? '24:00' : hhmmOf(end) };
@@ -96,6 +96,21 @@ export default function WeekGrid({
    * 무시한다. 화면 표시용 클래스만 별도 state로 관리한다.
    */
   const dragRef = useRef(null); // { proposalItemId, offsetY }
+  /*
+   * 새벽(00~06시)에 시작하는 블록이 있으면 0시부터 그린다 — 자정을 넘긴 공부(다음 날 00:00~01:00)나 새벽 근무 조각이 격자 밖으로 빠져
+   * 사라지지 않게. 없으면 예전처럼 06시부터다.
+   */
+  const startHour = (() => {
+    const starts = [
+      ...items.filter((i) => i.startTime).map((i) => i.startTime),
+      ...draftCards.filter((c) => !c.excluded && c.startTime).map((c) => c.startTime),
+      ...(occurrences ?? []).flatMap((o) => occurrenceSegments(o))
+        .filter((seg) => dates.includes(seg.date) && seg.endTime !== '00:00').map((seg) => seg.startTime),
+    ];
+    const earliest = starts.length === 0 ? DEFAULT_START_HOUR * 60 : Math.min(...starts.map(minutesOf));
+    return earliest < DEFAULT_START_HOUR * 60 ? 0 : DEFAULT_START_HOUR;
+  })();
+  const gridHeight = (END_HOUR - startHour) * HOUR_PX;
   const [draggingId, setDraggingId] = useState(null);
 
   /*
@@ -109,7 +124,7 @@ export default function WeekGrid({
       ...draftCards.filter((c) => !c.excluded && c.startTime).map((c) => c.startTime),
     ];
     if (starts.length === 0) return null;
-    return topOf(starts.sort()[0]);
+    return topOf(starts.sort()[0], startHour);
   })();
 
   const weekStart = dates[0];
@@ -117,9 +132,9 @@ export default function WeekGrid({
     const grid = gridRef.current;
     if (!grid) return;
     // 아무것도 없으면 아침(08시)을 기준으로 둔다.
-    const target = earliestTop ?? topOf('08:00');
+    const target = earliestTop ?? topOf('08:00', startHour);
     grid.scrollTop = Math.max(0, Math.min(grid.scrollHeight - grid.clientHeight, target - HOUR_PX));
-  }, [earliestTop, weekStart]);
+  }, [earliestTop, weekStart, startHour]);
 
   const timedByDate = {};
   const untimedByDate = {};
@@ -134,7 +149,7 @@ export default function WeekGrid({
   for (const occurrence of occurrences ?? []) {
     for (const segment of occurrenceSegments(occurrence)) {
       if (!(segment.date in routineByDate)) continue;
-      const clamped = clampSegment(segment);
+      const clamped = clampSegment(segment, startHour);
       if (clamped) routineByDate[segment.date].push({ occurrence, segment: clamped });
     }
   }
@@ -148,7 +163,7 @@ export default function WeekGrid({
   for (const commitment of commitments ?? []) {
     for (const segment of occurrenceSegments(commitment)) {
       if (!(segment.date in commitmentByDate)) continue;
-      const clamped = clampSegment(segment);
+      const clamped = clampSegment(segment, startHour);
       if (clamped) commitmentByDate[segment.date].push({ commitment, segment: clamped });
     }
   }
@@ -173,12 +188,12 @@ export default function WeekGrid({
     const columnWidth = rect.width / dates.length;
     const dayIndex = Math.max(0, Math.min(dates.length - 1, Math.floor(relX / columnWidth)));
 
-    const rawMinutes = START_HOUR * 60 + (relY / HOUR_PX) * 60;
+    const rawMinutes = startHour * 60 + (relY / HOUR_PX) * 60;
     const snapped = Math.round(rawMinutes / SNAP_MINUTES) * SNAP_MINUTES;
     const duration = card.startTime && card.endTime
       ? minutesOf(card.endTime) - minutesOf(card.startTime)
       : (card.expectedMinutes || 30);
-    const start = Math.max(START_HOUR * 60, Math.min(END_HOUR * 60 - duration, snapped));
+    const start = Math.max(startHour * 60, Math.min(END_HOUR * 60 - duration, snapped));
 
     onPatchCard(card.proposalItemId, {
       scheduledDate: dates[dayIndex],
@@ -223,17 +238,17 @@ export default function WeekGrid({
       </div>
 
       <div className="week-grid-body" ref={gridRef}>
-        <div className="week-grid-gutter" style={{ height: GRID_HEIGHT }}>
-          {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
+        <div className="week-grid-gutter" style={{ height: gridHeight }}>
+          {Array.from({ length: END_HOUR - startHour }, (_, i) => (
             <div key={i} className="week-grid-hour-label" style={{ top: i * HOUR_PX }}>
-              {String(START_HOUR + i).padStart(2, '0')}
+              {String(startHour + i).padStart(2, '0')}
             </div>
           ))}
         </div>
 
         {dates.map((date) => (
-          <div key={date} className={`week-grid-col${date === todayDate ? ' is-today' : ''}`} style={{ height: GRID_HEIGHT }}>
-            {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
+          <div key={date} className={`week-grid-col${date === todayDate ? ' is-today' : ''}`} style={{ height: gridHeight }}>
+            {Array.from({ length: END_HOUR - startHour }, (_, i) => (
               <div key={i} className="week-grid-line" style={{ top: i * HOUR_PX }} />
             ))}
 
@@ -247,7 +262,7 @@ export default function WeekGrid({
                 className="grid-block is-routine"
                 title={`${occurrence.title}${occurrence.location ? ` · ${occurrence.location}` : ''}`}
                 style={{
-                  top: topOf(segment.startTime),
+                  top: topOf(segment.startTime, startHour),
                   height: heightOf(segment.startTime, segment.endTime),
                   left: `calc(3px + ${lane} * (100% - 6px) / ${laneCount})`,
                   width: `calc((100% - 6px) / ${laneCount})`,
@@ -276,7 +291,7 @@ export default function WeekGrid({
                 className="grid-block is-commitment"
                 title={`${commitment.title}${commitment.locationText ? ` · ${commitment.locationText}` : ''}`}
                 style={{
-                  top: topOf(segment.startTime),
+                  top: topOf(segment.startTime, startHour),
                   height: heightOf(segment.startTime, segment.endTime),
                 }}
                 onClick={() => onSelectCommitment?.(commitment)}
@@ -297,7 +312,7 @@ export default function WeekGrid({
                 key={item.executionItemId}
                 type="button"
                 className={`grid-block status-${(item.status ?? 'PLANNED').toLowerCase()}`}
-                style={{ top: topOf(item.startTime), height: heightOf(item.startTime, item.endTime) }}
+                style={{ top: topOf(item.startTime, startHour), height: heightOf(item.startTime, item.endTime) }}
                 onClick={() => onSelectItem?.(item)}
               >
                 <span className="grid-block-time">{item.startTime}</span>
@@ -311,7 +326,7 @@ export default function WeekGrid({
                 <div
                   key={card.proposalItemId}
                   className={`grid-block is-draft${onPatchCard ? '' : ' is-readonly'}${card.excluded ? ' is-excluded' : ''}${draggingId === card.proposalItemId ? ' is-dragging' : ''}`}
-                  style={{ top: topOf(card.startTime), height: heightOf(card.startTime, card.endTime) }}
+                  style={{ top: topOf(card.startTime, startHour), height: heightOf(card.startTime, card.endTime) }}
                   role={onPatchCard ? 'button' : undefined}
                   tabIndex={onPatchCard ? 0 : undefined}
                   title={onPatchCard ? `${card.title} — 끌어서 옮길 수 있어요` : `${card.title} · ${card.startTime}~${card.endTime}`}

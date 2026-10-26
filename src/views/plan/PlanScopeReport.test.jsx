@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
-import PlanScopeReport, { studyTimeLabel } from './PlanScopeReport.jsx';
+import PlanScopeReport, { studyTimeLabel, rangeLabel } from './PlanScopeReport.jsx';
 
 /** 서버가 판정한 "말한 범위"를 글자로 보인다. 완료 표시는 서버 문장(notice)이 정한다. */
 const REPORT = {
@@ -76,5 +76,42 @@ describe('PlanScopeReport 말한 시간', () => {
     expect(studyTimeLabel({ minutes: 60, perDay: true })).toBe('하루 60분');
     expect(studyTimeLabel({ minutes: null, from: '20:00', until: '24:00' })).toBe('20:00~24:00');
     expect(studyTimeLabel(null)).toBeNull();
+  });
+});
+
+describe('말한 시간 조건(2026-10-25)', () => {
+  it('범위·제외·요청량·남는 시간·휴식 여유·겹친 일정을 따로 보인다', () => {
+    render(<PlanScopeReport report={{
+      status: 'NONE', scopes: [],
+      timeCondition: {
+        status: 'ADOPTED',
+        windows: [{ start: '14:00', end: '20:00', endsNextDay: false }],
+        exclusions: [{ start: '18:00', end: '19:00', endsNextDay: false, label: '저녁' }],
+        notes: ['저녁은 끝을 말하지 않아 60분으로 봤어요'], issues: [],
+      },
+      timeBudget: { requestedMinutes: 240, capacityMinutes: 180, targetMinutes: 180, breakReserveMinutes: 0,
+        shortfallMinutes: 60, conflicts: ['17:00~20:00 쿠팡알바 근무'] },
+    }} />);
+    expect(screen.getByText('14:00~20:00')).toBeInTheDocument();
+    expect(screen.getByText(/제외 저녁 18:00~19:00/)).toBeInTheDocument();
+    expect(screen.getByText(/요청 240분/)).toBeInTheDocument();
+    expect(screen.getByText(/60분은 들어갈 자리가 없어요/)).toBeInTheDocument();
+    expect(screen.getByText(/쿠팡알바 근무/)).toBeInTheDocument();
+  });
+
+  it('확인하지 못한 시간도 숨기지 않고 기본 시간으로 계산했다고 말한다', () => {
+    render(<PlanScopeReport report={{
+      status: 'NONE', scopes: [],
+      timeCondition: { status: 'VERIFY_FAILED', windows: [], exclusions: [], notes: [],
+        issues: [{ code: 'VALUE_MISMATCH', quote: '오후4시까지 가능해' }] },
+    }} />);
+    expect(screen.getByText('말한 시간 · 확인 못 함')).toBeInTheDocument();
+    expect(screen.getByText(/기본 시간으로 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/말한 문장과 달라요/)).toBeInTheDocument();
+  });
+
+  it('자정을 넘는 범위를 그렇게 말한다', () => {
+    expect(rangeLabel({ start: '22:00', end: '01:00', endsNextDay: true })).toBe('22:00~다음 날 01:00');
+    expect(rangeLabel({ start: null, end: '00:00', endsNextDay: true })).toBe('~24:00');
   });
 });
