@@ -1,0 +1,39 @@
+/*
+ * 실행 기록의 "걸린 점(선택)"과 기록 화면의 시간 구분.
+ * 선택 상태는 색만으로 전하지 않는다 — 체크 표시와 aria-pressed가 함께 있다.
+ */
+.exec-blocker {
+  flex-basis: 100%;
+  min-width: 0;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--ws-border-strong);
+  border-radius: 8px;
+}
+.exec-blocker-legend { padding: 0 4px; font-size: 12px; color: var(--ws-text-dim); }
+.exec-blocker-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.exec-blocker-option.is-active {
+  border-color: var(--ws-accent);
+  background: var(--ws-accent-soft);
+  color: var(--ws-accent-text);
+  font-weight: 600;
+}
+.exec-blocker-note {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  background: var(--ws-surface);
+  color: var(--ws-text);
+}
+.exec-blocker-note:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+.exec-blocker-hint,
+.exec-tray-note { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; color: var(--ws-text-dim); }
+
+.record-chip-missing { border-style: dashed; color: var(--ws-text-dim); }
+.record-chip-blocker { background: var(--ws-warn-soft); color: var(--ws-warn); }
