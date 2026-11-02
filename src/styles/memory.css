@@ -1,0 +1,36 @@
+/*
+ * "AI가 이해한 내 상황". 390px에서 한 줄에 버튼 세 개가 안 들어가므로 전부 wrap된다.
+ * 출처 묶음은 제목(글자)으로 구분하고, 색은 쓰지 않는다.
+ */
+.memory-view { min-width: 0; }
+.memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.memory-item {
+  min-width: 0; padding: 10px 12px;
+  border: 1px solid var(--ws-border); border-radius: 9px; background: var(--ws-surface);
+}
+.memory-content { margin: 0; font-size: 14px; color: var(--ws-text); overflow-wrap: anywhere; white-space: pre-wrap; }
+.memory-meta { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 4px 0 6px; font-size: 12px; color: var(--ws-text-dim); }
+.memory-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.memory-edit { display: flex; flex-direction: column; gap: 6px; }
+.memory-edit-input {
+  width: 100%; max-width: 100%; box-sizing: border-box; padding: 6px 8px; resize: vertical;
+  border: 1px solid var(--ws-border-strong); border-radius: 6px;
+  font: inherit; font-size: 14px; background: var(--ws-surface); color: var(--ws-text);
+}
+.memory-edit-input:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+.memory-confirm {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 6px 8px;
+  border: 1px dashed var(--ws-border-strong); border-radius: 6px; font-size: 13px; color: var(--ws-text);
+}
+.memory-notice { margin: 0 0 8px; font-size: 13px; color: var(--ws-text-dim); }
+.memory-stale {
+  margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--ws-border);
+  border-left: 3px solid var(--ws-draft); border-radius: 8px; background: var(--ws-draft-soft);
+  font-size: 13px; color: var(--ws-text);
+}
+.memory-stale p { margin: 0; }
+.memory-stale-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-view * { transition: none !important; animation: none !important; }
+}
