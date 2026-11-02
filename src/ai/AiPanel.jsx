@@ -27,6 +27,7 @@ import {
 import ConsultPhotoTray from './ConsultPhotoTray.jsx';
 import { photoTopicText } from '../lib/studyLabels.js';
 import { useConsultPhotos } from './useConsultPhotos.js';
+import { shrinkImageToFit } from '../lib/shrinkImage.js';
 import ScheduleSuggestionCard from './ScheduleSuggestionCard.jsx';
 import ChangeBundleCard from './ChangeBundleCard.jsx';
 import ScheduleImportReviewModal from './ScheduleImportReviewModal.jsx';
@@ -850,13 +851,15 @@ export default function AiPanel({
     setImportError(null);
     setImporting(true);
     try {
+      // 대화를 만들기 전에 줄인다 — 줄이지 못하면 빈 대화를 남기지 않고 바로 알린다.
+      const upload = await shrinkImageToFit(file);
       let targetConversationId = activeConversationId;
       if (!targetConversationId) {
         const created = await conversationAPI.create(scope.conversationScope, scope.courseId ?? null);
         targetConversationId = created.conversationId;
         setActiveConversationId(targetConversationId);
       }
-      const result = await scheduleImportAPI.extract(targetConversationId, file);
+      const result = await scheduleImportAPI.extract(targetConversationId, upload);
       setExtraction({ ...result, conversationId: targetConversationId });
     } catch (err) {
       setImportError(err.message || '조금 뒤에 다시 시도해 주세요.');
