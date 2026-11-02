@@ -31,7 +31,7 @@
 - API는 모듈째 mock: `vi.mock('../../api/api.js', …)`(51곳). 그래서 화면이 없는 export를 읽어도 깨지지 않게 `views/classcheck/classSessionApi.js`·`views/learning/materialWeekApi.js` 같은 null-안전 접근자를 둔다.
 - 상호작용은 `@testing-library/user-event`가 기본(47개 파일), `fireEvent`는 5개 파일.
 - 가짜 데이터 헬퍼는 `src/testing/`(예: `fakeAnalysisBatch.js`).
-- 실행: `npm test`(= `vitest run`). CI(`.github/workflows/ci.yml`, Node 24): `npm ci` → `npm test` → `npm run build` → `npm run lint`.
+- 실행: `npm test`(= `vitest run`). CI(`.github/workflows/ci.yml`, Node 24): `test` 잡 `npm ci` → `npm test` → `npm run build` → `npm run lint`, `context-layer` 잡 대조 스크립트.
 
 ## 브랜치·커밋
 
@@ -44,4 +44,4 @@
 ## 문서 레이어 유지 (docs/context)
 
 변경이 `docs/context/*.md`의 기술(화면 그룹·화면↔API 대응·토큰·공통 컴포넌트 props)을 무효화하면 **같은 커밋에서** 갱신한다.
-`views/`에 새 디렉터리를 만들면 MAP.md 표에 그룹을 더한다. 확인: `bash scripts/check-context-layer.sh`(그룹 커버리지·분량 상한).
+`views/`에 새 디렉터리를 만들면 MAP.md 표에 그룹을 더한다. 확인: `bash scripts/check-context-layer.sh`(그룹 커버리지·분량 상한). CI `context-layer` 잡이 모든 push·PR에서 돌린다.
