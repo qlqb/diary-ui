@@ -111,6 +111,24 @@ describe('AiPanel — 이미지에서 일정 가져오기', () => {
     await waitFor(() => expect(scheduleImportAPI.extract).toHaveBeenCalledTimes(1));
   });
 
+  it('5MB를 넘는 이미지를 줄이지 못하면 크기 초과라고 말하고 대화를 만들지 않는다', async () => {
+    const user = userEvent.setup();
+    globalThis.createImageBitmap = vi.fn().mockRejectedValue(new Error('decode'));
+    try {
+      render(<AiPanel scope={SCOPE} />);
+      await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+
+      const big = new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'schedule.png', { type: 'image/png' });
+      await user.upload(document.querySelector('input[type="file"]'), big);
+
+      expect(await screen.findByText(/5MB를 넘어요/)).toBeInTheDocument();
+      expect(conversationAPI.create).not.toHaveBeenCalled();
+      expect(scheduleImportAPI.extract).not.toHaveBeenCalled();
+    } finally {
+      delete globalThis.createImageBitmap;
+    }
+  });
+
   it('글자를 붙여넣는 것은 건드리지 않는다', async () => {
     const user = userEvent.setup();
     render(<AiPanel scope={SCOPE} />);
