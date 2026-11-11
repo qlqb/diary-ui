@@ -1,0 +1,145 @@
+/*
+ * 프로젝트 학습 지도. 390px 폭에서 가로로 넘치지 않는 것이 기준이다 — 줄은 전부 wrap되고,
+ * 들여쓰기는 깊이가 깊어져도 화면 절반을 넘지 않게 상한을 둔다.
+ * 상태는 색만으로 전하지 않는다: 진행은 글자 라벨, 제안은 "자동 분석 제안(승인 전)" 칩, 검색은 <mark>.
+ */
+.project-sections { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 4px; border-bottom: 1px solid var(--ws-border); }
+.project-section-tab {
+  padding: 8px 14px; border: 0; border-bottom: 3px solid transparent; background: transparent;
+  color: var(--ws-text-dim); font: inherit; font-size: 14px; cursor: pointer;
+}
+.project-section-tab.is-active { border-bottom-color: var(--ws-accent); color: var(--ws-text); font-weight: 700; }
+.project-section-tab:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: -2px; }
+.project-anchor:focus { outline: none; }
+.project-anchor:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 4px; border-radius: 8px; }
+
+.lm { min-width: 0; }
+.lm-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.lm-optional {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 6px 0 10px; padding: 8px 10px;
+  border: 1px solid var(--ws-border); border-radius: 8px;
+  background: var(--ws-accent-soft); color: var(--ws-text); font-size: 13px;
+}
+
+.lm-state {
+  margin: 8px 0; padding: 10px 12px;
+  border: 1px solid var(--ws-border); border-left: 3px solid var(--ws-border-strong); border-radius: 8px;
+  background: var(--ws-surface);
+}
+.lm-state.is-problem { border-left-color: var(--ws-warn); background: var(--ws-warn-soft); }
+.lm-state-title { margin: 0; font-weight: 600; font-size: 14px; color: var(--ws-text); }
+.lm-state-desc { margin: 4px 0 8px; font-size: 13px; color: var(--ws-text-dim); }
+
+.lm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 6px; }
+.lm-toolbar-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.lm-tabs { display: inline-flex; border: 1px solid var(--ws-border-strong); border-radius: 8px; overflow: hidden; }
+.lm-tab {
+  padding: 5px 12px; border: 0; background: var(--ws-surface); color: var(--ws-text-dim);
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.lm-tab.is-active { background: var(--ws-accent-soft); color: var(--ws-accent-text); font-weight: 600; text-decoration: underline; }
+.lm-tab:focus-visible,
+.lm-toggle:focus-visible,
+.lm-title-btn:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+
+.lm-search {
+  display: inline-flex; align-items: center; gap: 6px; flex: 1 1 180px; min-width: 0; max-width: 320px;
+  padding: 4px 8px; border: 1px solid var(--ws-border-strong); border-radius: 8px; background: var(--ws-surface);
+}
+.lm-search:focus-within { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+.lm-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13px; color: var(--ws-text); }
+.lm-search-result { margin: 0 0 6px; font-size: 12px; color: var(--ws-text-dim); }
+.lm-overlay-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ws-text-dim); }
+.lm-mark { background: var(--ws-warn-soft); color: inherit; font-weight: 700; text-decoration: underline; padding: 0 1px; }
+
+.lm-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 900px) {
+  .lm-body:has(.lm-detail-pane) { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+}
+.lm-tree-pane, .lm-detail-pane { min-width: 0; }
+
+.lm-tree { list-style: none; margin: 0; padding: 0; }
+.lm-node { margin: 1px 0; }
+.lm-row {
+  display: flex; align-items: flex-start; gap: 4px; min-width: 0;
+  padding: 4px 6px 4px calc(6px + min(var(--lm-depth, 0) * 14px, 40vw));
+  border-radius: 6px;
+}
+.lm-row.is-selected { background: var(--ws-accent-soft); box-shadow: inset 2px 0 0 var(--ws-accent); }
+.lm-row.is-match { box-shadow: inset 0 0 0 1px var(--ws-warn); }
+.lm-toggle, .lm-toggle-spacer { flex: 0 0 22px; width: 22px; height: 22px; }
+.lm-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: transparent; color: var(--ws-text-dim); cursor: pointer;
+}
+.lm-row-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lm-title-btn {
+  display: inline-flex; align-items: flex-start; gap: 6px; max-width: 100%;
+  padding: 1px 2px; border: 0; border-radius: 4px; background: transparent;
+  color: var(--ws-text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+}
+.lm-title { overflow-wrap: anywhere; }
+.lm-status-icon { flex-shrink: 0; margin-top: 3px; color: var(--ws-text-faint); }
+.lm-status-IN_PROGRESS { color: var(--ws-accent); }
+.lm-status-LEARNED { color: var(--ws-ok); }
+.lm-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--ws-text-dim); }
+.lm-progress { font-weight: 600; }
+.lm-materials { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.lm-material { display: inline-flex; align-items: center; gap: 4px; min-width: 0; font-size: 12px; color: var(--ws-text-dim); }
+.lm-material-name { overflow-wrap: anywhere; }
+.lm-material-locator { padding: 0 5px; border: 1px solid var(--ws-border); border-radius: 4px; font-size: 11px; color: var(--ws-text-dim); }
+.lm-marks { display: flex; flex-wrap: wrap; gap: 4px; flex: 0 1 auto; }
+.lm-more { padding: 4px 6px; }
+
+/* 승인 전 제안: 점선 + 글자 라벨. 점선만으로는 구분이 안 되는 사람이 있다. */
+.lm-proposed-row {
+  margin: 2px 0; border: 1px dashed var(--ws-draft); background: var(--ws-draft-soft);
+}
+.lm-proposed-head { display: flex; flex-wrap: wrap; gap: 4px; }
+.lm-proposed-chip { border: 1px dashed var(--ws-draft); background: var(--ws-draft-soft); color: var(--ws-draft); font-weight: 600; }
+.lm-proposed-note { margin: 2px 0 0; font-size: 12px; color: var(--ws-text-dim); }
+.lm-proposed-review { align-self: flex-start; }
+.lm-proposed-roots { margin-top: 10px; }
+.lm-proposed-roots-title { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--ws-text-dim); }
+
+.lm-week { margin: 0 0 14px; }
+.lm-week-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--ws-text); }
+.lm-week-note, .lm-week-files { margin: 2px 0 4px; font-size: 12px; color: var(--ws-text-dim); }
+
+.lm-unlinked { margin-top: 12px; }
+.lm-unlinked-title { font-weight: 600; }
+.lm-unlinked-list, .lm-unlinked-sections { list-style: none; margin: 0; padding: 0; }
+.lm-unlinked-item { padding: 6px 0; border-top: 1px solid var(--ws-border); }
+.lm-unlinked-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
+.lm-unlinked-sections li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0 2px 18px; font-size: 12px; color: var(--ws-text-dim); }
+
+.lm-selfcheck-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 12px; }
+.lm-selfcheck { margin-top: 12px; padding: 12px; border: 1px solid var(--ws-border); border-radius: 10px; background: var(--ws-surface); }
+.lm-selfcheck-title { margin: 0; font-size: 14px; font-weight: 700; }
+.lm-selfcheck-desc { margin: 4px 0 10px; font-size: 13px; color: var(--ws-text-dim); }
+.lm-selfcheck-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.lm-selfcheck-group select { max-width: 100%; min-width: 0; font: inherit; font-size: 13px; }
+.lm-selfcheck-list { list-style: none; margin: 8px 0; padding: 0; }
+.lm-selfcheck-item fieldset { margin: 0 0 6px; padding: 8px 10px; min-width: 0; border: 1px solid var(--ws-border); border-radius: 8px; }
+.lm-selfcheck-item legend { padding: 0 4px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; max-width: 100%; }
+.lm-selfcheck-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.lm-selfcheck-level { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; min-height: 28px; }
+.lm-selfcheck-level input:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 2px; }
+.lm-selfcheck-note {
+  width: 100%; max-width: 100%; box-sizing: border-box; margin-top: 6px; padding: 5px 8px;
+  border: 1px solid var(--ws-border-strong); border-radius: 6px; font: inherit; font-size: 13px;
+  background: var(--ws-surface); color: var(--ws-text);
+}
+.lm-selfcheck-note:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+.lm-selfcheck-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+@media (max-width: 480px) {
+  .lm-search { flex-basis: 100%; max-width: none; }
+  .lm-marks { flex-basis: 100%; padding-left: 26px; }
+  .lm-row { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm *, .lm *::before, .lm *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
