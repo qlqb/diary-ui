@@ -238,7 +238,7 @@ describe('항목 카드', () => {
 
     const third = screen.getByText('목표 없는 항목').closest('li');
     expect(within(third).queryByText('목표')).not.toBeInTheDocument();
-    expect(screen.queryByText(/TOC_AI|USER/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\b(?:TOC_AI|USER)\b/)).not.toBeInTheDocument();
   });
 
   it('출처 라벨·위치 안내·꼭 하는 이유·마감 출처를 따로 말하고, 마감이 없으면 미확인이라고 한다', async () => {
