@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
-import PlanScopeReport, { studyTimeLabel, rangeLabel } from './PlanScopeReport.jsx';
+import PlanScopeReport from './PlanScopeReport.jsx';
+import { studyTimeLabel, rangeLabel } from '../../lib/planScopeLabels.js';
 
 /** 서버가 판정한 "말한 범위"를 글자로 보인다. 완료 표시는 서버 문장(notice)이 정한다. */
 const REPORT = {
