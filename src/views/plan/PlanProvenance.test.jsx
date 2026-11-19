@@ -5,6 +5,7 @@ import PlanDraftReview from './PlanDraftReview.jsx';
 import ExecutionItemEvidence from './ExecutionItemEvidence.jsx';
 import { forgetItemEvidence } from '../../lib/evidenceCache.js';
 import { materialStoreAPI, planAPI, schedulePreviewAPI } from '../../api/api.js';
+import { expandPlanItems, openPlanWhy } from '../../testing/planItems.js';
 
 vi.mock('../../api/api.js', () => ({
   planAPI: {
@@ -137,6 +138,8 @@ afterEach(() => {
 
 async function openEvidence(user) {
   render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-10" projectTitles={{ 6: '네트워크프로그래밍' }} onOpenSource={vi.fn()} />);
+  expandPlanItems();
+  openPlanWhy();
   await waitFor(() => expect(planAPI.draftProvenance).toHaveBeenCalledWith(77));
   await user.click(screen.getByRole('button', { name: /근거 보기/ }));
 }
@@ -145,6 +148,8 @@ describe('생성 시 참고한 정보', () => {
   it('접혀 있다가 열리고, 준 정보와 서버 계산을 나눠서 보여준다', async () => {
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-10" />);
+    expandPlanItems();
+    openPlanWhy();
 
     await waitFor(() => expect(planAPI.draftProvenance).toHaveBeenCalledWith(77));
     // 접혀 있는 동안에는 본문이 없다 — 훑어보는 화면의 무게중심을 옮기지 않는다.
@@ -168,6 +173,8 @@ describe('생성 시 참고한 정보', () => {
     planAPI.draftProvenance.mockResolvedValue({ recorded: false, items: [] });
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-10" />);
+    expandPlanItems();
+    openPlanWhy();
 
     await waitFor(() => expect(planAPI.draftProvenance).toHaveBeenCalled());
     await user.click(screen.getByRole('button', { name: /생성 시 참고한 정보/ }));
@@ -226,6 +233,8 @@ describe('항목별 근거 — 짧게 확인하고 원문을 연다', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(tab);
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-10" />);
+    expandPlanItems();
+    openPlanWhy();
     await waitFor(() => expect(planAPI.draftProvenance).toHaveBeenCalled());
 
     // 검토 중인 상태를 만든다: 항목 제외, 제목 수정.
@@ -353,6 +362,8 @@ describe('항목별 근거 — 짧게 확인하고 원문을 연다', () => {
     }));
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-10" />);
+    expandPlanItems();
+    openPlanWhy();
 
     await waitFor(() => expect(planAPI.draftProvenance).toHaveBeenCalled());
     expect(screen.getByText('수정 전 제안의 근거')).toBeInTheDocument();
@@ -365,6 +376,8 @@ describe('항목별 근거 — 짧게 확인하고 원문을 연다', () => {
     planAPI.draftProvenance.mockReturnValueOnce(new Promise((resolve) => { resolveLoad = resolve; }));
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-10" />);
+    expandPlanItems();
+    openPlanWhy();
 
     expect(await screen.findByText(/근거를 불러오는 중/)).toBeInTheDocument();
     expect(screen.queryByText(/근거 보기/)).not.toBeInTheDocument();
@@ -378,6 +391,8 @@ describe('항목별 근거 — 짧게 확인하고 원문을 연다', () => {
     planAPI.draftProvenance.mockRejectedValueOnce(new Error('네트워크가 끊겼어요'));
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-10" />);
+    expandPlanItems();
+    openPlanWhy();
 
     expect(await screen.findByText(/근거를 불러오지 못했어요/)).toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: /다시 시도/ })[0]);
@@ -391,6 +406,8 @@ describe('항목별 근거 — 짧게 확인하고 원문을 연다', () => {
     planAPI.confirm.mockRejectedValueOnce(conflict);
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-10" />);
+    expandPlanItems();
+    openPlanWhy();
     await waitFor(() => expect(planAPI.draftProvenance).toHaveBeenCalled());
     const title = screen.getByRole('textbox');
     await user.clear(title);

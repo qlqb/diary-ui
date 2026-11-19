@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PlanCreateView from './PlanCreateView.jsx';
 import { planAPI, schedulePreviewAPI, topicAPI } from '../../api/api.js';
+import { openPlanMore, planItemButton } from '../../testing/planItems.js';
 
 vi.mock('../../api/api.js', () => ({
   planAPI: {
@@ -45,7 +46,8 @@ const FULL = draft(77, [ADT, LIST]);
 const PROJECT_TITLES = { 6: '자료구조' };
 
 function buttonIn(titleText, name) {
-  return within(screen.getByText(titleText).closest('li')).getByRole('button', { name });
+  // 줄을 펴고, 「빼기」 안에 묶인 두 길(이번만 빼기·이미 알아요)도 열어서 집는다.
+  return planItemButton(titleText, name);
 }
 
 async function openDraft(first = FULL) {
@@ -123,6 +125,7 @@ describe('T13·T14 제외 목록의 범위', () => {
     await userEvent.click(buttonIn('자료구조 · ADT와 복잡도', '이번만 빼기'));
     await screen.findByText(/이번 계획에서만 뺀 항목/);
 
+    openPlanMore();
     await userEvent.click(screen.getByRole('button', { name: '다시 만들기' }));
     planAPI.createDraft.mockResolvedValueOnce(draft(81, [LIST], { excluded: [{ topicId: 101, title: 'ADT와 복잡도' }] }));
     await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
@@ -157,7 +160,9 @@ describe('T15 상담 초안', () => {
     await userEvent.click(buttonIn('자료구조 · ADT와 복잡도', '이번만 빼기'));
     await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(90, expect.objectContaining({ excludeTopicIds: [101] })));
 
-    await userEvent.click(await screen.findByRole('button', { name: '이미 알아요' }));
+    // 다시 만든 초안(연결 리스트만 남음)이 온 뒤에 그 항목을 「이미 알아요」로 표시한다.
+    await waitFor(() => expect(screen.queryByText('자료구조 · ADT와 복잡도')).not.toBeInTheDocument());
+    await userEvent.click(buttonIn('자료구조 · 연결 리스트', '이미 알아요'));
     await waitFor(() => expect(topicAPI.updateUserMark).toHaveBeenCalledWith(102, 'KNOWN'));
     await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(91, expect.objectContaining({})));
     // 다시 만든 뒤에도 상담 초안이다 — 화면의 기간 입력으로 바뀌지 않는다.
@@ -304,8 +309,8 @@ describe('구간만 인용한 항목의 학습 항목 찾기', () => {
     planAPI.redraft.mockResolvedValueOnce(draft(96, []));
     await openDraft(noTopic);
 
-    await userEvent.click(await within(screen.getByText('자료구조 · 연결 리스트 삭제 실습').closest('li'))
-      .findByRole('button', { name: '이번만 빼기' }));
+    // 근거(provenance)가 도착해야 학습 항목을 찾을 수 있다 — 그때까지 기다린다.
+    await userEvent.click(await waitFor(() => buttonIn('자료구조 · 연결 리스트 삭제 실습', '이번만 빼기')));
 
     await waitFor(() => expect(planAPI.redraft).toHaveBeenCalledWith(95, expect.objectContaining({ excludeTopicIds: [102] })));
   });

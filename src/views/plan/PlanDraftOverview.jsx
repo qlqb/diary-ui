@@ -2,10 +2,11 @@
  * 초안의 첫 화면 요약. 계획 탭의 검토 화면과 상담 작업 공간이 같은 것을 본다(PlanDraftReview 맨 위).
  *
  * 스크롤하지 않아도 알아야 하는 것만 둔다:
- *   · 실제 제안량 — 항목 수와 예상 시간 합. 예산(상한)은 보조 정보다. 예산은 채워야 하는 양이 아니라서
+ *   · 실제 제안량 — 항목 수와 예상 시간 합, 그리고 남는 여유. 예산(상한)과 프로젝트별 내역은 설명이라
+ *     「왜 이렇게 짰나요?」(PlanOverviewDetails)로 보낸다. 예산은 채워야 하는 양이 아니라서
  *     "얼마나 못 채웠는가"는 어디에도 적지 않는다.
- *   · 어느 프로젝트가 들어갔고 어느 것이 빠졌는가, 빠졌다면 왜인가. "검토하지 못함"과 "이번에는 뺌"은
- *     다른 사실이다 — 못 본 것을 덜 중요하게 본 것처럼 말하지 않는다.
+ *   · 들어가지 않은 프로젝트가 있다는 사실 한 줄. 어느 것이 왜 빠졌는지는 [이유 보기]로 연다. "검토하지 못함"과
+ *     "이번에는 뺌"은 다른 사실이다 — 못 본 것을 덜 중요하게 본 것처럼 말하지 않는다(그 구분은 상세에 있다).
  *   · 배치가 임시인가(가능한 시간을 가정했는가). 일정을 못 읽은 것은 또 다른 사실이라 따로 말한다.
  *   · 아직 열려 있는 핵심 질문 하나와 [답하기].
  *   · 이 초안이 최신 답변을 반영하기 전 버전인가, 다시 만들었다면 무엇이 달라졌는가.
@@ -32,22 +33,21 @@ const FIELD_LABEL = {
 const fieldLabel = (field) => FIELD_LABEL[field] ?? '직접 고친 값';
 
 export default function PlanDraftOverview({
-  draft, selectedCount, selectedMinutes, projectTitles = {},
+  draft, selectedCount, selectedMinutes,
   stale = false, staleReasons = [], regenerating = false, stageLabel = null, onRemake = null,
   outcome = null, conflictChoice = {}, onChooseConflict = null,
   scheduleLookupFailed = false, onRetrySchedule = null,
   onAnswerQuestion = null, onReview = null, onApply = null, applyDisabled = false, applyLabel = '적용',
   onContinueConsult = null,
+  /** 「왜 이렇게 짰나요?」를 열고 그리로 간다. 없으면 [이유 보기]를 그리지 않는다. */
+  onShowWhy = null,
 }) {
   if (!draft) return null;
 
   const projects = draft.strategy?.projects ?? [];
-  const included = projects.filter((p) => p.disposition === 'INCLUDED');
   const missing = projects.filter((p) => p.disposition !== 'INCLUDED');
-  const titleOf = (p) => p.courseTitle ?? projectTitles[p.courseId] ?? '프로젝트';
   const basisNote = AVAILABILITY_BASIS_NOTE[draft.availabilityBasis] ?? null;
   const openQuestion = (draft.strategy?.openQuestions ?? [])[0] ?? null;
-  const budget = draft.targetMinutes;
   const available = draft.estimatedAvailableMinutes;
   const changes = outcome?.changes ?? [];
   const carried = outcome?.carriedEdits ?? [];
@@ -76,45 +76,18 @@ export default function PlanDraftOverview({
       <p className="plan-overview-lead">
         <strong>고른 항목 {selectedCount}개 · 합계 {formatMinutes(selectedMinutes)}</strong>
       </p>
-      {(budget != null && budget > 0) || available != null ? (
+      {available != null && (
         <p className="plan-overview-dim">
-          {budget != null && budget > 0 && <>예산(상한) {formatMinutes(budget)} — 채워야 하는 양이 아니에요</>}
-          {budget != null && budget > 0 && available != null && ' · '}
-          {available != null && (
-            <>
-              남는 시간 추정 {formatMinutes(available)}
-              {' · 여유/휴식 약 '}{formatMinutes(Math.max(0, available - selectedMinutes))}
-            </>
-          )}
+          남는 시간 추정 {formatMinutes(available)}
+          {' · 여유/휴식 약 '}{formatMinutes(Math.max(0, available - selectedMinutes))}
         </p>
-      ) : null}
+      )}
 
-      {projects.length > 0 && (
-        <div className="plan-overview-projects">
-          <p className="plan-overview-line">
-            <span className="plan-overview-label">포함한 프로젝트 {included.length}개</span>
-            {included.length > 0
-              ? included.map((p) => `${titleOf(p)}${p.itemCount ? ` (${p.itemCount}개 · ${formatMinutes(p.itemMinutes ?? 0)})` : ''}`).join(', ')
-              : '없음'}
-          </p>
-          {missing.length > 0 && (
-            <ul className="plan-overview-missing" aria-label="이번 초안에 들어가지 않은 프로젝트">
-              {missing.map((p) => (
-                <li key={p.courseId}>
-                  <span className="plan-overview-project">{titleOf(p)}</span>
-                  <span className="plan-overview-badge">{PROJECT_DISPOSITION_LABEL[p.disposition] ?? '상태 미확인'}</span>
-                  {p.reason && <span className="plan-overview-reason">{p.reason}</span>}
-                  {MATERIAL_STATE_LABEL[p.materialState] && (
-                    <span className="plan-overview-dim">자료: {MATERIAL_STATE_LABEL[p.materialState]}</span>
-                  )}
-                  {NEXT_ACTION_HINT[p.nextAction] && (
-                    <span className="plan-overview-dim">→ {NEXT_ACTION_HINT[p.nextAction]}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {missing.length > 0 && (
+        <p className="plan-overview-line plan-overview-missing-line">
+          <span className="plan-overview-label">들어가지 않은 프로젝트 {missing.length}개</span>
+          {onShowWhy && <button type="button" className="btn-ghost btn-sm" onClick={onShowWhy}>이유 보기</button>}
+        </p>
       )}
 
       {/*
@@ -209,6 +182,58 @@ export default function PlanDraftOverview({
           <button type="button" className="btn-ghost btn-sm" onClick={onContinueConsult}>계속 상담</button>
         )}
       </div>
+    </section>
+  );
+}
+
+/**
+ * 요약의 상세 — 예산(상한)과 프로젝트별 내역. 「왜 이렇게 짰나요?」 안에 그린다.
+ *
+ * 어느 프로젝트가 들어갔고 어느 것이 빠졌는가, 빠졌다면 왜인가. "검토하지 못함"과 "이번에는 뺌"은 다른 사실이다 —
+ * 셋(못 봄 / 못 정함 / 이번에 뺌)을 각자의 말로 부르고 이유·자료 상태·다음 길을 함께 적는다.
+ */
+export function PlanOverviewDetails({ draft, projectTitles = {} }) {
+  if (!draft) return null;
+  const projects = draft.strategy?.projects ?? [];
+  const included = projects.filter((p) => p.disposition === 'INCLUDED');
+  const missing = projects.filter((p) => p.disposition !== 'INCLUDED');
+  const titleOf = (p) => p.courseTitle ?? projectTitles[p.courseId] ?? '프로젝트';
+  const budget = draft.targetMinutes;
+  const hasBudget = budget != null && budget > 0;
+  if (!hasBudget && projects.length === 0) return null;
+
+  return (
+    <section className="plan-overview plan-overview-details" aria-label="예산과 프로젝트">
+      {hasBudget && (
+        <p className="plan-overview-dim">예산(상한) {formatMinutes(budget)} — 채워야 하는 양이 아니에요</p>
+      )}
+      {projects.length > 0 && (
+        <div className="plan-overview-projects">
+          <p className="plan-overview-line">
+            <span className="plan-overview-label">포함한 프로젝트 {included.length}개</span>
+            {included.length > 0
+              ? included.map((p) => `${titleOf(p)}${p.itemCount ? ` (${p.itemCount}개 · ${formatMinutes(p.itemMinutes ?? 0)})` : ''}`).join(', ')
+              : '없음'}
+          </p>
+          {missing.length > 0 && (
+            <ul className="plan-overview-missing" aria-label="이번 초안에 들어가지 않은 프로젝트">
+              {missing.map((p) => (
+                <li key={p.courseId}>
+                  <span className="plan-overview-project">{titleOf(p)}</span>
+                  <span className="plan-overview-badge">{PROJECT_DISPOSITION_LABEL[p.disposition] ?? '상태 미확인'}</span>
+                  {p.reason && <span className="plan-overview-reason">{p.reason}</span>}
+                  {MATERIAL_STATE_LABEL[p.materialState] && (
+                    <span className="plan-overview-dim">자료: {MATERIAL_STATE_LABEL[p.materialState]}</span>
+                  )}
+                  {NEXT_ACTION_HINT[p.nextAction] && (
+                    <span className="plan-overview-dim">→ {NEXT_ACTION_HINT[p.nextAction]}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </section>
   );
 }

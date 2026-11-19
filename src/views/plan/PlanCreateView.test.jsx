@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { openPlanWhy } from '../../testing/planItems.js';
 import PlanCreateView from './PlanCreateView.jsx';
 import { planAPI, schedulePreviewAPI } from '../../api/api.js';
 
@@ -53,11 +54,45 @@ describe('계획 초안 검토', () => {
     schedulePreviewAPI.recompute.mockResolvedValue(null);
   });
 
+  /*
+   * 평소에는 기간만 고르고 바로 만든다. 강도·목적·덧붙일 말은 「옵션」 한 줄에 접혀 있고 지금 값이 요약으로 보인다.
+   * 첫 계획이면(확정 이력 없음) 강도를 알 수 있게 펼친 채로 시작한다.
+   */
+  it('강도·목적·덧붙일 말은 「옵션」에 접혀 있고 고른 값이 요약으로 보인다', async () => {
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+    const options = await screen.findByRole('button', { name: /^옵션/ });
+
+    expect(options).toHaveAttribute('aria-expanded', 'false');
+    expect(options).toHaveTextContent('직전 계획과 같은 강도');
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/덧붙일 말/)).not.toBeInTheDocument();
+
+    await userEvent.click(options);
+    expect(screen.getAllByRole('radio').length).toBeGreaterThan(1);
+    await userEvent.click(screen.getByRole('button', { name: '시험 준비' }));
+    await userEvent.type(screen.getByLabelText(/덧붙일 말/), '개념부터');
+
+    await userEvent.click(options);
+    expect(options).toHaveAttribute('aria-expanded', 'false');
+    expect(options).toHaveTextContent('직전 계획과 같은 강도 · 시험 준비 · 덧붙일 말 있음');
+  });
+
+  it('첫 계획이면 「옵션」을 펼친 채로 시작한다', async () => {
+    planAPI.findCoveringDate.mockResolvedValue([]);
+    render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
+
+    const options = await screen.findByRole('button', { name: /^옵션/ });
+    await waitFor(() => expect(options).toHaveAttribute('aria-expanded', 'true'));
+    expect(screen.getByText(/처음이라면 보통으로 그냥 넘어가도 괜찮아요/)).toBeInTheDocument();
+  });
+
   async function openDraft() {
     render(<PlanCreateView projectTitles={PROJECT_TITLES} />);
     await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
     // 제목은 input의 value라 텍스트로 잡히지 않는다. 초안이 그려졌다는 신호는 게이지다.
     await screen.findByRole('button', { name: '계획 확정' });
+    // 예산·판단·참고한 정보는 「왜 이렇게 짰나요?」 안에 있다.
+    openPlanWhy();
   }
 
   it('요약이 선택된 항목의 시간 합을 먼저 보여주고, 체크를 풀면 줄어든다', async () => {
@@ -172,16 +207,19 @@ describe('계획 초안 검토', () => {
   });
 
   /*
-   * 요약은 고른 양(항목 수·합계)이 먼저고, 예산(상한)·남는 시간 추정·여유는 작은 글씨로 뒤따른다.
-   * 항목을 빼면 합계와 여유가 바로 바뀐다. 예산보다 적어도 경고하지 않는다.
+   * 요약은 고른 양(항목 수·합계)이 먼저고, 남는 시간 추정·여유는 작은 글씨로 뒤따른다. 예산(상한)은 설명이라
+   * 「왜 이렇게 짰나요?」 안에 있다. 항목을 빼면 합계와 여유가 바로 바뀐다. 예산보다 적어도 경고하지 않는다.
    */
-  it('요약에 고른 합계가 먼저, 예산·남는 시간·여유가 보조로 나오고, 빼면 여유가 늘어난다', async () => {
+  it('요약에 고른 합계가 먼저, 남는 시간·여유가 보조로 나오고, 예산은 설명 쪽에 있고, 빼면 여유가 늘어난다', async () => {
     await openDraft();
 
     expect(screen.getByText('고른 항목 4개 · 합계 2h 30m')).toBeInTheDocument();
     // 600 - 150 = 450분 = 7h 30m
-    expect(screen.getByText(/예산\(상한\) 6h 30m — 채워야 하는 양이 아니에요 · 남는 시간 추정 10h · 여유\/휴식 약 7h 30m/))
-      .toBeInTheDocument();
+    const overview = screen.getByRole('region', { name: '초안 요약' });
+    expect(within(overview).getByText(/남는 시간 추정 10h · 여유\/휴식 약 7h 30m/)).toBeInTheDocument();
+    expect(within(overview).queryByText(/예산\(상한\)/)).not.toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: '왜 이렇게 짰나요?' }))
+      .getByText(/예산\(상한\) 6h 30m — 채워야 하는 양이 아니에요/)).toBeInTheDocument();
     expect(screen.getByText(/기본 시간대.*추정/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('checkbox', { name: /과제 2번/ }));
@@ -248,7 +286,11 @@ describe('계획 초안 검토', () => {
     await openDraft();
 
     expect(await screen.findByText(/8\/25 화 19:00~19:40/)).toBeInTheDocument();
-    expect(screen.getByText(/배치 안 됨 · 남는 시간이 없어요/)).toBeInTheDocument();
+    // 줄에는 "배치 안 됨"만, 이유는 그 줄을 펼치면 보인다.
+    const unplaced = screen.getByText(/배치 안 됨/).closest('li');
+    expect(within(unplaced).queryByText('남는 시간이 없어요')).not.toBeInTheDocument();
+    await userEvent.click(within(unplaced).getByText(/배치 안 됨/));
+    expect(within(unplaced).getByText('남는 시간이 없어요')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: '계획 확정' }));
     await waitFor(() => expect(planAPI.confirm).toHaveBeenCalled());
@@ -360,9 +402,9 @@ describe('계획 초안 검토', () => {
     }
     expect(screen.getAllByRole('checkbox').length).toBeGreaterThanOrEqual(9);
     expect(screen.getByRole('button', { name: '계획 확정' })).toBeInTheDocument();
-    // 일반 제안의 "변경 N개 적용" 바는 여기서 쓰지 않는다. 첫 화면 요약의 [적용]은 계획 확정과 같은 동작이다.
+    // 일반 제안의 "변경 N개 적용" 바는 여기서 쓰지 않는다. 확정은 하단 확정 바의 [계획 확정] 하나다.
     expect(screen.queryByRole('button', { name: /변경 \d+개 적용/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '적용' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '적용' })).not.toBeInTheDocument();
     expect(planAPI.createDraft).not.toHaveBeenCalled();
   });
 });

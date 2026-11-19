@@ -1,6 +1,6 @@
 # MAP — diary-ui 화면 색인
 
-`src/views/` 100개 파일(테스트 포함)을 디렉터리 = 기능 그룹으로 묶었다. 파일 나열 대신 그룹의 역할과 진입점만 적는다.
+`src/views/` 101개 파일(테스트 포함)을 디렉터리 = 기능 그룹으로 묶었다. 파일 나열 대신 그룹의 역할과 진입점만 적는다.
 구조는 [ARCHITECTURE](ARCHITECTURE.md), 화면↔API는 [UI-CONTRACT](UI-CONTRACT.md), 규칙은 [CONVENTIONS](CONVENTIONS.md).
 백엔드 쪽 지도는 diary-api `docs/context/MAP.md`.
 
@@ -17,10 +17,10 @@
 | `views/projects/` (18) | 프로젝트 | 프로젝트 목록·작업 공간(교재·과제·학습 기억·자료 정리) | `ProjectsView`, `ProjectWorkspace` |
 | `views/learning/` (15) | 프로젝트 | 학습 지도·항목 상세·구조 편집·자료 주차·자기 점검 | `ProjectLearningMap`, `StructureEditor` |
 | `views/memory/` (2) | 프로젝트 | AI가 이해한 내 상황(user_contexts) 보기·고치기 | `MemoryView` |
-| `views/plan/` (25) | 계획 | 계획 만들기·초안 검토·말한 범위·근거·주간 미리보기·확정 계획 | `PlanCreateView`, `PlanView` |
+| `views/plan/` (26) | 계획 | 계획 만들기·초안 검토·말한 범위·근거·주간 미리보기·확정 계획 | `PlanCreateView`, `PlanView` |
 | `views/schedule/` (12) | 일정 | 주간 격자·반복 일정·예외·1회성 약속 | `ScheduleView` |
 
-합계 100 = 4 + 4 + 5 + 15 + 18 + 15 + 2 + 25 + 12. 대조: `bash scripts/check-context-layer.sh`.
+합계 101 = 4 + 4 + 5 + 15 + 18 + 15 + 2 + 26 + 12. 대조: `bash scripts/check-context-layer.sh`.
 
 ## views 밖
 

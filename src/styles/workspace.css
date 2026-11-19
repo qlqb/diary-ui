@@ -2322,3 +2322,82 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
   .ai-reopen { bottom: calc(68px + env(safe-area-inset-bottom)); }
   .undo-toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
+
+/* ===== 초안 검토: 한 줄 항목 · 하단 확정 바 ===== */
+.plan-item-row { display: flex; align-items: center; gap: 8px; }
+.plan-item-toggle {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  background: none; border: none; padding: 6px 0; cursor: pointer; text-align: left; font: inherit; color: inherit;
+}
+.plan-item-toggle:hover .plan-item-title { text-decoration: underline; }
+.plan-item-toggle .plan-item-title { flex: 1; min-width: 0; }
+.plan-item-toggle svg { flex: none; color: var(--ws-text-dim); }
+.plan-item-brief {
+  flex: none; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; color: var(--ws-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.plan-item-brief.is-unplaced { color: var(--ws-warn, #b45309); }
+.plan-item-must { flex: none; }
+.plan-item-body { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; }
+.plan-item.is-open { border-bottom: 1px solid var(--ws-border); }
+/* 펼친 줄 안의 라벨(완료 기준·꼭 하는 이유·마감)은 내용과 띄우고 흐리게 — 라벨과 내용이 붙어 읽히지 않게. */
+.plan-item-body .plan-item-done { margin: 2px 0 0 24px; font-size: 14px; }
+.plan-item-body .plan-item-done-label { margin-right: 6px; color: var(--ws-text-dim); }
+.plan-item-body .plan-item-tag { margin-left: 6px; }
+.plan-item-remove { margin: 4px 0 0 24px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.plan-item-remove p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.plan-confirm-bar {
+  position: sticky; bottom: 0; z-index: 2; align-items: center;
+  padding: 10px 0; border-top: 1px solid var(--ws-border); background: var(--ws-bg);
+  /* 스크롤 영역의 아래 여백으로 목록이 비쳐 보이지 않게, 바의 배경을 여백만큼 아래로 늘린다. */
+  box-shadow: 0 32px 0 0 var(--ws-bg);
+}
+.plan-confirm-total { margin-right: auto; font-size: 14px; font-variant-numeric: tabular-nums; }
+.plan-more { position: relative; display: inline-flex; }
+.plan-more-menu {
+  position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 3;
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px; white-space: nowrap;
+  border: 1px solid var(--ws-border); border-radius: 8px; background: var(--ws-surface);
+}
+@media (max-width: 520px) {
+  .plan-item-toggle { flex-wrap: wrap; }
+  .plan-item-toggle .plan-item-title { flex-basis: 100%; }
+}
+
+/* ===== 초안 검토: 요약 카드 · 「왜 이렇게 짰나요?」 ===== */
+.plan-title-inline { display: flex; align-items: center; gap: 6px; color: var(--ws-text-dim); }
+.plan-title-inline input {
+  flex: 1; min-width: 0; margin-left: -7px; padding: 4px 6px; font: inherit; font-size: 18px; font-weight: 600;
+  color: var(--ws-text); background: transparent; border: 1px solid transparent; border-radius: 8px;
+}
+.plan-title-inline input:hover { border-color: var(--ws-border); }
+.plan-title-inline input:focus { border-color: var(--ws-border-strong); background: var(--ws-surface); outline: none; }
+.plan-overview-missing-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.plan-why-alert { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.plan-why-body { display: flex; flex-direction: column; gap: 12px; padding: 0 12px 12px; }
+.plan-why .plan-group-meta { white-space: nowrap; }
+
+/* ===== 계획 만들기: 강도·목적·덧붙일 말을 「옵션」 한 줄로 ===== */
+.plan-options { border: 1px solid var(--ws-border); border-radius: 10px; }
+.plan-options-toggle {
+  width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  background: none; border: none; cursor: pointer; text-align: left; font: inherit; color: inherit;
+}
+.plan-options-title { font-weight: 600; }
+.plan-options-summary { font-size: 13px; color: var(--ws-text-dim); }
+.plan-options-body { display: flex; flex-direction: column; gap: 12px; padding: 0 12px 12px; }
+.plan-options-body .plan-intensity { margin: 0; }
+.plan-options-body .plan-intensity legend { font-size: 14px; font-weight: 600; padding: 0 4px; }
+.plan-options-body .plan-intensity-summary { margin: 0; font-size: 13px; color: var(--ws-text-dim); }
+
+/* 서버가 알린 의도 경고(앞선 발언 누락·범위 미확인·일부 기간 합의). 요약 카드 아래에 한 줄씩. */
+.plan-intent-warnings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* 제안 카드의 전제 — 버튼을 누르면 이번 계획에 한해 받아들이는 AI의 정리. */
+.ai-offer-premises {
+  align-self: stretch; padding: 8px 10px; border: 1px solid var(--ws-border); border-radius: 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.ai-offer-premises ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.ai-offer-premises .ai-hint { margin: 0; }

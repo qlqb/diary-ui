@@ -10,6 +10,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expandPlanItems, openPlanWhy } from '../../testing/planItems.js';
 import PlanDraftReview from './PlanDraftReview.jsx';
 import { planAPI, schedulePreviewAPI } from '../../api/api.js';
 
@@ -69,17 +70,24 @@ beforeEach(() => {
 });
 
 describe('첫 화면 요약', () => {
-  it('실제 항목 수와 합계가 먼저, 예산은 상한이라고만 말한다', async () => {
+  it('요약에는 실제 항목 수와 합계가 먼저고, 예산은 설명 쪽에서 상한이라고만 말한다', async () => {
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" />);
+    expandPlanItems();
+    openPlanWhy();
     const overview = await screen.findByRole('region', { name: '초안 요약' });
 
     expect(within(overview).getByText('고른 항목 3개 · 합계 2h 10m')).toBeInTheDocument();
-    expect(within(overview).getByText(/예산\(상한\) 6h 30m — 채워야 하는 양이 아니에요/)).toBeInTheDocument();
+    expect(within(overview).queryByText(/예산\(상한\)/)).not.toBeInTheDocument();
     expect(within(overview).queryByText(/%/)).not.toBeInTheDocument();
+    const why = screen.getByRole('region', { name: '왜 이렇게 짰나요?' });
+    expect(within(why).getByText(/예산\(상한\) 6h 30m — 채워야 하는 양이 아니에요/)).toBeInTheDocument();
+    expect(within(why).queryByText(/%/)).not.toBeInTheDocument();
   });
 
   it('★ 검토하지 못한 프로젝트를 "뺐다"고 부르지 않는다 — 셋을 각자의 말로, 이유·자료 상태·다음 길과 함께', async () => {
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" />);
+    expandPlanItems();
+    openPlanWhy();
     const missing = await screen.findByRole('list', { name: '이번 초안에 들어가지 않은 프로젝트' });
     const rows = within(missing).getAllByRole('listitem');
     expect(rows).toHaveLength(3);
@@ -101,6 +109,8 @@ describe('첫 화면 요약', () => {
 
   it('등록된 일정이 없어 가정한 시간이면 배치가 임시라고 말한다', async () => {
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" />);
+    expandPlanItems();
+    openPlanWhy();
     expect(await screen.findByText(/등록된 일정이 없어 가능한 시간은 가정이에요. 배치는 임시예요/)).toBeInTheDocument();
     expect(screen.getByText('배치 임시')).toBeInTheDocument();
   });
@@ -109,6 +119,8 @@ describe('첫 화면 요약', () => {
     schedulePreviewAPI.get.mockRejectedValueOnce(new Error('network'));
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" />);
+    expandPlanItems();
+    openPlanWhy();
 
     expect(await screen.findByText(/일정을 불러오지 못했어요/)).toBeInTheDocument();
     expect(screen.queryByText(/등록된 일정이 없어/)).not.toBeInTheDocument();
@@ -124,6 +136,8 @@ describe('첫 화면 요약', () => {
     const onAnswerQuestion = vi.fn();
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" onAnswerQuestion={onAnswerQuestion} />);
+    expandPlanItems();
+    openPlanWhy();
 
     const overview = await screen.findByRole('region', { name: '초안 요약' });
     expect(within(overview).getByText(/운영체제 시험 범위가 어디까지예요\?/)).toBeInTheDocument();
@@ -132,20 +146,65 @@ describe('첫 화면 요약', () => {
     expect(onAnswerQuestion).toHaveBeenCalledWith('운영체제 시험 범위가 어디까지예요?');
   });
 
-  it('[적용]은 계획 확정과 같은 요청이고, [계속 상담]은 대화로 돌아간다', async () => {
+  it('확정은 하단 확정 바 하나로 하고(요약에 [적용]을 따로 두지 않는다), [계속 상담]은 대화로 돌아간다', async () => {
     const onContinueConsult = vi.fn();
     const onConfirmed = vi.fn();
     planAPI.confirm.mockResolvedValue({ planVersionId: 5 });
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" onContinueConsult={onContinueConsult} onConfirmed={onConfirmed} />);
+    expandPlanItems();
+    openPlanWhy();
 
     const overview = await screen.findByRole('region', { name: '초안 요약' });
     await user.click(within(overview).getByRole('button', { name: '계속 상담' }));
     expect(onContinueConsult).toHaveBeenCalled();
 
-    await user.click(within(overview).getByRole('button', { name: '적용' }));
+    expect(within(overview).queryByRole('button', { name: '적용' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '계획 확정' }));
     await waitFor(() => expect(planAPI.confirm).toHaveBeenCalledWith(77, expect.objectContaining({ excludedItemIds: [] })));
     await waitFor(() => expect(onConfirmed).toHaveBeenCalledWith({ planVersionId: 5 }));
+  });
+});
+
+describe('접어 둔 설명', () => {
+  it('「왜 이렇게 짰나요?」는 접힌 채로 시작하고, 빠진 프로젝트가 있다는 사실과 [이유 보기]는 요약에 남는다', async () => {
+    const user = userEvent.setup();
+    render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" />);
+    const overview = await screen.findByRole('region', { name: '초안 요약' });
+
+    expect(screen.getByRole('button', { name: '왜 이렇게 짰나요?' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('list', { name: '이번 초안에 들어가지 않은 프로젝트' })).not.toBeInTheDocument();
+    expect(within(overview).getByText(/들어가지 않은 프로젝트 \d+개/)).toBeInTheDocument();
+
+    await user.click(within(overview).getByRole('button', { name: '이유 보기' }));
+    expect(screen.getByRole('button', { name: '왜 이렇게 짰나요?' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('list', { name: '이번 초안에 들어가지 않은 프로젝트' })).toBeInTheDocument();
+  });
+});
+
+describe('의도 경고', () => {
+  it('서버가 알린 경고를 문장 그대로 요약에 보이고, 없으면 아무것도 그리지 않는다', async () => {
+    const warned = {
+      ...DRAFT,
+      scopeReport: {
+        intentWarnings: [
+          { code: 'UTTERANCES_OMITTED', message: '대화가 길어 앞선 발언 3개는 이 초안을 만들 때 보지 못했어요. 빠진 조건이 없는지 확인해 주세요.' },
+          { code: 'SCOPE_NOT_READ', message: '상담에서 정리한 범위를 이 초안이 읽지 못했을 수 있어요: 「웹서버는 JSTL부터 역순으로 본다」. 항목이 그 범위에서 시작하는지 확인해 주세요.' },
+        ],
+      },
+    };
+    const { unmount } = render(<PlanDraftReview draft={warned} todayIso="2026-09-19" />);
+    const list = await screen.findByRole('list', { name: '내 말이 다 반영됐는지 확인이 필요한 것' });
+
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(list).getByText(/앞선 발언 3개는 이 초안을 만들 때 보지 못했어요/)).toBeInTheDocument();
+    expect(within(list).getByText(/「웹서버는 JSTL부터 역순으로 본다」/)).toBeInTheDocument();
+    unmount();
+
+    // 예전 서버의 초안(필드 없음)과 경고가 없는 초안은 목록 자체가 없다.
+    render(<PlanDraftReview draft={{ ...DRAFT, scopeReport: { intentWarnings: [] } }} todayIso="2026-09-19" />);
+    await screen.findByRole('region', { name: '초안 요약' });
+    expect(screen.queryByRole('list', { name: '내 말이 다 반영됐는지 확인이 필요한 것' })).not.toBeInTheDocument();
   });
 });
 
@@ -167,16 +226,20 @@ describe('낡은 초안', () => {
 
   it('최신 초안이면 그 표시가 없다', async () => {
     render(<PlanDraftReview todayIso="2026-09-19" draft={{ ...DRAFT, freshness: { state: 'CURRENT', reasons: [] } }} onRemake={vi.fn()} />);
+    expandPlanItems();
+    openPlanWhy();
     await screen.findByRole('region', { name: '초안 요약' });
     expect(screen.queryByText('이전 버전 · 최신 답변 반영 전')).not.toBeInTheDocument();
   });
 
-  it('다시 만드는 동안에는 이전 버전을 그대로 보여 주고 적용을 막는다', async () => {
+  it('다시 만드는 동안에는 이전 버전을 그대로 보여 주고 확정을 막는다', async () => {
     render(<PlanDraftReview todayIso="2026-09-19" draft={DRAFT} stale remaking remakeStageLabel="계획 정리 중" onRemake={vi.fn()} />);
+    expandPlanItems();
+    openPlanWhy();
 
     expect(await screen.findByText(/새 초안을 만드는 중이에요 — 계획 정리 중. 아래는 이전 버전이에요/)).toBeInTheDocument();
     expect(screen.getByText('연결 리스트 구현')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '적용' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '계획 확정' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: '다시 만들기' })).not.toBeInTheDocument();
   });
 
@@ -188,6 +251,8 @@ describe('낡은 초안', () => {
     };
     const user = userEvent.setup();
     render(<PlanDraftReview todayIso="2026-09-19" draft={DRAFT} outcome={outcome} />);
+    expandPlanItems();
+    openPlanWhy();
 
     expect(await screen.findByText('무엇이 바뀌었나')).toBeInTheDocument();
     expect(screen.getByText(/과제 2번을 앞으로 옮겼어요 — 금요일 마감/)).toBeInTheDocument();
@@ -224,6 +289,8 @@ describe('항목 카드', () => {
       },
     };
     render(<PlanDraftReview draft={draft} todayIso="2026-09-19" projectTitles={{ 9: '영어회화' }} />);
+    expandPlanItems();
+    openPlanWhy();
     await screen.findByRole('region', { name: '초안 요약' });
 
     const first = screen.getByText('have to 예약 문장 말하기').closest('li');
@@ -243,6 +310,8 @@ describe('항목 카드', () => {
 
   it('출처 라벨·위치 안내·꼭 하는 이유·마감 출처를 따로 말하고, 마감이 없으면 미확인이라고 한다', async () => {
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" projectTitles={{ 6: '자료구조' }} />);
+    expandPlanItems();
+    openPlanWhy();
     await screen.findByRole('region', { name: '초안 요약' });
 
     const first = screen.getByText('연결 리스트 구현').closest('li');
@@ -268,6 +337,8 @@ describe('항목 카드', () => {
     planAPI.confirm.mockResolvedValue({ planVersionId: 5 });
     const user = userEvent.setup();
     render(<PlanDraftReview draft={DRAFT} todayIso="2026-09-19" />);
+    expandPlanItems();
+    openPlanWhy();
     await screen.findByRole('region', { name: '초안 요약' });
 
     const first = screen.getByText('연결 리스트 구현').closest('li');
@@ -277,7 +348,9 @@ describe('항목 카드', () => {
     await user.type(input, '30');
 
     expect(await screen.findByText('고른 항목 3개 · 합계 1h 40m')).toBeInTheDocument();
-    expect(within(first).getByText(/시간을 직접 고침/)).toBeInTheDocument();
+    // 줄에 고친 시간과 그 사실이 함께 보이고, 하단 확정 바의 합계도 같이 바뀐다.
+    expect(within(first).getByText(/약 30분 · 직접 고침/)).toBeInTheDocument();
+    expect(screen.getByText('3개 · 1h 40m')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '계획 확정' }));
     await waitFor(() => expect(planAPI.confirm).toHaveBeenCalled());

@@ -3,7 +3,8 @@
  *
  * 강도는 초안 생성 **전에** 정해진다. 초안이 나온 뒤 강도를 바꾸는 것은 결국 다시 생성하는
  * 것과 같으므로 초안 화면에는 강도 변경을 두지 않는다. 그리고 기본값이 직전 계획에서
- * 이어지므로 매번 고르게 하지도 않는다 — 평소에는 한 줄로 접혀 있다.
+ * 이어지므로 매번 고르게 하지도 않는다 — 강도·목적·덧붙일 말은 「옵션」 한 줄로 접혀 있고,
+ * 평소에는 기간만 고르고 바로 만든다. 지금 값은 접힌 줄에 요약으로 보인다.
  *
  * 초안 검토(PlanDraftReview)는 AI 패널에서 만든 기간 계획과 같은 컴포넌트다. 어느 탭에서
  * 시작했든 검토·확정 화면과 API는 같다 — initialDraft로 그 초안을 받아 바로 검토로 시작한다.
@@ -15,7 +16,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, Sparkles, X } from 'lucide-react';
+import { CalendarRange, ChevronDown, ChevronRight, Sparkles, X } from 'lucide-react';
 import { planAPI } from '../../api/api.js';
 import PlanAskCard from './PlanAskCard.jsx';
 import { PLAN_INTENSITY_HINT, PLAN_INTENSITY_LABEL, PlanIntensity } from '../../types/execution.js';
@@ -68,7 +69,8 @@ export default function PlanCreateView({
   const [endDate, setEndDate] = useState(addDays(todayIso, 6));
   const [intensity, setIntensity] = useState(null);
   const [purpose, setPurpose] = useState(null);
-  const [intensityOpen, setIntensityOpen] = useState(false);
+  /** 강도·목적·덧붙일 말을 담은 「옵션」. 평소에는 접혀 있고, 첫 계획이면 펼친 채로 시작한다. */
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [instruction, setInstruction] = useState('');
 
   const [draft, setDraft] = useState(initialDraft);
@@ -128,7 +130,7 @@ export default function PlanCreateView({
     const timer = setInterval(poll, 1500);
     return () => { cancelled = true; clearInterval(timer); };
   }, [loading]);
-  /** 확정 이력이 없으면(=첫 계획) 강도를 펼친 상태로 시작한다. */
+  /** 확정 이력이 없으면(=첫 계획) 옵션(강도)을 펼친 상태로 시작한다. */
   const [hasHistory, setHasHistory] = useState(true);
   /**
    * 요청 순번. 기간을 바꾸거나 새 요청을 보내면 올린다 — 이전 요청의 늦은 응답이 지금 화면을 덮지 않게 한다.
@@ -191,12 +193,12 @@ export default function PlanCreateView({
       .then((plans) => {
         if (cancelled) return;
         // 오늘을 덮는 계획이 없다고 이력이 없는 것은 아니지만, 첫 계획을 만드는 사람에게
-        // 강도를 펼쳐 보여주는 것이 목적이라 이 근사로 충분하다.
+        // 옵션(강도)을 펼쳐 보여주는 것이 목적이라 이 근사로 충분하다.
         const first = plans.length === 0;
         setHasHistory(!first);
-        if (first) setIntensityOpen(true);
+        if (first) setOptionsOpen(true);
       })
-      .catch(() => { /* 강도 펼침 여부일 뿐이라 실패해도 화면은 그대로 쓴다. */ });
+      .catch(() => { /* 옵션 펼침 여부일 뿐이라 실패해도 화면은 그대로 쓴다. */ });
     return () => { cancelled = true; };
   }, [todayIso]);
 
@@ -453,26 +455,42 @@ export default function PlanCreateView({
             )}
           </div>
 
-          <IntensityPicker
-            intensity={intensity}
-            draft={draft}
-            open={intensityOpen}
-            onToggle={() => setIntensityOpen((v) => !v)}
-            onSelect={(value) => { setIntensity(value); clearDraft(); }}
-            firstPlan={!hasHistory}
-          />
+          <div className="plan-options">
+            <button type="button" className="plan-options-toggle" aria-expanded={optionsOpen}
+              onClick={() => setOptionsOpen((v) => !v)}>
+              {optionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <span className="plan-options-title">옵션</span>
+              <span className="plan-options-summary">
+                {[
+                  intensitySummaryOf(intensity ?? draft?.intensity, !hasHistory),
+                  purpose ? PURPOSE_LABEL[purpose] : null,
+                  instruction.trim() ? '덧붙일 말 있음' : null,
+                ].filter(Boolean).join(' · ')}
+              </span>
+            </button>
+            {optionsOpen && (
+              <div className="plan-options-body">
+                <IntensityPicker
+                  intensity={intensity}
+                  draft={draft}
+                  onSelect={(value) => { setIntensity(value); clearDraft(); }}
+                  firstPlan={!hasHistory}
+                />
 
-          <PurposePicker purpose={purpose} onSelect={(value) => { setPurpose(value); clearDraft(); }} />
+                <PurposePicker purpose={purpose} onSelect={(value) => { setPurpose(value); clearDraft(); }} />
 
-          <label className="plan-instruction">
-            <span>덧붙일 말 (선택)</span>
-            <input
-              type="text"
-              value={instruction}
-              placeholder="예: 시험 전까지 자료구조 위주로, 개념부터"
-              onChange={(e) => setInstruction(e.target.value)}
-            />
-          </label>
+                <label className="plan-instruction">
+                  <span>덧붙일 말 (선택)</span>
+                  <input
+                    type="text"
+                    value={instruction}
+                    placeholder="예: 시험 전까지 자료구조 위주로, 개념부터"
+                    onChange={(e) => setInstruction(e.target.value)}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
 
           {!draft && (
             <button type="button" className="btn-primary" disabled={!periodValid || loading}
@@ -576,7 +594,7 @@ export default function PlanCreateView({
 }
 
 /**
- * 강도 선택. 평소에는 한 줄로 접혀 있고 [강도 바꾸기]를 눌러야 펼쳐진다.
+ * 강도 선택. 「옵션」 안에 있어 따로 접지 않는다.
  *
  * 강도는 "남는 시간의 몇 %까지를 공부 예산(상한)으로 잡을지"다. 초안이 있으면 그 기간의 실제 숫자
  * (추정 남는 시간 중 예산)를 함께 보여준다 — 라벨만으로는 `집중`이 얼마나 집중인지 모른다.
@@ -591,6 +609,16 @@ const PURPOSE_OPTIONS = [
   ['EXAM', '시험 준비'],
   ['SELF_STUDY', '독학·훑기'],
 ];
+const PURPOSE_LABEL = Object.fromEntries(PURPOSE_OPTIONS);
+
+/*
+ * 지금 강도를 한마디로. 첫 계획이면 "직전 계획과 같은 강도"라고 말하지 않는다 — 직전 계획이 없기 때문이다.
+ * 서버가 이력이 없을 때 NORMAL로 떨어뜨리므로 그 값을 그대로 말한다.
+ */
+function intensitySummaryOf(shown, firstPlan) {
+  if (shown) return PLAN_INTENSITY_LABEL[shown];
+  return firstPlan ? PLAN_INTENSITY_LABEL[PlanIntensity.NORMAL] : '직전 계획과 같은 강도';
+}
 
 function PurposePicker({ purpose, onSelect }) {
   return (
@@ -609,57 +637,40 @@ function PurposePicker({ purpose, onSelect }) {
   );
 }
 
-function IntensityPicker({ intensity, draft, open, onToggle, onSelect, firstPlan }) {
+function IntensityPicker({ intensity, draft, onSelect, firstPlan }) {
   const shown = intensity ?? draft?.intensity;
 
-  /*
-   * 첫 계획이면 "직전 계획과 같은 강도"라고 말하지 않는다 — 직전 계획이 없기 때문이다.
-   * 서버가 이력이 없을 때 NORMAL로 떨어뜨리므로 그 값을 그대로 말한다.
-   */
-  const summary = shown
-    ? PLAN_INTENSITY_LABEL[shown]
-    : firstPlan
-      ? PLAN_INTENSITY_LABEL[PlanIntensity.NORMAL]
-      : '직전 계획과 같은 강도';
-
   return (
-    <div className="plan-intensity">
-      <div className="plan-intensity-summary">
-        <span>
-          {summary}
-          {draft?.targetMinutes != null && (
-            <>
-              {' · '}
-              {draft.estimatedAvailableMinutes != null
-                ? `남는 시간 약 ${formatMinutes(draft.estimatedAvailableMinutes)} 중 예산(상한) ${formatMinutes(draft.targetMinutes)}`
-                : `예산(상한) 약 ${formatMinutes(draft.targetMinutes)}`}
-            </>
-          )}
-        </span>
-        <button type="button" className="btn-ghost btn-sm" onClick={onToggle}>
-          {open ? '접기' : '강도 바꾸기'}
-        </button>
-      </div>
-
-      {open && (
-        <div className="plan-intensity-options">
-          {Object.values(PlanIntensity).map((value) => (
-            <label key={value} className="plan-intensity-option">
-              <input
-                type="radio"
-                name="plan-intensity"
-                checked={shown ? shown === value
-                  : firstPlan && value === PlanIntensity.NORMAL}
-                onChange={() => onSelect(value)}
-              />
-              <span className="plan-intensity-name">{PLAN_INTENSITY_LABEL[value]}</span>
-              <span className="plan-intensity-hint">{PLAN_INTENSITY_HINT[value]}</span>
-            </label>
-          ))}
-          <p className="hint">이번 기간의 남는 시간 중 어느 정도까지 공부에 쓸까요? 상한이라 다 채우지 않아도 되고, 나중에 조정할 수 있어요.</p>
-          {firstPlan && <p className="hint">처음이라면 보통으로 그냥 넘어가도 괜찮아요.</p>}
-        </div>
+    <fieldset className="plan-intensity">
+      <legend>강도</legend>
+      {/* 지금 강도 이름은 「옵션」 줄에 이미 있다. 여기서는 초안이 있을 때 그 강도의 실제 숫자만 덧붙인다. */}
+      {draft?.targetMinutes != null && (
+        <p className="plan-intensity-summary">
+          {intensitySummaryOf(shown, firstPlan)}
+          {' · '}
+          {draft.estimatedAvailableMinutes != null
+            ? `남는 시간 약 ${formatMinutes(draft.estimatedAvailableMinutes)} 중 예산(상한) ${formatMinutes(draft.targetMinutes)}`
+            : `예산(상한) 약 ${formatMinutes(draft.targetMinutes)}`}
+        </p>
       )}
-    </div>
+
+      <div className="plan-intensity-options">
+        {Object.values(PlanIntensity).map((value) => (
+          <label key={value} className="plan-intensity-option">
+            <input
+              type="radio"
+              name="plan-intensity"
+              checked={shown ? shown === value
+                : firstPlan && value === PlanIntensity.NORMAL}
+              onChange={() => onSelect(value)}
+            />
+            <span className="plan-intensity-name">{PLAN_INTENSITY_LABEL[value]}</span>
+            <span className="plan-intensity-hint">{PLAN_INTENSITY_HINT[value]}</span>
+          </label>
+        ))}
+        <p className="hint">이번 기간의 남는 시간 중 어느 정도까지 공부에 쓸까요? 상한이라 다 채우지 않아도 되고, 나중에 조정할 수 있어요.</p>
+        {firstPlan && <p className="hint">처음이라면 보통으로 그냥 넘어가도 괜찮아요.</p>}
+      </div>
+    </fieldset>
   );
 }

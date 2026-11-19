@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PlanCreateView from './PlanCreateView.jsx';
 import { planAPI, schedulePreviewAPI, topicAPI } from '../../api/api.js';
+import { expandPlanItems, openPlanMore, openPlanWhy, planItemButton } from '../../testing/planItems.js';
 
 vi.mock('../../api/api.js', () => ({
   planAPI: {
@@ -83,12 +84,14 @@ async function openDraft(draft = DRAFT) {
   render(<PlanCreateView projectTitles={PROJECT_TITLES} hasHistory />);
   await userEvent.click(await screen.findByRole('button', { name: /초안 만들기/ }));
   await screen.findByText(/계획$/, { exact: false });
+  // 항목은 한 줄로 접혀 있다. 목표·할 일·완료 기준은 펼친 줄 안에 있다.
+  expandPlanItems();
+  openPlanWhy();
 }
 
 /** 그 조각의 「이미 알아요」. 순서로 집으면 그룹 정렬이 바뀔 때 엉뚱한 항목을 누른다. */
 function knownButtonFor(titleText) {
-  const item = screen.getByText(titleText).closest('li');
-  return within(item).getByRole('button', { name: '이미 알아요' });
+  return planItemButton(titleText, '이미 알아요');
 }
 
 beforeEach(() => {
@@ -187,10 +190,11 @@ describe('판단 근거 표시', () => {
   it('취급과 우선순위를 함께, 그러나 따로 보여준다', async () => {
     await openDraft();
 
-    // "꼭 하기 · 충분히 보기 · 문제 풀기 · 약 45분" — 마감은 출처와 함께 따로 적는다.
-    expect(screen.getByText(/꼭 하기 · 충분히 보기 · 문제 풀기 · 약 45분/)).toBeInTheDocument();
+    // "꼭 하기 · 충분히 보기 · 문제 풀기" — 시간은 항목 줄에 있고, 마감은 출처와 함께 따로 적는다.
+    expect(screen.getByText('꼭 하기 · 충분히 보기 · 문제 풀기')).toBeInTheDocument();
+    expect(within(screen.getByText('자료구조 · ADT와 복잡도').closest('li')).getByText(/약 45분/)).toBeInTheDocument();
     expect(screen.getAllByText(/화요일 수업 전 \(9\/8 14:00\) · 수업 시각/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/권장 · 핵심만 보기 · 읽기 · 약 30분/)).toBeInTheDocument();
+    expect(screen.getByText('권장 · 핵심만 보기 · 읽기')).toBeInTheDocument();
   });
 });
 
@@ -235,6 +239,7 @@ describe('세 동작', () => {
     await openDraft();
     planAPI.regenerateItems.mockResolvedValue({ ...DRAFT, proposalId: 88 });
 
+    openPlanMore();
     await userEvent.click(screen.getByRole('button', { name: /실행 방법 다시 제안/ }));
 
     await waitFor(() => expect(planAPI.regenerateItems).toHaveBeenCalledWith(77));
@@ -246,6 +251,7 @@ describe('세 동작', () => {
     const before = screen.getByText('다음 주 수업을 알아들을 정도로 따라잡기').textContent;
     planAPI.regenerateItems.mockResolvedValue({ ...DRAFT, proposalId: 88 });
 
+    openPlanMore();
     await userEvent.click(screen.getByRole('button', { name: /실행 방법 다시 제안/ }));
     await waitFor(() => expect(planAPI.regenerateItems).toHaveBeenCalled());
 
