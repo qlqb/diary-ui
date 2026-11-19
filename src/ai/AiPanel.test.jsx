@@ -9,7 +9,7 @@
  * 독립된 조작이어야 한다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AiPanel from './AiPanel.jsx';
@@ -76,6 +76,55 @@ describe('기간 계획 OFFER와 강도 선택지', () => {
       });
     });
   }
+
+  it('제안이 전제로 삼은 합의를 버튼 위에 보여 주고, 누르면 그 제안 메시지 id를 함께 보낸다', async () => {
+    const user = userEvent.setup();
+    conversationAPI.list.mockResolvedValue([]);
+    conversationAPI.create.mockResolvedValue({ conversationId: 1 });
+    const offer = {
+      type: 'CREATE_PERIOD_PLAN', label: '이 내용으로 계획 초안 만들기',
+      periodStartDate: '2026-11-18', periodEndDate: '2026-11-18', intensity: 'NORMAL', courseIds: [],
+      premises: [
+        { id: 1, text: '웹서버프로그래밍은 JSTL부터 역순으로 본다.' },
+        { id: 2, text: '센서활용프로그래밍은 적외선 센서 활용부터 역순으로 본다.' },
+      ],
+    };
+    streamOffer(offer, { offerAction: offer });
+    conversationAPI.sendMessage.mockImplementationOnce(async (_id, _payload, { onEvent }) => {
+      onEvent('message.started', {});
+      onEvent('message.completed', { responseType: 'PROPOSAL', reply: '초안을 만들었어요.', userMessageId: 7, assistantMessageId: 8 });
+    });
+
+    render(<AiPanel scope={SCOPE} onPeriodPlan={vi.fn()} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    await sendFirstMessage(user);
+
+    const premises = await screen.findByRole('group', { name: '이 전제로 만들어요' });
+    expect(within(premises).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(premises).getByText('웹서버프로그래밍은 JSTL부터 역순으로 본다.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '이 내용으로 계획 초안 만들기' }));
+
+    await waitFor(() => expect(conversationAPI.sendMessage).toHaveBeenCalledTimes(2));
+    // 6 = 그 제안을 담은 AI 메시지. 서버는 이 카드가 보여 준 전제만 승인한다.
+    expect(conversationAPI.sendMessage.mock.calls[1][1].offerMessageId).toBe(6);
+  });
+
+  it('전제가 없는 제안은 전제 묶음을 그리지 않는다', async () => {
+    const user = userEvent.setup();
+    conversationAPI.list.mockResolvedValue([]);
+    conversationAPI.create.mockResolvedValue({ conversationId: 1 });
+    streamOffer({
+      type: 'CREATE_PERIOD_PLAN', label: '이 내용으로 계획 초안 만들기',
+      periodStartDate: '2026-09-04', periodEndDate: '2026-09-06', intensity: 'FOCUSED', courseIds: [36],
+    });
+
+    render(<AiPanel scope={SCOPE} onPeriodPlan={vi.fn()} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    await sendFirstMessage(user);
+
+    await screen.findByRole('button', { name: '이 내용으로 계획 초안 만들기' });
+    expect(screen.queryByRole('group', { name: '이 전제로 만들어요' })).not.toBeInTheDocument();
+  });
 
   async function sendFirstMessage(user) {
     await user.type(screen.getByRole('textbox'), '이번 주 계획 짜줘');

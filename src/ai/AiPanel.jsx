@@ -542,6 +542,15 @@ export default function AiPanel({
             setScheduleSuggestions((prev) => [...prev, ...(data?.suggestions ?? [])]);
           } else if (eventName === 'message.completed') {
             if (data?.userMessageId) lastUserMessageIdRef.current = data.userMessageId;
+            /*
+             * 제안 카드에 그 제안 메시지의 id를 붙여 둔다. 버튼을 누를 때 이 id를 함께 보내야 서버가 "이 카드가 보여 준 전제"만
+             * 승인한다 — 서버는 가장 최근 제안으로 짐작하지 않는다. 새로고침 뒤 복원된 카드에는 id가 없어 아무것도 승인되지 않는다.
+             */
+            if (data?.responseType === 'OFFER' && data?.assistantMessageId) {
+              setCurrentOffer((prev) => (prev
+                ? { ...prev, ...(data.offerAction ?? {}), offerMessageId: data.assistantMessageId }
+                : prev));
+            }
             setMessages((prev) => prev.map((m) => (m.key === streamingKey
               ? {
                 ...m, content: data.reply ?? m.content, responseType: data.responseType, streaming: false, reading: null,
@@ -718,6 +727,8 @@ export default function AiPanel({
       await runTurn({
         requestedAction: 'CREATE_PERIOD_PLAN',
         sourceMessageId: lastUserMessageIdRef.current,
+        // 누른 카드의 제안 메시지. 카드가 전제를 보여 줬을 때만 의미가 있고, 없으면 보내지 않는다.
+        ...(offer.offerMessageId != null ? { offerMessageId: offer.offerMessageId } : {}),
         idempotencyKey: newIdempotencyKey(),
         periodPlan: {
           periodStartDate: offer.periodStartDate,
@@ -1232,6 +1243,19 @@ export default function AiPanel({
                     {currentOffer.intensity ? ` · ${PLAN_INTENSITY_LABEL[currentOffer.intensity] ?? currentOffer.intensity}` : ''}
                     {currentOffer.type === 'CREATE_PERIOD_PLAN' ? ' · 검토 후 계획으로 확정돼요' : ''}
                   </p>
+                )}
+                {/*
+                  이 제안이 전제로 삼은 것(아직 내가 답하지 않은 AI의 정리). 보이지 않는 전제는 버튼으로 승인되지 않는다 —
+                  무엇을 받아들이는지 보고 눌러야 승인이다. 이번 계획에만 해당하고, 다르면 대화로 고쳐 말하면 된다.
+                */}
+                {(currentOffer.premises ?? []).length > 0 && (
+                  <div className="ai-offer-premises" role="group" aria-label="이 전제로 만들어요">
+                    <p className="ai-hint">이 전제로 만들어요. 버튼을 누르면 이번 계획에 한해 받아들인 것으로 기록돼요.</p>
+                    <ul>
+                      {currentOffer.premises.map((premise) => <li key={premise.id}>{premise.text}</li>)}
+                    </ul>
+                    <p className="ai-hint">다르면 누르기 전에 대화로 고쳐 말해 주세요.</p>
+                  </div>
                 )}
                 <button type="button" className="btn-primary ai-offer-btn" onClick={handleCreateProposalFromOffer}>
                   {currentOffer.label || '이 내용으로 초안 만들기'}
