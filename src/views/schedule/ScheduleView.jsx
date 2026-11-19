@@ -10,6 +10,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import WeekGrid from './WeekGrid.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
+import UnplacedTray from '../../components/UnplacedTray.jsx';
+import { trayHandlersOf, trayItemsOf } from '../../ai/unplacedDraft.js';
 import ExecutionRow from '../../components/ExecutionRow.jsx';
 import { adjustmentFor } from '../../ai/useProposalDraft.js';
 import RoutineSection from './RoutineSection.jsx';
@@ -108,6 +110,7 @@ export default function ScheduleView({
     (c) => c.operation === 'CREATE' && (!c.scheduledDate || dates.includes(c.scheduledDate)),
   );
   const adjustedItems = items.filter((i) => adjustmentFor(draft, i.executionItemId));
+  const trayItems = onPatchCard ? trayItemsOf(draftCards) : [];
 
   /** 결과를 돌려준다 — ExecutionRow가 성공했을 때만 트레이를 닫는다(TodayView와 같은 계약). */
   const handleAction = async (action, item, payload) => {
@@ -190,13 +193,14 @@ export default function ScheduleView({
         </section>
       )}
 
-      {(weekDraftCards.length > 0 || adjustedItems.length > 0) && (
+      {(weekDraftCards.length > 0 || adjustedItems.length > 0 || trayItems.length > 0) && (
         <section className="view-section">
           <h2 className="section-title"><Sparkles size={14} /> 이번 주 초안</h2>
           <p className="section-desc">
             격자에서 끌어 옮기거나 아래에서 값을 고칠 수 있어요. AI에게 &quot;수요일 거 금요일로 옮겨&quot;처럼
             말해도 됩니다.
           </p>
+          <UnplacedTray items={trayItems} {...trayHandlersOf(draftCards, onPatchCard, onToggleExclude)} />
           <div className="row-list">
             {weekDraftCards.map((card) => (
               <DraftRow key={card.proposalItemId} card={card} showDate

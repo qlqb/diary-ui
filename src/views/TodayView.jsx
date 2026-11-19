@@ -20,6 +20,8 @@ import { ChevronDown, ChevronRight, Plus, Sparkles, Clock3 } from 'lucide-react'
 import ExecutionRow from '../components/ExecutionRow.jsx';
 import TimeBlockRow from '../components/TimeBlockRow.jsx';
 import DraftRow from '../components/DraftRow.jsx';
+import UnplacedTray from '../components/UnplacedTray.jsx';
+import { trayHandlersOf, trayItemsOf } from '../ai/unplacedDraft.js';
 import ReschedulePanel from './today/ReschedulePanel.jsx';
 import { adjustmentFor } from '../ai/useProposalDraft.js';
 import { classifyToday, isTimed } from '../lib/today.js';
@@ -388,6 +390,10 @@ export default function TodayView({
               overdue.length === 0 && <p className="view-dim">남은 것이 없어요.</p>
             ) : (
               <>
+                {onPatchCard && (
+                  <UnplacedTray items={trayItemsOf(draft?.cards)}
+                    {...trayHandlersOf(draft?.cards, onPatchCard, onToggleExclude)} />
+                )}
                 {overdue.length > 0 && <p className="section-desc overdue-divider">앞으로 할 일</p>}
                 <div className="row-list">
                   {restRows.map((row) => (row.entry

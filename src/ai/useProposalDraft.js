@@ -34,6 +34,10 @@ function toCard(item) {
     /** 서버가 자동 배치한 값인지(사용자가 직접 시간을 정하면 false). */
     autoPlaced: false,
     unplacedReason: null,
+    /** 서버가 못 넣은 항목에 붙인 힌트(UnplacedItemDto)와, 사용자가 묶음에서 고른 처리('placed'|'deferred') */
+    unplacedHint: null,
+    unplacedResolved: null,
+    unplacedBefore: null,
     // 조정 제안 전용
     targetExecutionItemId: item.targetExecutionItemId ?? null,
     beforeTitle: item.beforeTitle ?? null,
@@ -95,7 +99,8 @@ export function useProposalDraft({ onApplied } = {}) {
           };
         }
         const unplaced = unplacedById.get(card.proposalItemId);
-        return unplaced ? { ...card, unplacedReason: unplaced.reason } : card;
+        // 힌트(다음 빈 시간·줄이면 들어가는 길이)는 못 넣은 항목 묶음(UnplacedTray)이 쓴다.
+        return unplaced ? { ...card, unplacedReason: unplaced.reason, unplacedHint: unplaced } : card;
       });
     } catch {
       // 배치를 못 구해도 초안 자체는 보여준다 — 사용자가 직접 시간을 정할 수 있다.

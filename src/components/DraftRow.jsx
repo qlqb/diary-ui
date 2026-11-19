@@ -23,7 +23,7 @@ export default function DraftRow({ card, onPatch, onToggleExclude, showDate }) {
       <div className="exec-row-main">
         <div className="exec-row-headline">
           <span className="draft-badge"><Sparkles size={12} /> AI 초안 · 적용 전</span>
-          {card.unplacedReason && <span className="chip chip-warn">시간을 못 찾았어요</span>}
+          {card.unplacedReason && !card.unplacedResolved && <span className="chip chip-warn">시간을 못 찾았어요</span>}
         </div>
 
         <input
