@@ -1390,6 +1390,32 @@ export const routineAPI = {
 };
 
 export const planAPI = {
+    /**
+     * 계획 기간의 고정 일정(반복 일정 발생분 + 약속). 앞 일정 기준 표현(lib/precededBy.js)의 재료다.
+     * 일정 화면이 쓰는 두 조회를 그대로 묶을 뿐 새 서버 API가 아니다. [{ title, startAt, endAt, kind }]
+     */
+    fixedSchedule: async (from, to) => {
+        const params = new URLSearchParams({ from, to });
+        const [occurrences, commitments] = await Promise.all([
+            request(`/routines/occurrences?${params.toString()}`),
+            request(`/commitments?${params.toString()}`),
+        ]);
+        return [
+            ...(occurrences ?? []).map((o) => ({ title: o.title, startAt: o.startAt, endAt: o.endAt, kind: 'ROUTINE' })),
+            ...(commitments ?? []).map((c) => ({ title: c.title, startAt: c.startAt, endAt: c.endAt, kind: 'COMMITMENT' })),
+        ];
+    },
+
+    /**
+     * 자리 기록 — 이 과목을 이 시각의 자리에 놓으면 지난 4주 같은 자리(요일·시간대)에서는 실제로 얼마나 했나.
+     * 분량 3층(사실 → 제안 → 관점)의 근거다. 읽기만 하고, 자리 여러 개를 한 번에 묻느라 POST다.
+     * slots: [{ key, courseId, startAt('YYYY-MM-DDTHH:mm:ss'), plannedMinutes }]
+     */
+    slotHistory: (slots) => request('/execution-items/slot-history', {
+        method: 'POST',
+        body: JSON.stringify({ slots }),
+    }),
+
     /** 초안 생성. intensity를 생략하면 서버가 직전 계획에서 승계한다. */
     createDraft: ({
         startDate, endDate, intensity = null, title = null, instruction = null, courseIds = null,
@@ -1854,5 +1880,10 @@ export const studyStateAPI = {
 export const consultContextAPI = {
     update: (contextId, { content }) =>
         request(`/contexts/${contextId}`, { method: 'PATCH', body: JSON.stringify({ content }) }),
+    /**
+     * 계획 상담 첫머리 질문(겹침·가까운 마감·쓸 시간, 최대 3개). 서버가 데이터에서 고르고 AI를 부르지 않는다.
+     * [{ id, kind, question, choices: [{ label, message }] }] — message가 null이면 "직접 말하기"다.
+     */
+    openingQuestions: () => request('/ai/consult/opening-questions'),
 };
 // ===== /consult-workspace (agent A) =====
