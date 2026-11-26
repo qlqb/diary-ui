@@ -1,0 +1,62 @@
+/*
+ * 학습 실행 작업 공간. 기준 화면 1536×760 — 오른쪽에서 여는 시트이고 창 높이를 넘지 않는다(본문만 스크롤).
+ * 기본 글자 14px 이상. 펼침 상태는 화살표와 aria-expanded로, 선택 상태는 글자와 aria-pressed로 전한다(색만으로 말하지 않는다).
+ */
+.iw-backdrop {
+  position: fixed; inset: 0; z-index: 65;
+  display: flex; justify-content: flex-end;
+  background: rgba(17, 24, 39, 0.28);
+}
+.iw-sheet {
+  display: flex; flex-direction: column;
+  width: min(600px, 100vw); height: 100vh; min-height: 0;
+  background: var(--ws-surface); color: var(--ws-text);
+  box-shadow: -8px 0 32px rgba(17, 24, 39, 0.16);
+  font-size: 14px;
+}
+.iw-head { display: flex; align-items: flex-start; gap: 10px; padding: 16px 18px 10px; border-bottom: 1px solid var(--ws-border); }
+.iw-head-text { flex: 1 1 auto; min-width: 0; }
+.iw-kicker { margin: 0 0 2px; font-size: 13px; color: var(--ws-text-dim); }
+.iw-title { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; }
+.iw-title:focus { outline: none; }
+.iw-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 18px 24px; display: flex; flex-direction: column; gap: 12px; }
+
+.iw-core { margin: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--ws-border); border-radius: 10px; background: var(--ws-bg); }
+.iw-core > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.iw-core dt { font-size: 13px; font-weight: 700; color: var(--ws-text-dim); }
+.iw-core dd { margin: 0; line-height: 1.5; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.iw-hint { flex-basis: 100%; }
+.iw-tag { font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--ws-border-strong); color: var(--ws-text-dim); }
+.iw-notice { margin: 0; }
+
+.iw-section { border-top: 1px solid var(--ws-border); padding-top: 8px; }
+.iw-section-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: 0; padding: 4px 0; font-size: 14px; font-weight: 700; color: var(--ws-text); cursor: pointer; text-align: left;
+}
+.iw-section-toggle:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 2px; }
+.iw-section-body { padding: 6px 0 2px 21px; display: flex; flex-direction: column; gap: 8px; }
+
+.iw-help { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 8px; background: var(--ws-accent-soft); }
+.iw-help p, .iw-help ol { margin: 0; line-height: 1.5; }
+.iw-help ol { padding-left: 20px; }
+.iw-help-stale { opacity: 0.85; }
+.iw-label { display: inline-block; min-width: 76px; font-size: 13px; font-weight: 700; color: var(--ws-text-dim); margin-right: 6px; }
+.iw-help-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.iw-help-ask input { flex: 1 1 220px; min-width: 0; font-size: 14px; padding: 5px 8px; border: 1px solid var(--ws-border-strong); border-radius: 6px; }
+.iw-adjust { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.iw-records { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.iw-record p { margin: 0; line-height: 1.5; }
+.iw-record-how { color: var(--ws-text-dim); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.iw-record-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.iw-record-edit input { flex: 1 1 200px; min-width: 0; font-size: 14px; padding: 4px 8px; border: 1px solid var(--ws-border-strong); border-radius: 6px; }
+.iw-record-edit .is-active, .exec-support .is-active { font-weight: 700; }
+
+.exec-row-title-open {
+  background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: inherit; text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--ws-border-strong); text-underline-offset: 3px;
+}
+.exec-row-title-open:hover { color: var(--ws-accent-text); }
+.exec-row-title-open:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 2px; }
+.plan-item-action-line { display: block; font-size: 14px; color: var(--ws-text-dim); margin: 2px 0; }

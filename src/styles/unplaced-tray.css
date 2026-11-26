@@ -1,0 +1,35 @@
+/* 계획 기간 안에 못 넣은 항목 묶음 (components/UnplacedTray.jsx) */
+.unplaced-tray {
+  border: 1px solid var(--ws-warn, #9a6700);
+  background: var(--ws-warn-soft, #fdf6e3);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.unplaced-tray.is-done { border-color: var(--ws-border, #e5e7eb); background: var(--ws-surface, #fff); }
+.unplaced-tray-head { display: flex; align-items: center; gap: 6px; color: var(--ws-warn, #9a6700); }
+.unplaced-tray.is-done .unplaced-tray-head { color: var(--ws-text-dim, #6b7280); }
+.unplaced-tray-desc { margin: 0; font-size: 13px; color: var(--ws-text-dim, #6b7280); }
+.unplaced-tray-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.unplaced-tray-item {
+  background: var(--ws-surface, #fff);
+  border: 1px solid var(--ws-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.unplaced-tray-item:not(.is-open) { opacity: 0.85; }
+.unplaced-tray-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.unplaced-tray-title { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.unplaced-tray-meta { font-size: 13px; color: var(--ws-text-dim, #6b7280); white-space: nowrap; }
+.unplaced-tray-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.unplaced-tray-manual { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; font-size: 13px; }
+.unplaced-tray-manual label { display: flex; flex-direction: column; gap: 2px; color: var(--ws-text-dim, #6b7280); }
+.unplaced-tray-resolved { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px;
+  font-size: 13px; color: var(--ws-text-dim, #6b7280); }
+.unplaced-tray-resolved span { display: inline-flex; align-items: center; gap: 4px; }

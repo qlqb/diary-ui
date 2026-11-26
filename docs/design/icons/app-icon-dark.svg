@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="오늘조각">
+  <rect width="64" height="64" rx="15" fill="#eef0fe"/>
+  <path d="M18 18 H31 L46 33 V46 A4 4 0 0 1 42 50 H18 A4 4 0 0 1 14 46 V22 A4 4 0 0 1 18 18 Z" fill="#4f46e5"/>
+  <path d="M36.5 14 H48 A2 2 0 0 1 50 16 V27.5 Z" fill="#7c3aed" stroke="#7c3aed" stroke-width="2" stroke-linejoin="round"/>
+</svg>

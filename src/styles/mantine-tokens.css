@@ -1,0 +1,69 @@
+/*
+ * 기존 색 변수(--ws-*)를 Mantine 팔레트에 묶는다(2026-11-20, Mantine 전환).
+ * 부품은 Mantine 컴포넌트로 바꿔 가지만, 행·칸·배지처럼 기존 CSS가 그리는 부분도 같은 색이어야 화면이 한 벌로 보인다.
+ * workspace.css의 :root 정의 뒤에 불러와 값을 덮는다. 값은 Mantine 테마의 변수다. 강조색은 로고에 맞춘 남색 팔레트(ui/theme.js의 brand)다.
+ */
+:root {
+  --ws-bg: var(--mantine-color-gray-0);
+  --ws-surface: var(--mantine-color-white);
+  --ws-border: var(--mantine-color-gray-3);
+  --ws-border-strong: var(--mantine-color-gray-4);
+  --ws-text: var(--mantine-color-black);
+  --ws-text-dim: var(--mantine-color-gray-7);
+  --ws-text-faint: var(--mantine-color-dimmed);
+  --ws-accent: var(--mantine-color-brand-6);
+  --ws-accent-soft: var(--mantine-color-brand-0);
+  --ws-accent-text: var(--mantine-color-brand-8);
+  --ws-draft: var(--mantine-color-violet-6);
+  --ws-draft-soft: var(--mantine-color-violet-0);
+  --ws-danger: var(--mantine-color-red-8);
+  --ws-ok: var(--mantine-color-green-8);
+  --ws-ok-soft: var(--mantine-color-green-0);
+  --ws-warn: var(--mantine-color-orange-8);
+  --ws-warn-soft: var(--mantine-color-orange-0);
+}
+
+/* 기존 CSS가 그리는 카드·행의 둥글기도 Mantine 단계에 맞춘다(radius.md = 8px). 배치 값(여백·폭)은 건드리지 않는다. */
+.exec-row, .week-grid-wrap, .empty-block, .routine-row, .routine-form, .plan-group, .plan-options,
+.consult-scope-all, .consult-scope-project, .view-error, .view-notice, .volume-fact, .opening-question,
+.px-drift, .unplaced-tray { border-radius: var(--mantine-radius-md); }
+
+/* 버튼 안 아이콘과 글자 사이(기존 .btn-*의 gap 6px를 이어받는다). */
+.mantine-Button-label { gap: 6px; }
+
+/*
+ * 입력 부품(TextInput·TimeInput·Textarea·NativeSelect·Checkbox).
+ * 기존 CSS에는 ".commitment-form input[type='date']"처럼 문맥으로 입력칸을 꾸미는 규칙이 많다. 그 규칙들은 폭·여백(배치)을
+ * 정하므로 남기고, 테두리·배경·둥글기·글자 크기처럼 "모양"만 Mantine 값으로 되돌린다. 클래스를 세 번 겹친 건 그 문맥 규칙
+ * (클래스 2개 + 태그)보다 앞서기 위해서다.
+ */
+.mantine-Input-input.mantine-Input-input.mantine-Input-input {
+  border: 1px solid var(--input-bd);
+  border-radius: var(--input-radius);
+  background: var(--input-bg);
+  color: var(--input-color);
+  font-size: var(--input-fz);
+  padding-inline-start: var(--input-padding-inline-start);
+  padding-inline-end: var(--input-padding-inline-end);
+  box-shadow: none;
+}
+.mantine-Input-input.mantine-Input-input.mantine-Input-input:not(textarea) { height: var(--input-height); min-height: var(--input-height); padding-block: 0; }
+.mantine-Input-input.mantine-Input-input.mantine-Input-input:focus,
+.mantine-Input-input.mantine-Input-input.mantine-Input-input:focus-within { border-color: var(--input-bd-focus); outline: none; }
+.mantine-Input-input.mantine-Input-input.mantine-Input-input:disabled { background: var(--mantine-color-gray-1); opacity: 0.6; }
+
+/* 기존 클래스(예: .learning-input)는 이제 바깥 상자(root)에 붙는다. 폭·flex는 그대로 쓰고, 상자 모양은 지운다. */
+.mantine-TextInput-root.mantine-TextInput-root, .mantine-TimeInput-root.mantine-TimeInput-root,
+.mantine-Textarea-root.mantine-Textarea-root, .mantine-NativeSelect-root.mantine-NativeSelect-root {
+  border: 0; padding: 0; background: none; box-shadow: none; min-height: 0; height: auto;
+}
+
+/* 체크박스는 글자 줄 안에 놓인다(감싼 label 안). */
+.mantine-Checkbox-root { display: inline-flex; vertical-align: middle; }
+
+/*
+ * 배지: 기존 칩 자리에는 아이콘+글자가 한 줄로 들어간다(예: 📍 약속). Mantine 기본 label은 block이라 아이콘이 위로 올라가고,
+ * 글자도 기존 칩(13px)보다 작아 읽기 어렵다 → 글자 크기·높이만 기존 칩에 맞추고 label을 한 줄 flex로 둔다.
+ */
+.mantine-Badge-root.mantine-Badge-root { font-size: 13px; height: 22px; font-weight: 600; letter-spacing: 0; }
+.mantine-Badge-label { display: inline-flex; align-items: center; gap: 4px; }
