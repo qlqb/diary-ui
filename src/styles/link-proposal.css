@@ -1,0 +1,135 @@
+/*
+  프로젝트 연결 제안 창(ProposalDialog). 샌드박스(proposal-sandbox)에서 고른 "추천 우선안 + 새 프로젝트" 모양.
+  색은 앱 변수(--ws-*)를 그대로 쓴다. 메뉴·팝오버는 포털이라 .lp-menu·.lp-form처럼 창 밖에서도 맞는 이름을 쓴다.
+*/
+.lp-dialog { width: min(760px, 94vw); max-height: 86vh; overflow: hidden; }
+
+.lp-head { padding: 18px 20px 12px; border-bottom: 1px solid var(--ws-border); }
+.lp-head-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lp-head h2 { margin: 0; font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.lp-count { font-size: 12px; font-weight: 600; color: var(--ws-accent-text); background: var(--ws-accent-soft); border-radius: 999px; padding: 1px 8px; }
+.lp-sub { margin: 4px 0 10px; font-size: 13px; color: var(--ws-text-dim); }
+
+.lp-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.lp-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; background: var(--ws-bg); border: 1px solid var(--ws-border); color: var(--ws-text); }
+.lp-chip b { font-weight: 700; }
+.lp-chip.is-new { border-color: #c7d2fe; background: var(--ws-accent-soft); color: var(--ws-accent-text); }
+.lp-chip.is-warn { border-color: #f5d48a; background: var(--ws-warn-soft); color: var(--ws-warn); }
+.lp-chip.is-leave { color: var(--ws-text-dim); }
+
+.lp-body { flex: 1; overflow: auto; padding: 6px 20px 14px; }
+
+.lp-section { margin-top: 14px; }
+.lp-section-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; font-size: 13.5px; font-weight: 700; color: var(--ws-text); }
+.lp-section-from { font-size: 12px; font-weight: 500; color: var(--ws-text-faint); }
+.lp-section-count { font-size: 12px; font-weight: 600; color: var(--ws-text-dim); }
+.lp-section-hint { font-size: 12px; font-weight: 400; color: var(--ws-text-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.lp-section.is-review { background: var(--ws-warn-soft); border: 1px solid #f2dca6; border-radius: 10px; padding: 10px 12px 4px; }
+.lp-section.is-review .lp-section-title { color: var(--ws-warn); align-items: center; }
+.lp-section.is-review .lp-section-hint { color: #8a6a1f; white-space: normal; }
+
+.lp-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--ws-border); border-radius: 10px; background: var(--ws-surface); }
+.lp-section.is-review .lp-list { border-color: #f2dca6; margin-bottom: 8px; }
+
+.lp-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 0 10px; align-items: center; padding: 7px 10px 7px 12px; }
+.lp-row + .lp-row { border-top: 1px solid var(--ws-border); }
+.lp-row.is-changed { background: #f7f8ff; box-shadow: inset 3px 0 0 var(--ws-accent); }
+.lp-check { display: flex; justify-content: center; align-self: start; padding-top: 3px; }
+.lp-pending { color: var(--ws-warn); }
+.lp-side { align-self: start; }
+.lp-dot { width: 10px; height: 10px; margin-top: 3px; border-radius: 50%; border: 2px solid var(--ws-warn); background: #fff; }
+
+.lp-main { min-width: 0; }
+.lp-name { all: unset; cursor: pointer; display: flex; align-items: flex-start; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--ws-text); line-height: 1.4; }
+.lp-name svg { flex: none; margin-top: 2px; color: var(--ws-text-faint); }
+.lp-name span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
+.lp-name:hover span { text-decoration: underline; text-decoration-color: var(--ws-border-strong); }
+.lp-name:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 2px; border-radius: 4px; }
+
+.lp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 3px 0 0 20px; font-size: 12px; color: var(--ws-text-dim); }
+.lp-role { position: relative; display: inline-flex; align-items: center; gap: 2px; color: var(--ws-text-dim); }
+.lp-role { font-size: 12px; margin-right: 4px; }
+.lp-role select { appearance: none; field-sizing: content; border: 0; background: transparent; font: inherit; color: inherit; padding: 2px 14px 2px 4px; border-radius: 5px; cursor: pointer; }
+.lp-role select:hover { background: var(--ws-bg); }
+.lp-role select:hover { color: var(--ws-text); text-decoration: underline; }
+.lp-role svg { position: absolute; right: 0; pointer-events: none; }
+.lp-reason { display: inline-flex; align-items: center; gap: 4px; color: var(--ws-warn); }
+.lp-changed { display: inline-flex; align-items: center; gap: 6px; color: var(--ws-accent-text); }
+.lp-changed button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; color: var(--ws-text-dim); text-decoration: underline; }
+.lp-why { display: flex; gap: 5px; align-items: flex-start; margin: 6px 0 0 20px; padding: 6px 8px; font-size: 12px; color: var(--ws-text-dim); background: var(--ws-bg); border-radius: 6px; }
+.lp-why svg { flex: none; margin-top: 2px; }
+
+.lp-side { display: flex; align-items: center; gap: 4px; }
+.lp-side .mantine-Button-root { flex: none; white-space: nowrap; }
+.lp-dest { all: unset; cursor: pointer; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; max-width: 220px; height: 28px; padding: 0 9px 0 10px; border-radius: 7px; border: 1px solid var(--ws-border-strong); background: var(--ws-surface); font-size: 12.5px; font-weight: 600; color: var(--ws-text); }
+.lp-dest:hover { border-color: var(--ws-text-faint); }
+.lp-dest:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+.lp-dest-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-dest svg { flex: none; color: var(--ws-text-faint); }
+.lp-dest.is-quiet { border-color: transparent; background: transparent; font-weight: 500; color: var(--ws-text-dim); }
+.lp-row:hover .lp-dest.is-quiet, .lp-dest.is-quiet:focus-visible, .lp-dest.is-quiet[aria-expanded="true"] { border-color: var(--ws-border-strong); background: var(--ws-surface); color: var(--ws-text); }
+.lp-dest.is-changed { border-color: var(--ws-accent); color: var(--ws-accent-text); background: var(--ws-accent-soft); }
+.lp-dest.is-leave { color: var(--ws-text-dim); border-style: dashed; }
+.lp-new-tag { font-size: 10.5px; font-weight: 700; padding: 0 5px; border-radius: 4px; background: var(--ws-accent); color: #fff; line-height: 16px; }
+.lp-row.is-waiting .lp-dest { border-style: dashed; border-color: #d9b45a; }
+.lp-menu { max-height: 340px; overflow: auto; }
+
+.lp-leave-toggle { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--ws-text-dim); margin-bottom: 6px; }
+
+.lp-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--ws-border); background: var(--ws-surface); }
+.lp-foot-note { flex: 1; margin: 0; font-size: 12.5px; color: var(--ws-text-dim); }
+
+.lp-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+@media (max-width: 560px) {
+  .lp-dialog { width: 100vw; max-height: 100vh; border-radius: 0; }
+  .lp-head, .lp-body, .lp-foot { padding-left: 14px; padding-right: 14px; }
+  .lp-row { grid-template-columns: 22px minmax(0, 1fr); }
+  .lp-side { grid-column: 2; margin-top: 6px; flex-wrap: wrap; }
+  .lp-dest { max-width: 100%; min-width: 0; flex: 0 1 auto; }
+  .lp-row:not(.is-waiting) .lp-side { flex-wrap: nowrap; }
+  .lp-role { flex: none; }
+  .lp-foot { flex-wrap: wrap; }
+  .lp-foot-note { flex-basis: 100%; }
+  .lp-foot .mantine-Button-root:last-child { flex: 1; }
+}
+
+/* 새 프로젝트 만들기 · 여러 개 고르기 */
+.lp-bar { flex: none; display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 6px 20px; border-bottom: 1px solid var(--ws-border); font-size: 12.5px; color: var(--ws-text-faint); }
+.lp-bar.is-on { background: var(--ws-accent-soft); color: var(--ws-accent-text); }
+.lp-bar-hint { margin-left: auto; }
+.lp-bar-count b { font-weight: 700; }
+.lp-bar-spacer { flex: 1; }
+
+.lp-row.is-picked { background: var(--ws-accent-soft); box-shadow: inset 3px 0 0 var(--ws-accent); }
+.lp-bar.is-on ~ .lp-body .lp-row { cursor: pointer; }
+
+.lp-form { display: flex; flex-direction: column; gap: 8px; padding: 6px 6px 4px; }
+.lp-back { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ws-text-dim); }
+.lp-back:hover { color: var(--ws-text); }
+.lp-form-label { font-size: 12.5px; font-weight: 600; color: var(--ws-text); }
+.lp-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lp-form-hint { font-size: 11.5px; color: var(--ws-text-faint); margin: 0; }
+.lp-same { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border-radius: 8px; background: var(--ws-warn-soft); color: var(--ws-warn); font-size: 12px; }
+.lp-same span { flex-basis: calc(100% - 20px); color: #7a5a12; }
+.lp-same .mantine-Button-root { flex: 1 1 100%; }
+.lp-create-item { font-weight: 600; color: var(--ws-accent-text); }
+
+.lp-chip-btn { cursor: pointer; font: inherit; }
+.lp-chip-btn svg { color: var(--ws-accent-text); opacity: .7; }
+.lp-chip-btn:hover { border-color: var(--ws-accent); }
+.lp-chip-btn.is-empty { border-color: var(--ws-danger); color: var(--ws-danger); }
+
+@media (max-width: 560px) {
+  .lp-bar { flex-wrap: wrap; padding: 6px 14px; }
+  .lp-bar.is-on .lp-bar-count { order: 0; flex: 1 1 calc(100% - 70px); }
+  .lp-bar.is-on .lp-bar-spacer { display: none; }
+  .lp-bar.is-on > .mantine-Button-root { order: 2; }
+  .lp-bar.is-on > .mantine-Button-root:last-child { order: 1; }
+  .lp-bar-hint { display: none; }
+  .lp-bar:not(.is-on) .mantine-Button-root { margin-left: auto; }
+}
+
+.lp-error { margin: 0 20px 6px; }
+.lp-empty { margin: 14px 0 4px; }
+.lp-foot .mantine-Button-root { flex: none; }

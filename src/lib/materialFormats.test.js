@@ -6,7 +6,7 @@ import {
 
 describe('materialFormats', () => {
   it('accept 값에 자료 형식과 압축이 있다', () => {
-    expect(MATERIAL_ACCEPT).toBe('.pdf,.pptx,.hwp,.hwpx,.ipynb,.sh,.cpp,.cc,.cxx,.h,.hpp,.zip');
+    expect(MATERIAL_ACCEPT).toBe('.pdf,.pptx,.hwp,.hwpx,.ipynb,.sh,.c,.cpp,.cc,.cxx,.h,.hpp,.zip');
   });
 
   it('C++ 소스·헤더는 텍스트 자료로 받는다', () => {
@@ -14,6 +14,10 @@ describe('materialFormats', () => {
       expect(isAllowedMaterialFile(name)).toBe(true);
     }
     expect(materialFileKind('main.cpp', null)).toBe('CPP');
+    expect(isAllowedMaterialFile('main.c')).toBe(true);
+    expect(isAllowedMaterialFile('LIST.C')).toBe(true);
+    expect(materialFileKind('main.c', null)).toBe('C');
+    expect(materialFileKind('자료', 'text/x-csrc')).toBe('C');
     expect(materialFileKind('stack.h', 'text/plain')).toBe('H');
     expect(materialFileKind('자료', 'text/x-c++src')).toBe('CPP');
     // 컴파일 결과물은 받지 않는다.

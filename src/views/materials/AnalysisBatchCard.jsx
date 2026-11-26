@@ -18,6 +18,7 @@ import {
 } from '../../lib/analysisBatch.js';
 import { waitingCopy } from '../../lib/materialStages.js';
 
+import { Button } from '@mantine/core';
 function StageIcon({ stage }) {
   if (stage === 'DONE') return <CheckCircle2 size={14} className="batch-item-icon is-done" />;
   if (stage === 'ANALYZING' || stage === 'UPLOADING') {
@@ -111,10 +112,10 @@ export default function AnalysisBatchCard({
                 ? ` ${item.completedChunks ?? 0}/${item.totalChunks}` : ''}
             </span>
             {item.retryable && item.materialId && (
-              <button type="button" className="btn-ghost btn-sm" disabled={retrying === item.itemId}
+              <Button variant="default" size="xs" type="button" disabled={retrying === item.itemId}
                 onClick={() => retry(item)}>
                 <RotateCcw size={12} /> 다시
-              </button>
+              </Button>
             )}
             {item.message && <p className="batch-item-message">{item.message}</p>}
           </li>
@@ -125,10 +126,10 @@ export default function AnalysisBatchCard({
 
       <div className="analysis-batch-actions">
         {onAddMore && (
-          <button type="button" className="btn-ghost btn-sm" onClick={onAddMore}>새 자료 추가</button>
+          <Button variant="default" size="xs" type="button" onClick={onAddMore}>새 자료 추가</Button>
         )}
         {onBack && (
-          <button type="button" className="btn-primary btn-sm" onClick={onBack}>{backLabel}</button>
+          <Button size="xs" type="button" onClick={onBack}>{backLabel}</Button>
         )}
       </div>
     </section>

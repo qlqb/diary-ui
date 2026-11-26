@@ -11,6 +11,7 @@
 
 import { Pause, Play } from 'lucide-react';
 import { CONSULT_BEFORE_APPROVAL, dailyLimitCopy } from '../../lib/materialStages.js';
+import { Badge, Button } from '@mantine/core';
 import '../../styles/material-status.css';
 
 export default function AnalysisOverviewBar({ overview, error, onPause, onResume, busy = false }) {
@@ -37,19 +38,19 @@ export default function AnalysisOverviewBar({ overview, error, onPause, onResume
         <strong>자동 분석</strong>
         {' · '}
         {parts.length > 0 ? parts.join(' · ') : '분석할 자료가 없어요'}
-        {overview.paused && <span className="chip chip-status">일시중지됨 · 재개하면 이어서 처리해요</span>}
+        {overview.paused && <Badge component="span" color="gray" className="chip chip-status">일시중지됨 · 재개하면 이어서 처리해요</Badge>}
         {overview.serviceAvailable === false && (
-          <span className="chip chip-warn">지금은 분석 서비스를 쓸 수 없어요 · 대기 목록은 유지돼요</span>
+          <Badge component="span" color="orange" className="chip chip-warn">지금은 분석 서비스를 쓸 수 없어요 · 대기 목록은 유지돼요</Badge>
         )}
       </span>
       {overview.paused ? (
-        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onResume}>
+        <Button variant="default" size="xs" type="button" disabled={busy} onClick={onResume}>
           <Play size={13} /> 재개
-        </button>
+        </Button>
       ) : (
-        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onPause}>
+        <Button variant="default" size="xs" type="button" disabled={busy} onClick={onPause}>
           <Pause size={13} /> 일시중지
-        </button>
+        </Button>
       )}
       {limitReached && (
         <p className="analysis-waiting-note analysis-overview-limit" role="status">

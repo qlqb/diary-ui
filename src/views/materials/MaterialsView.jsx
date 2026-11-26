@@ -40,6 +40,7 @@ import AnalysisBatchCard from './AnalysisBatchCard.jsx';
 import { useAnalysisBatches } from './useAnalysisBatches.js';
 import { useUploadEstimate } from './useUploadEstimate.js';
 import { describeEstimate, estimateBasisNote, UPLOAD_TIME_NOTE } from '../../lib/analysisBatch.js';
+import { ActionIcon, Badge, Button, NativeSelect } from '@mantine/core';
 import '../../styles/material-status.css';
 import '../../styles/project-tidy.css';
 
@@ -773,9 +774,9 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
               올린 자료는 여러 프로젝트에서 함께 쓸 수 있어요.
             </p>
           </div>
-          <button type="button" className="btn-ghost btn-sm" onClick={uploader.openPicker}>
+          <Button variant="default" size="xs" type="button" onClick={uploader.openPicker}>
             <Plus size={13} /> 파일 추가
-          </button>
+          </Button>
         </header>
 
         {/*
@@ -831,14 +832,14 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
         {postUploadIds.length > 0 && !proposal && (
             <p className="proposal-inline-hint">
               방금 올린 자료를 프로젝트에 연결할까요?
-              <button type="button" className="btn-ghost btn-sm" disabled={proposalLoading}
+              <Button variant="default" size="xs" type="button" disabled={proposalLoading}
                       onClick={() => showProposal(postUploadIds, 'manual', ProposalTrigger.MANUAL)}>
                 <Sparkles size={13} /> 프로젝트에 연결
-              </button>
-              <button type="button" className="icon-btn" aria-label="이 안내 닫기"
+              </Button>
+              <ActionIcon variant="subtle" color="gray" type="button" aria-label="이 안내 닫기"
                       onClick={() => setPostUploadIds([])}>
                 <X size={13} />
-              </button>
+              </ActionIcon>
             </p>
         )}
 
@@ -873,13 +874,13 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
                 </strong>
                 <span className="proposal-banner-sub">{bannerSubtitle}</span>
               </span>
-              <button type="button" className="btn-ghost btn-sm" ref={reviewButtonRef}
+              <Button variant="default" size="xs" type="button" ref={reviewButtonRef}
                       onClick={() => setDialogOpen(true)}>
                 검토하기
-              </button>
-              <button type="button" className="icon-btn" aria-label="제안 닫기" onClick={closeProposal}>
+              </Button>
+              <ActionIcon variant="subtle" color="gray" type="button" aria-label="제안 닫기" onClick={closeProposal}>
                 <X size={14} />
-              </button>
+              </ActionIcon>
             </div>
         )}
 
@@ -887,6 +888,7 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
             <ProposalDialog
                 key={proposalKey}
                 proposal={proposal}
+                projects={projects ?? []}
                 loading={proposalLoading}
                 onClose={closeDialog}
                 onShowRemaining={(ids) => showProposal(ids, 'manual', ProposalTrigger.REMAINING)}
@@ -907,15 +909,15 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
             <p className="proposal-inline-hint">
               {proposalMessage}
               {proposalRetryable && (
-                  <button type="button" className="btn-ghost btn-sm" disabled={proposalLoading}
+                  <Button variant="default" size="xs" type="button" disabled={proposalLoading}
                           onClick={() => showProposal(lastProposalMaterialIds.current, 'manual', ProposalTrigger.RETRY)}>
                     다시 시도
-                  </button>
+                  </Button>
               )}
-              <button type="button" className="icon-btn" aria-label="이 안내 닫기"
+              <ActionIcon variant="subtle" color="gray" type="button" aria-label="이 안내 닫기"
                       onClick={() => setProposalMessage(null)}>
                 <X size={13} />
-              </button>
+              </ActionIcon>
             </p>
         )}
 
@@ -946,13 +948,13 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
             자동 제안을 껐어도 이 버튼은 항상 동작한다.
           */}
           {unlinkedCount > 0 && (
-              <button type="button" className="btn-ghost btn-sm material-filters-action"
+              <Button variant="default" size="xs" type="button" className="material-filters-action"
                       disabled={proposalLoading}
                       onClick={() => showProposal([], 'manual', ProposalTrigger.MANUAL)}>
                 {proposalLoading
                     ? <><Loader2 size={13} className="spin" /> 살펴보는 중</>
                     : <><Sparkles size={13} /> 프로젝트로 정리하기</>}
-              </button>
+              </Button>
           )}
         </div>
 
@@ -1004,38 +1006,38 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
                         )}
                         {m.extractionStatus !== ExtractionStatus.SUCCESS && (
                             <>
-                              <span className="chip chip-warn" title={m.extractionError ?? undefined}>
+                              <Badge component="span" color="orange" className="chip chip-warn" title={m.extractionError ?? undefined}>
                                 {EXTRACTION_STATUS_LABEL[m.extractionStatus]}
-                              </span>
+                              </Badge>
                               {/*
                                 같은 파일을 다시 올리게 하지 않는다 — 원본은 서버에 있으므로 다시 읽기만
                                 하면 된다. 분석 재시도와 다른 버튼이다(저쪽은 이미 읽은 원문을 모델에 다시 보낸다).
                               */}
-                              <button type="button" className="btn-ghost btn-sm"
+                              <Button variant="default" size="xs" type="button"
                                       disabled={reExtractingId === m.materialId}
                                       onClick={() => retryExtraction(m.materialId)}>
                                 {reExtractingId === m.materialId
                                     ? <><Loader2 size={13} className="spin" /> 다시 읽는 중</>
                                     : <><RotateCcw size={13} /> 본문 다시 읽기</>}
-                              </button>
+                              </Button>
                             </>
                         )}
                         {m.extractionStatus === ExtractionStatus.SUCCESS && m.extractionWarning && (
-                            <span className="chip chip-warn" title={m.extractionWarning}>일부만 읽음</span>
+                            <Badge component="span" color="orange" className="chip chip-warn" title={m.extractionWarning}>일부만 읽음</Badge>
                         )}
                         {m.origin === 'CONSULT_PHOTO' && (
                             <>
-                              <span className="chip chip-status"
+                              <Badge component="span" color="gray" className="chip chip-status"
                                     title="상담에서 올린 교재 사진이에요. 원본은 30일 뒤 지워지고 읽은 글은 남아요.">
                                 상담 사진
-                              </span>
+                              </Badge>
                               {m.originalAvailable ? (
-                                  <button type="button" className="btn-ghost btn-sm"
+                                  <Button variant="default" size="xs" type="button"
                                           onClick={() => deletePhotoOriginal(m.materialId)}
                                           title="읽은 글과 단원 연결은 남아요">
                                     원본만 지우기
-                                  </button>
-                              ) : <span className="chip chip-warn">원본 지워짐 · 읽은 글은 남음</span>}
+                                  </Button>
+                              ) : <Badge component="span" color="orange" className="chip chip-warn">원본 지워짐 · 읽은 글은 남음</Badge>}
                             </>
                         )}
                         {m.extractionStatus === ExtractionStatus.SUCCESS && analysis.byMaterialId.get(m.materialId) && (
@@ -1059,13 +1061,13 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
                           다른 자료를 검토 대상에서 없애지도 않는다. 분석이 끝나지 않았으면 서버가 그렇게 알려준다.
                         */}
                         {onPlanWithMaterial && m.extractionStatus === ExtractionStatus.SUCCESS && (
-                            <button type="button" className="btn-ghost btn-sm" onClick={() => onPlanWithMaterial(m)}>
+                            <Button variant="default" size="xs" type="button" onClick={() => onPlanWithMaterial(m)}>
                               이 자료로 계획
-                            </button>
+                            </Button>
                         )}
-                        <button
+                        <Button variant="default" size="xs"
                             type="button"
-                            className="btn-ghost btn-sm"
+
                             ref={(el) => { linkButtonRefs.current[m.materialId] = el; }}
                             disabled={linkable.length === 0}
                             title={linkable.length === 0 ? '연결할 수 있는 프로젝트가 없어요' : undefined}
@@ -1074,19 +1076,19 @@ export default function MaterialsView({ projects, onProjectsChanged, onPlanWithM
                             onClick={() => toggleLinking(m.materialId)}
                         >
                           <Link2 size={13} /> 프로젝트 연결
-                        </button>
+                        </Button>
                         {/*
                           확인을 묻지 않는다. 되돌릴 창이 열리는 동안 서버는 아직 이 일을
                           모르므로, 잘못 눌러도 취소하면 그만이다.
                         */}
-                        <button
+                        <Button variant="light" color="red" size="xs"
                             type="button"
-                            className="btn-ghost btn-sm btn-danger"
+
                             title="삭제 (Ctrl+Z로 되돌릴 수 있어요)"
                             onClick={() => pendingDelete.schedule(m)}
                         >
                           <Trash2 size={13} /> 삭제
-                        </button>
+                        </Button>
                       </div>
                     </div>
 
@@ -1172,16 +1174,16 @@ function UploadTray({ items, running, skipped, stagedCount, onStart, onRemove, o
                 <UploadItemState item={it} />
                 <span className="upload-item-actions">
               {it.state === 'failed' && (
-                  <button type="button" className="btn-ghost btn-sm" disabled={running}
+                  <Button variant="default" size="xs" type="button" disabled={running}
                           onClick={() => onRetry(it.id)}>
                     다시 올리기
-                  </button>
+                  </Button>
               )}
                   {it.state !== 'uploading' && (
-                      <button type="button" className="icon-btn" aria-label={`${it.file.name} 목록에서 빼기`}
+                      <ActionIcon variant="subtle" color="gray" type="button" aria-label={`${it.file.name} 목록에서 빼기`}
                               onClick={() => onRemove(it.id)}>
                         <X size={14} />
-                      </button>
+                      </ActionIcon>
                   )}
             </span>
                 {it.state === 'done' && it.extractionStatus !== ExtractionStatus.SUCCESS && (
@@ -1217,15 +1219,15 @@ function UploadTray({ items, running, skipped, stagedCount, onStart, onRemove, o
           <span className="upload-tray-hint">{UPLOAD_HINT}</span>
           <span className="upload-format-note">{SHELL_SCRIPT_HINT}</span>
           {settledCount > 0 && (
-              <button type="button" className="btn-ghost btn-sm" disabled={running} onClick={onClear}>
+              <Button variant="default" size="xs" type="button" disabled={running} onClick={onClear}>
                 정리
-              </button>
+              </Button>
           )}
-          <button type="button" className="btn-primary" disabled={running || stagedCount === 0} onClick={onStart}>
+          <Button type="button" disabled={running || stagedCount === 0} onClick={onStart}>
             {running
                 ? <><Loader2 size={13} className="spin" /> 올리는 중</>
                 : <><Upload size={13} /> {stagedCount}개 분석 시작</>}
-          </button>
+          </Button>
         </div>
       </div>
   );
@@ -1259,9 +1261,9 @@ function UploadSummary({ summary, onDismiss }) {
           role="status" aria-label="업로드 결과">
         <div className="upload-summary-head">
           <p className="upload-summary-title">{parts.join(' · ')}</p>
-          <button type="button" className="icon-btn" aria-label="업로드 결과 닫기" onClick={onDismiss}>
+          <ActionIcon variant="subtle" color="gray" type="button" aria-label="업로드 결과 닫기" onClick={onDismiss}>
             <X size={13} />
-          </button>
+          </ActionIcon>
         </div>
         {problems.length > 0 && (
             <ul className="upload-summary-list">
@@ -1291,7 +1293,7 @@ function UploadItemState({ item }) {
       return (
           <span className="upload-item-status is-done">
           <Check size={12} /> 올렸어요
-          <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[item.extractionStatus]}</span>
+          <Badge component="span" color="orange" className="chip chip-warn">{EXTRACTION_STATUS_LABEL[item.extractionStatus]}</Badge>
         </span>
       );
     }
@@ -1420,9 +1422,9 @@ function MaterialDetail({ materialId, onBack, onChanged }) {
       <div className="view">
         <header className="view-head">
           <div className="project-head">
-            <button type="button" className="icon-btn" onClick={onBack} aria-label="자료 목록으로">
+            <ActionIcon variant="subtle" color="gray" type="button" onClick={onBack} aria-label="자료 목록으로">
               <ArrowLeft size={18} />
-            </button>
+            </ActionIcon>
             <div>
               <h1 className="view-title">{material?.originalFilename}</h1>
               <p className="view-sub">
@@ -1430,7 +1432,7 @@ function MaterialDetail({ materialId, onBack, onChanged }) {
                 {materialFileKind(material?.originalFilename, material?.contentType)} · {formatDate(material?.createdAt)}
               </span>
                 {material?.extractionStatus !== ExtractionStatus.SUCCESS && (
-                    <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[material?.extractionStatus]}</span>
+                    <Badge component="span" color="orange" className="chip chip-warn">{EXTRACTION_STATUS_LABEL[material?.extractionStatus]}</Badge>
                 )}
                 {material?.materialId && (
                     <MaterialFileLink
@@ -1462,10 +1464,10 @@ function MaterialDetail({ materialId, onBack, onChanged }) {
                           onChange={(t) => handleRoleChange(l.courseId, t)}
                       />
                       <span className="material-actions">
-                  <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                  <Button variant="default" size="xs" type="button" disabled={busy}
                           onClick={() => handleRemoveLink(l.courseId)}>
                     <X size={13} /> 연결 해제
-                  </button>
+                  </Button>
                 </span>
                     </li>
                 ))}
@@ -1525,11 +1527,11 @@ function MaterialSections({ materialId }) {
                   <li key={sec.sectionId} className="material-item material-section-item">
                     <span className="material-section-locator">{sec.locator}</span>
                     <span className="material-section-roles">
-                      {(sec.roles ?? []).map((r) => <span key={r} className="chip chip-status">{sectionRoleLabel(r)}</span>)}
+                      {(sec.roles ?? []).map((r) => <Badge component="span" color="gray" key={r} className="chip chip-status">{sectionRoleLabel(r)}</Badge>)}
                     </span>
                     <span className="material-name">{sec.title}</span>
                     {sec.taskText && <span className="material-section-task">수행: {sec.taskText}</span>}
-                    {sec.assignmentCue && <span className="chip chip-warn">제출 단서</span>}
+                    {sec.assignmentCue && <Badge component="span" color="orange" className="chip chip-warn">제출 단서</Badge>}
                     {/*
                       본문이 다른 파일을 가리키는데 그 파일이 앱에 없을 때. 앱이 아는 것은 "여기에 올라오지
                       않았다"까지다 — 사용자가 그 파일을 갖고 있는지는 말하지 않는다.
@@ -1586,7 +1588,7 @@ function AnalysisHistory({ analyses }) {
           {analyses.map((a) => (
               <li key={a.analysisId} className="material-item analysis-history-item">
                 <span className="analysis-history-course">{a.courseTitle ?? '알 수 없는 프로젝트'}</span>
-                <span className="chip">{ANALYSIS_STATUS_LABEL[a.status] ?? a.status}</span>
+                <Badge component="span" color="gray" className="chip">{ANALYSIS_STATUS_LABEL[a.status] ?? a.status}</Badge>
                 <span className="material-row-meta">{formatDate(a.createdAt)}</span>
                 {a.payload?.summary && (
                     <p className="analysis-history-summary">{a.payload.summary}</p>
@@ -1627,14 +1629,14 @@ function LinkForm({ projects, onCancel, onSubmit, busy = false, autoFocus = fals
             }
           }}
       >
-        <select className="material-type" value={courseId} aria-label="연결할 프로젝트"
+        <NativeSelect className="material-type" value={courseId} aria-label="연결할 프로젝트"
                 autoFocus={autoFocus} disabled={busy}
                 onChange={(e) => setCourseId(e.target.value)}>
           {projects.map((p) => <option key={p.courseId} value={p.courseId}>{p.title}</option>)}
-        </select>
+        </NativeSelect>
         <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={busy} />
-        <button type="submit" className="btn-ghost btn-sm" disabled={busy || !courseId}>연결</button>
-        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onCancel}>취소</button>
+        <Button variant="default" size="xs" type="submit" disabled={busy || !courseId}>연결</Button>
+        <Button variant="default" size="xs" type="button" disabled={busy} onClick={onCancel}>취소</Button>
         <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
       </form>
   );

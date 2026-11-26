@@ -11,8 +11,13 @@
 import { materialStages, STAGE_STATE_LABEL, TIDY_IS_OPTIONAL, waitingCopy } from '../../lib/materialStages.js';
 import '../../styles/material-status.css';
 
-export default function MaterialStages({ material, status, limit = null }) {
-  const stages = materialStages(material, status);
+/**
+ * pendingOnly: 끝난 단계("완료")는 빼고 남은 단계만 보인다. 자료가 많은 프로젝트 표처럼 한 줄이 아까운 곳에서 쓴다 —
+ * "등록 완료 · 텍스트 추출 완료"는 남은 일이 있는 자료에서도 늘 같은 말이라 정보가 없다.
+ */
+export default function MaterialStages({ material, status, limit = null, pendingOnly = false }) {
+  const all = materialStages(material, status);
+  const stages = pendingOnly ? all.filter((stage) => stage.state !== 'done') : all;
   const waiting = waitingCopy(status?.waitingReason ?? null, limit);
   return (
     <div className="material-stages">
@@ -32,7 +37,7 @@ export default function MaterialStages({ material, status, limit = null }) {
         그 자리를 차지했는데, 그건 자동으로 도는 일이 아니라 사용자가 고르는 일이라 단계로 두면
         누르지도 않은 일이 밀린 것처럼 보였다. 한 줄 안내로 바꾼다.
       */}
-      {stages[2]?.state === 'done' && <p className="material-stage-next">{TIDY_IS_OPTIONAL}</p>}
+      {!pendingOnly && all[2]?.state === 'done' && <p className="material-stage-next">{TIDY_IS_OPTIONAL}</p>}
     </div>
   );
 }

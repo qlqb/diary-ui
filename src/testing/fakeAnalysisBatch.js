@@ -12,7 +12,7 @@
 
 import { vi } from 'vitest';
 
-const SUPPORTED = ['pdf', 'pptx', 'hwp', 'hwpx', 'ipynb', 'sh', 'cpp', 'cc', 'cxx', 'h', 'hpp'];
+const SUPPORTED = ['pdf', 'pptx', 'hwp', 'hwpx', 'ipynb', 'sh', 'c', 'cpp', 'cc', 'cxx', 'h', 'hpp'];
 
 function extensionOf(name) {
   const dot = String(name ?? '').lastIndexOf('.');

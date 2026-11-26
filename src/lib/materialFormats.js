@@ -8,11 +8,12 @@
  * hwp는 HWP 5.0만 읽는다. hwpx는 별도 형식이라 둘 다 적는다.
  *
  * sh는 실행하지 않는다 — 실습 자료에 딸려 오는 스크립트를 "무엇을 하는 파일인지" 읽을 텍스트로만 받는다.
- * C++ 소스·헤더(cpp·cc·cxx·h·hpp)도 같다. 컴파일·실행하지 않고 텍스트로만 읽는다.
+ * C 소스(c)와 C++ 소스·헤더(cpp·cc·cxx·h·hpp)도 같다. 헤더 .h는 C·C++ 공용이다. 컴파일·실행하지 않고 텍스트로만 읽는다.
  */
+export const C_EXTENSIONS = ['c'];
 export const CPP_EXTENSIONS = ['cpp', 'cc', 'cxx', 'h', 'hpp'];
 
-export const MATERIAL_EXTENSIONS = ['pdf', 'pptx', 'hwp', 'hwpx', 'ipynb', 'sh', ...CPP_EXTENSIONS];
+export const MATERIAL_EXTENSIONS = ['pdf', 'pptx', 'hwp', 'hwpx', 'ipynb', 'sh', ...C_EXTENSIONS, ...CPP_EXTENSIONS];
 
 export const ARCHIVE_EXTENSION = 'zip';
 
@@ -22,10 +23,10 @@ export const MATERIAL_ACCEPT = [...MATERIAL_EXTENSIONS, ARCHIVE_EXTENSION]
   .join(',');
 
 /** 안내 문구에 쓰는 형식 나열. */
-export const MATERIAL_FORMATS_LABEL = 'PDF·PPTX·HWP·HWPX·IPYNB·SH·C++';
+export const MATERIAL_FORMATS_LABEL = 'PDF·PPTX·HWP·HWPX·IPYNB·SH·C·C++';
 
 /** 셸 스크립트·코드를 올려도 되는지 망설이는 사람에게 하는 말. 업로드 안내 옆에 늘 붙는다. */
-export const SHELL_SCRIPT_HINT = '셸 스크립트(.sh)·C++ 코드(.cpp·.h 등)는 실행하지 않고 텍스트 자료로만 읽어요';
+export const SHELL_SCRIPT_HINT = '셸 스크립트(.sh)·C·C++ 코드(.c·.cpp·.h 등)는 실행하지 않고 텍스트 자료로만 읽어요';
 export const UPLOAD_FORMATS_LABEL = `${MATERIAL_FORMATS_LABEL} · ZIP(안에 든 파일을 골라서)`;
 
 export function materialExtension(filename) {
@@ -54,6 +55,7 @@ const KIND_BY_CONTENT_TYPE = [
   ['x-sh', 'SH'],
   ['shellscript', 'SH'],
   ['c++', 'CPP'],
+  ['x-csrc', 'C'],
   ['hwp+zip', 'HWPX'],
   ['hwp', 'HWP'],
   ['presentation', 'PPTX'],
