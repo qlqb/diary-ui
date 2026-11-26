@@ -16,6 +16,7 @@ import { contextAPI, studyStateAPI } from '../../api/api.js';
 import {
   FACT_GROUPS, FACT_KIND_LABEL, HELP_LEVEL_LABEL, formatSaidDay, topicChipText,
 } from '../../lib/studyLabels.js';
+import { Badge, Button, NativeSelect, Textarea } from '@mantine/core';
 import '../../styles/learning-flow.css';
 import '../../styles/memory.css';
 
@@ -96,7 +97,7 @@ export default function StudyStatePanel({ courseId, refreshToken = 0, onChanged 
 
       {error && (
         <p className="view-error" role="alert">
-          {error}{' '}<button type="button" className="btn-ghost btn-sm" onClick={load}>다시 불러오기</button>
+          {error}{' '}<Button variant="default" size="xs" type="button" onClick={load}>다시 불러오기</Button>
         </p>
       )}
       {notice && <p className="study-state-notice" role="status">{notice}</p>}
@@ -133,18 +134,18 @@ export default function StudyStatePanel({ courseId, refreshToken = 0, onChanged 
                 <li key={id} className="study-state-item">
                   {isEditing ? (
                     <form className="study-state-edit" onSubmit={(e) => { e.preventDefault(); save(fact); }}>
-                      <textarea rows={2} autoFocus aria-label="내용 고치기" disabled={busy} value={editing.text}
+                      <Textarea rows={2} autoFocus aria-label="내용 고치기" disabled={busy} value={editing.text}
                         onChange={(e) => setEditing({ ...editing, text: e.target.value })}
                         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } }} />
                       <span className="study-state-edit-fields">
                         <label>종류{' '}
-                          <select value={editing.kind} disabled={busy}
+                          <NativeSelect value={editing.kind} disabled={busy}
                             onChange={(e) => setEditing({ ...editing, kind: e.target.value })}>
                             {KIND_OPTIONS.map((k) => <option key={k} value={k}>{FACT_KIND_LABEL[k]}</option>)}
-                          </select>
+                          </NativeSelect>
                         </label>
                         <label>단원{' '}
-                          <select value={editing.topicId ?? ''} disabled={busy}
+                          <NativeSelect value={editing.topicId ?? ''} disabled={busy}
                             onChange={(e) => setEditing({ ...editing, topicId: e.target.value ? Number(e.target.value) : null })}>
                             <option value="">단원 없음</option>
                             {topics.map((t) => (
@@ -152,34 +153,34 @@ export default function StudyStatePanel({ courseId, refreshToken = 0, onChanged 
                                 {t.sourceTocSeq ? `${t.title} · 목차 ${t.sourceTocSeq}번째` : t.title}
                               </option>
                             ))}
-                          </select>
+                          </NativeSelect>
                         </label>
                         {editing.kind === 'RESOLVED' && (
                           <label>도움{' '}
-                            <select value={editing.help ?? ''} disabled={busy}
+                            <NativeSelect value={editing.help ?? ''} disabled={busy}
                               onChange={(e) => setEditing({ ...editing, help: e.target.value || null })}>
                               <option value="">말하지 않음</option>
                               <option value="SOLO">{HELP_LEVEL_LABEL.SOLO}</option>
                               <option value="GUIDED">{HELP_LEVEL_LABEL.GUIDED}</option>
-                            </select>
+                            </NativeSelect>
                           </label>
                         )}
                       </span>
                       <span className="memory-actions">
-                        <button type="submit" className="btn-primary btn-sm" disabled={busy || !editing.text.trim()}>저장</button>
-                        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setEditing(null)}>취소</button>
+                        <Button size="xs" type="submit" disabled={busy || !editing.text.trim()}>저장</Button>
+                        <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setEditing(null)}>취소</Button>
                       </span>
                     </form>
                   ) : (
                     <p className="study-state-text">
                       {fact.text}
                       {fact.kind === 'RESOLVED' && fact.help && (
-                        <span className="chip chip-ok">{HELP_LEVEL_LABEL[fact.help]}</span>
+                        <Badge component="span" color="green" className="chip chip-ok">{HELP_LEVEL_LABEL[fact.help]}</Badge>
                       )}
                     </p>
                   )}
                   <p className="study-state-meta">
-                    {chip && <span className="chip chip-status" title="이 기억이 이어진 단원">{chip}</span>}
+                    {chip && <Badge component="span" color="gray" className="chip chip-status" title="이 기억이 이어진 단원">{chip}</Badge>}
                     <span className={inferred ? 'chip chip-warn' : 'chip chip-status'}>{fact.sourceLabel}</span>
                     {fact.label && <span>{fact.label}</span>}
                     {day && <span>{day}</span>}
@@ -187,33 +188,33 @@ export default function StudyStatePanel({ courseId, refreshToken = 0, onChanged 
                   {!isEditing && confirmingDelete !== id && (
                     <span className="memory-actions">
                       {inferred && (
-                        <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                        <Button variant="default" size="xs" type="button" disabled={busy}
                           aria-label={`맞아요: ${fact.text}`}
                           onClick={() => mutate(id, () => contextAPI.confirm(id), '확인했어요. 이제 "내가 말한 것"으로 다뤄요.')}>
                           <Check size={13} aria-hidden="true" /> 맞아요
-                        </button>
+                        </Button>
                       )}
-                      <button type="button" className="btn-ghost btn-sm" disabled={busy} aria-label={`고치기: ${fact.text}`}
+                      <Button variant="default" size="xs" type="button" disabled={busy} aria-label={`고치기: ${fact.text}`}
                         onClick={() => { setEditing({ id, text: fact.text, kind: fact.kind, topicId: fact.topicId ?? null, help: fact.help ?? null }); setRowError(null); }}>
                         <Pencil size={13} aria-hidden="true" /> 고치기
-                      </button>
-                      <button type="button" className="btn-ghost btn-sm" disabled={busy} aria-label={`지우기: ${fact.text}`}
+                      </Button>
+                      <Button variant="default" size="xs" type="button" disabled={busy} aria-label={`지우기: ${fact.text}`}
                         onClick={() => { setConfirmingDelete(id); setRowError(null); }}>
                         <Trash2 size={13} aria-hidden="true" /> 지우기
-                      </button>
+                      </Button>
                     </span>
                   )}
                   {confirmingDelete === id && (
                     <p className="memory-confirm" role="group" aria-label="지우기 확인">
                       <span>지우면 AI가 이 내용을 더는 참고하지 않고, 상담에서 같은 말을 다시 저장하지도 않아요.</span>
                       <span className="memory-actions">
-                        <button type="button" className="btn-ghost btn-sm btn-danger" disabled={busy} autoFocus
+                        <Button variant="light" color="red" size="xs" type="button" disabled={busy} autoFocus
                           onClick={() => mutate(id, () => contextAPI.remove(id), '지웠어요. AI가 더는 참고하지 않아요.')}>
                           지우기
-                        </button>
-                        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setConfirmingDelete(null)}>
+                        </Button>
+                        <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setConfirmingDelete(null)}>
                           그대로 두기
-                        </button>
+                        </Button>
                       </span>
                     </p>
                   )}

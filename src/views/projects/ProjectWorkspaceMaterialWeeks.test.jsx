@@ -90,10 +90,12 @@ describe('프로젝트 자료 목록의 주차', () => {
   it('확정 자리와 AI 추천을 구분해 보이고, 추천은 선택 상자에 선택되지 않는다', async () => {
     renderWorkspace();
 
-    expect(await screen.findByText('3주차 · AI 추천')).toBeInTheDocument();
+    const suggested = await screen.findByRole('combobox', { name: '3.AWS_구성하기_SSH실습.pdf의 주차' });
+    // 표에서는 추천을 드롭다운의 안내 문구로 말한다 — 고르기 전까지 값은 비어 있다(확정이 아니다).
+    expect(within(suggested).getByRole('option', { name: '3주차 · AI 추천' })).toBeDisabled();
+    expect(suggested).toHaveValue('');
     expect(screen.getByText('전체 참고자료 · 확인됨')).toBeInTheDocument();
     expect(screen.getByText('주차 확인 필요 1개')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '3.AWS_구성하기_SSH실습.pdf의 주차' })).toHaveValue('');
     expect(screen.getByRole('combobox', { name: '네트워크프로그래밍.pdf의 주차' })).toHaveValue('course');
   });
 

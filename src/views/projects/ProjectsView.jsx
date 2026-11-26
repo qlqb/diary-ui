@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Plus, FolderOpen, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { courseAPI } from '../../api/api.js';
 
+import { Badge, Button, TextInput } from '@mantine/core';
 const UNGROUPED = '__ungrouped__';
 
 function groupProjects(projects) {
@@ -67,14 +68,14 @@ export default function ProjectsView({ projects, loading, error, onReload, onOpe
           <h1 className="view-title">프로젝트</h1>
           <p className="view-sub">AI와 계속 이어가고 싶은 주제들</p>
         </div>
-        <button type="button" className="btn-primary" onClick={() => setCreating((v) => !v)}>
+        <Button type="button" onClick={() => setCreating((v) => !v)}>
           <Plus size={15} /> 프로젝트 만들기
-        </button>
+        </Button>
       </header>
 
       {creating && (
         <form className="project-create" onSubmit={handleCreate}>
-          <input
+          <TextInput
             type="text"
             className="project-create-title"
             placeholder="예: 자료구조, 정보처리기사, diary-app"
@@ -82,7 +83,7 @@ export default function ProjectsView({ projects, loading, error, onReload, onOpe
             autoFocus
             onChange={(e) => setTitle(e.target.value)}
           />
-          <input
+          <TextInput
             type="text"
             className="project-create-group"
             placeholder="분류 (선택) — 학교 / 자격증 / 개인"
@@ -93,10 +94,10 @@ export default function ProjectsView({ projects, loading, error, onReload, onOpe
           <datalist id="project-group-suggestions">
             {existingGroups.map((g) => <option key={g} value={g} />)}
           </datalist>
-          <button type="submit" className="btn-primary" disabled={!title.trim() || submitting}>
+          <Button type="submit" disabled={!title.trim() || submitting}>
             {submitting ? '만드는 중...' : '만들기'}
-          </button>
-          <button type="button" className="btn-ghost" onClick={() => setCreating(false)}>취소</button>
+          </Button>
+          <Button variant="default" type="button" onClick={() => setCreating(false)}>취소</Button>
           <p className="project-create-hint">
             자료는 나중에 올려도 돼요. 만들자마자 AI와 이야기를 시작할 수 있어요.
           </p>
@@ -114,9 +115,9 @@ export default function ProjectsView({ projects, loading, error, onReload, onOpe
             지금 신경 쓰고 있는 주제를 하나 만들어보세요. 이름만 있으면 됩니다 — 자료가 없어도
             바로 AI와 이야기할 수 있어요.
           </p>
-          <button type="button" className="btn-primary" onClick={() => setCreating(true)}>
+          <Button type="button" onClick={() => setCreating(true)}>
             <Plus size={15} /> 첫 프로젝트 만들기
-          </button>
+          </Button>
         </div>
       )}
 
@@ -195,12 +196,12 @@ function ArchiveBox({ onRestored }) {
           {archived.map((project) => (
             <li key={project.courseId} className="material-item">
               <span className="material-name">{project.title}</span>
-              <span className="chip">보관됨</span>
+              <Badge component="span" color="gray" className="chip">보관됨</Badge>
               <span className="material-actions">
-                <button type="button" className="btn-ghost btn-sm" disabled={busyId === project.courseId}
+                <Button variant="default" size="xs" type="button" disabled={busyId === project.courseId}
                   onClick={() => handleRestore(project.courseId)}>
                   다시 꺼내기
-                </button>
+                </Button>
               </span>
             </li>
           ))}
@@ -233,7 +234,7 @@ function ProjectCard({ project, onOpen }) {
       </span>
 
       <span className="project-card-foot">
-        {project.textbookTitle && <span className="chip">{project.textbookTitle}</span>}
+        {project.textbookTitle && <Badge component="span" color="gray" className="chip">{project.textbookTitle}</Badge>}
         <span className="project-card-open">열기 <ArrowRight size={13} /></span>
       </span>
     </button>

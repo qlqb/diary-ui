@@ -34,7 +34,7 @@ vi.mock('../../api/api.js', () => ({
   executionItemAPI: { getByCourse: vi.fn(), getByDateRange: vi.fn() },
   materialAPI: { upload: vi.fn(), listByCourse: vi.fn() },
   materialAnalysisAPI: { analyze: vi.fn(), dismiss: vi.fn(), listByMaterial: vi.fn() },
-  materialStoreAPI: { list: vi.fn(), addLink: vi.fn(), removeLink: vi.fn(), updateLinkType: vi.fn() },
+  materialStoreAPI: { list: vi.fn(), addLink: vi.fn(), removeLink: vi.fn(), updateLinkType: vi.fn(), file: vi.fn() },
   topicAPI: { getTree: vi.fn() },
   // 프로젝트 화면 상단이 대표 계획을 읽는다. 이 테스트의 관심사는 자료 연결이므로
   // 계획은 "없음"으로 두고 화면이 그래도 정상적으로 그려지는지만 보장한다.
@@ -113,5 +113,47 @@ describe('프로젝트의 연결된 자료', () => {
 
     expect(materialStoreAPI.updateLinkType).toHaveBeenCalledWith(4, 6, 'PROFESSOR_SLIDE');
     expect(materialStoreAPI.removeLink).not.toHaveBeenCalled();
+  });
+
+  it('연결 해제는 줄에 바로 있지 않고 ⋯ 메뉴 안에 있다', async () => {
+    const user = userEvent.setup();
+    materialStoreAPI.removeLink.mockResolvedValue({});
+    renderWorkspace();
+
+    const more = await screen.findByRole('button', { name: '자료구조.pdf 더보기' });
+    expect(screen.queryByRole('menuitem', { name: /연결 해제/ })).not.toBeInTheDocument();
+
+    await user.click(more);
+    await user.click(await screen.findByRole('menuitem', { name: '이 프로젝트에서 연결 해제' }));
+
+    expect(materialStoreAPI.removeLink).toHaveBeenCalledWith(4, 6);
+  });
+
+  it('⋯ 메뉴에서 PDF도 파일로 내려받을 수 있다', async () => {
+    const user = userEvent.setup();
+    materialStoreAPI.file.mockResolvedValue(new Blob(['%PDF']));
+    const created = vi.fn(() => 'blob:x');
+    const originalCreate = URL.createObjectURL;
+    URL.createObjectURL = created;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      renderWorkspace();
+      await user.click(await screen.findByRole('button', { name: '자료구조.pdf 더보기' }));
+      await user.click(await screen.findByRole('menuitem', { name: '파일 내려받기' }));
+
+      await vi.waitFor(() => expect(click).toHaveBeenCalled());
+      expect(materialStoreAPI.file).toHaveBeenCalledWith(4);
+      expect(materialStoreAPI.removeLink).not.toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+      URL.createObjectURL = originalCreate;
+    }
+  });
+
+  it('줄의 동작 버튼은 아이콘 위주지만 이름은 남아 있다', async () => {
+    renderWorkspace();
+
+    expect(await screen.findByRole('button', { name: 'PDF 열기 — 자료구조.pdf' })).toHaveAttribute('title', 'PDF 열기');
+    expect(screen.getByRole('button', { name: '이 자료로 질문 — 자료구조.pdf' })).toBeInTheDocument();
   });
 });

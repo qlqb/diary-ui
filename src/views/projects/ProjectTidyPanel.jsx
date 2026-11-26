@@ -26,6 +26,7 @@ import {
 import { hasStructureChange, previewStructure } from '../../lib/structurePreview.js';
 import * as tidyEdits from '../../lib/tidyEditStore.js';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
+import { Badge, Button, Checkbox, TextInput, Textarea } from '@mantine/core';
 import '../../styles/learning-flow.css';
 
 export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied = null, onOpenMaterials = null }) {
@@ -296,10 +297,10 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
       <div className="project-tidy-head">
         <h2 className="section-title">이 프로젝트 자료 정리</h2>
         {!hasProposal && !generating && (
-          <button type="button" className="btn-primary btn-sm" disabled={busy || view?.readyMaterialCount === 0}
+          <Button size="xs" type="button" disabled={busy || view?.readyMaterialCount === 0}
             onClick={() => requestTidy(false)}>
             <Sparkles size={13} /> 이 프로젝트 자료 정리
-          </button>
+          </Button>
         )}
       </div>
 
@@ -324,12 +325,12 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
             다시 해도 또 멈추므로 [새로 정리]를 준다 — 지금 자료와 구조로 새로 만든다.
           */}
           {view?.job?.retryable && (
-            <button type="button" className="btn-ghost btn-sm" disabled={busy}
-              onClick={retryTidy}>다시 시도</button>
+            <Button variant="default" size="xs" type="button" disabled={busy}
+              onClick={retryTidy}>다시 시도</Button>
           )}
           {view?.job?.needsNewRequest && (
-            <button type="button" className="btn-ghost btn-sm" disabled={busy}
-              onClick={() => requestTidy(true)}>지금 자료로 새로 정리</button>
+            <Button variant="default" size="xs" type="button" disabled={busy}
+              onClick={() => requestTidy(true)}>지금 자료로 새로 정리</Button>
           )}
         </p>
       )}
@@ -343,20 +344,20 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
           <label className="project-adjust-label" htmlFor={`adjust-${courseId}`}>
             학습 구조 조정 <span className="view-sub-dim">(선택 · 교재와 실제 수업이 다를 때)</span>
           </label>
-          <textarea id={`adjust-${courseId}`} className="input project-adjust-input" rows={2} maxLength={1000}
+          <Textarea id={`adjust-${courseId}`} className="input project-adjust-input" rows={2} maxLength={1000}
             placeholder="예: 교재 5장을 3장보다 먼저 수업했어 / 이 실습은 3주차야 / 이번 중간고사에는 4장이 빠져 / 스택 항목은 너무 넓으니 나눠줘"
             value={adjustText} disabled={busy} onChange={(e) => setAdjustText(e.target.value)} />
           <div className="project-adjust-actions">
-            <button type="button" className="btn-primary btn-sm" disabled={busy || !adjustText.trim()}
+            <Button size="xs" type="button" disabled={busy || !adjustText.trim()}
               onClick={requestAdjust}>
               {busy ? <Loader2 size={13} className="spin" /> : <Sparkles size={13} />} 조정안 만들기
-            </button>
-            <button type="button" className="btn-ghost btn-sm"
+            </Button>
+            <Button variant="default" size="xs" type="button"
               disabled={busy || !adjustText.trim() || view?.readyMaterialCount === 0}
               title="자료 구간을 다시 읽으며 이 요청을 반영해 정리해요(시간이 걸려요)"
               onClick={requestTidyWithInstruction}>
               자료를 다시 보며 정리
-            </button>
+            </Button>
           </div>
           {adjustNote && (
             <div className="project-adjust-note" role="status">
@@ -382,8 +383,8 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
         <>
           <div className="project-tidy-summary">
             <p className="project-tidy-headline">
-              {view.origin === 'USER' && <span className="chip chip-status">직접 고른 조정</span>}
-              {view.origin === 'REQUEST' && <span className="chip chip-status">내 요청</span>}
+              {view.origin === 'USER' && <Badge component="span" color="gray" className="chip chip-status">직접 고른 조정</Badge>}
+              {view.origin === 'REQUEST' && <Badge component="span" color="gray" className="chip chip-status">내 요청</Badge>}
               {' '}{view.summary?.headline}
             </p>
             {view.userRequest && <p className="view-sub-dim">요청: “{view.userRequest}”</p>}
@@ -394,7 +395,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
               <ul className="project-tidy-excluded">
                 {view.scope.excluded.map((item) => (
                   <li key={`${item.materialId}`}>
-                    <span className="chip chip-status">{item.reasonLabel}</span>
+                    <Badge component="span" color="gray" className="chip chip-status">{item.reasonLabel}</Badge>
                     {' '}{item.filename ?? `자료 ${item.materialId}`}
                   </li>
                 ))}
@@ -405,8 +406,8 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
           {view.treeChanged && (
             <p className="project-tidy-warn">
               이 정리안을 만든 뒤 학습 구조가 바뀌었어요. 그대로 적용하지 않아요 —
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                onClick={() => requestTidy(true)}>다시 정리</button>
+              <Button variant="default" size="xs" type="button" disabled={busy}
+                onClick={() => requestTidy(true)}>다시 정리</Button>
             </p>
           )}
           {view.tocLabel && !view.tocStale && (
@@ -417,17 +418,17 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
           {view.tocStale && (
             <p className="project-tidy-warn" role="alert">
               이 정리안을 만든 뒤 교재나 교재 목차가 바뀌었어요. 목차에서 온 변경은 적용하지 않아요(나머지는 골라 적용할 수 있어요) —
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                onClick={() => requestTidy(true)}>지금 교재로 다시 정리</button>
+              <Button variant="default" size="xs" type="button" disabled={busy}
+                onClick={() => requestTidy(true)}>지금 교재로 다시 정리</Button>
             </p>
           )}
           {!view.tocStale && view.newTocAvailable && (
             <p className="project-tidy-info">
               이 정리안에 들어 있지 않은 새 교재 목차가 있어요. 지금 검토 중인 안은 그대로 두었어요.
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" type="button" disabled={busy}
                 onClick={() => requestTidy(true)}>
                 <RefreshCw size={12} /> 새 목차로 다시 정리
-              </button>
+              </Button>
             </p>
           )}
           {view.recordsTextbook && (
@@ -438,10 +439,10 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
           {fromMaterials && view.newMaterialCount > 0 && (
             <p className="project-tidy-info">
               그 사이 분석이 끝난 자료 {view.newMaterialCount}개가 있어요. 지금 보는 정리안에는 들어 있지 않아요.
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" type="button" disabled={busy}
                 onClick={() => requestTidy(true)}>
                 <RefreshCw size={12} /> 새 자료 반영해 다시 정리
-              </button>
+              </Button>
             </p>
           )}
 
@@ -462,7 +463,7 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
                     })}>
                     {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                     {/* 새로 만들 항목도 이름으로 부른다 — "새로 만들 항목"만 있으면 무엇인지 알 수 없다. */}
-                    {group.kind === 'NEW' && <span className="chip chip-status">새 항목</span>}
+                    {group.kind === 'NEW' && <Badge component="span" color="gray" className="chip chip-status">새 항목</Badge>}
                     <span className="project-tidy-group-title">{group.title}</span>
                     {group.parentTitle && (
                       <span className="view-sub-dim"> · {group.parentTitle} 아래</span>
@@ -473,9 +474,9 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
                     <ul className="project-tidy-brief">
                       {groupChanges.map((change) => (
                         <li key={change.changeId} className={isExcluded(change.changeId) ? 'is-excluded' : ''}>
-                          <span className={`chip ${change.structural ? 'chip-warn' : 'chip-status'}`}>
+                          <Badge component="span" color={change.structural ? 'orange' : 'gray'} className={`chip ${change.structural ? 'chip-warn' : 'chip-status'}`}>
                             {change.label ?? TIDY_OP_LABEL[change.op]}
-                          </span>
+                          </Badge>
                           {' '}{change.text}
                         </li>
                       ))}
@@ -500,9 +501,9 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
           </ul>
 
           <div className="project-tidy-foot">
-            <button type="button" className="btn-ghost btn-sm" onClick={() => setDetailOpen((v) => !v)}>
+            <Button variant="default" size="xs" type="button" onClick={() => setDetailOpen((v) => !v)}>
               {detailOpen ? '자세히 접기' : '전부 펼쳐 보기'}
-            </button>
+            </Button>
             {saveStateText(saveState) && (
               <span className={`project-tidy-save${saveState === 'error' || saveState === 'conflict' ? ' is-problem' : ''}`}>
                 {saveStateText(saveState)}
@@ -518,8 +519,8 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
             <p className="view-error project-tidy-save-error">
               <AlertCircle size={13} /> {editState.errorText}
               {' '}고친 내용은 그대로 있어요.
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
-                onClick={() => tidyEdits.flush(courseId)}>다시 저장</button>
+              <Button variant="default" size="xs" type="button" disabled={busy}
+                onClick={() => tidyEdits.flush(courseId)}>다시 저장</Button>
             </p>
           )}
 
@@ -544,14 +545,14 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
                       {conflict.recovered ? '새로고침 전 편집' : '내가 고친 값'}: {describeEditValue(conflict.mine)}
                       {' · '}다른 곳의 값: {describeEditValue(conflict.theirs)}
                     </p>
-                    <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                    <Button variant="default" size="xs" type="button" disabled={busy}
                       onClick={() => tidyEdits.resolveConflict(courseId, conflict.changeId, 'mine')}>
                       내 편집 유지
-                    </button>
-                    <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                    </Button>
+                    <Button variant="default" size="xs" type="button" disabled={busy}
                       onClick={() => tidyEdits.resolveConflict(courseId, conflict.changeId, 'theirs')}>
                       다른 곳의 값 사용
-                    </button>
+                    </Button>
                   </li>
                 );
               })}
@@ -563,9 +564,9 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
               이전 판에서 옮겨 온 편집 {editState.unconfirmed.length}건을 확인해야 적용할 수 있어요:
               {' '}{editState.unconfirmed.map((id) => changeById[id]?.text ?? id).join(', ')}
               {!detailOpen && (
-                <button type="button" className="btn-ghost btn-sm" onClick={() => setDetailOpen(true)}>
+                <Button variant="default" size="xs" type="button" onClick={() => setDetailOpen(true)}>
                   확인할 항목 펼치기
-                </button>
+                </Button>
               )}
             </p>
           )}
@@ -577,18 +578,18 @@ export default function ProjectTidyPanel({ courseId, refreshToken = 0, onApplied
               이유 없이 거절당한 것이다. "요청 하나가 끝났다"가 아니라 "보낼 것이 남지
               않았다"가 기준이어야 한다 — 앞엣것은 전송 중에 더 고친 경우를 놓친다.
             */}
-            <button type="button" className="btn-primary"
+            <Button type="button"
               disabled={busy || view.treeChanged || selectedIds.length === 0
                 || editState.dirty || saveState === 'error' || saveState === 'conflict'
                 || editState.unconfirmed.length > 0}
               onClick={apply}>
               {busy ? <Loader2 size={14} className="spin" /> : null}
               {applyButtonLabel(selectedIds.length, changes.length)}
-            </button>
+            </Button>
             {onOpenMaterials && (
-              <button type="button" className="btn-ghost" disabled={busy} onClick={later}>나중에</button>
+              <Button variant="default" type="button" disabled={busy} onClick={later}>나중에</Button>
             )}
-            <button type="button" className="btn-ghost" disabled={busy} onClick={dismiss}>버리기</button>
+            <Button variant="default" type="button" disabled={busy} onClick={dismiss}>버리기</Button>
           </div>
           <p className="view-sub-dim">
             「나중에」는 검토 내용을 그대로 두고 화면만 옮겨요. 「버리기」는 이 정리안을 없애요 — 되살아나지 않아요.
@@ -644,8 +645,8 @@ function PreviewTree({ nodes }) {
       {nodes.map((n) => (
         <li key={n.key} className={`is-${n.status}`}>
           <span>{n.title}</span>
-          {PREVIEW_STATUS[n.status] && <span className="chip chip-status">{PREVIEW_STATUS[n.status]}</span>}
-          {n.marks.map((m) => <span key={m} className="chip">{m}</span>)}
+          {PREVIEW_STATUS[n.status] && <Badge component="span" color="gray" className="chip chip-status">{PREVIEW_STATUS[n.status]}</Badge>}
+          {n.marks.map((m) => <Badge component="span" color="gray" key={m} className="chip">{m}</Badge>)}
           {n.children.length > 0 && <PreviewTree nodes={n.children} />}
         </li>
       ))}
@@ -659,15 +660,15 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarr
   return (
     <li className={`project-tidy-change${change.structural ? ' is-structural' : ''}${excluded ? ' is-excluded' : ''}`}>
       <label className="project-tidy-change-head">
-        <input type="checkbox" checked={!excluded} disabled={busy} onChange={onToggle} />
-        <span className={`chip ${change.structural ? 'chip-warn' : 'chip-status'}`}>
+        <Checkbox size="xs" checked={!excluded} disabled={busy} onChange={onToggle} />
+        <Badge component="span" color={change.structural ? 'orange' : 'gray'} className={`chip ${change.structural ? 'chip-warn' : 'chip-status'}`}>
           {change.label ?? TIDY_OP_LABEL[change.op]}
-        </span>
+        </Badge>
         <span className="project-tidy-change-text">{change.text}</span>
-        {CHANGE_BY_LABEL[change.by] && <span className="chip">{CHANGE_BY_LABEL[change.by]}</span>}
+        {CHANGE_BY_LABEL[change.by] && <Badge component="span" color="gray" className="chip">{CHANGE_BY_LABEL[change.by]}</Badge>}
       </label>
       {change.titleEditable && (
-        <input type="text" className="input project-tidy-title-input" aria-label="항목 제목 고치기"
+        <TextInput type="text" className="input project-tidy-title-input" aria-label="항목 제목 고치기"
           value={edit?.title ?? change.title ?? ''} disabled={busy || excluded}
           onChange={(e) => onTitle(e.target.value)} />
       )}
@@ -691,12 +692,12 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarr
             {edit.title ? ` · 제목 「${edit.title}」` : ''}
           </p>
           <div className="project-tidy-confirm-actions">
-            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onKeepCarried}>
+            <Button variant="default" size="xs" type="button" disabled={busy} onClick={onKeepCarried}>
               이 편집 유지
-            </button>
-            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onDropCarried}>
+            </Button>
+            <Button variant="default" size="xs" type="button" disabled={busy} onClick={onDropCarried}>
               새 제안 사용
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -707,10 +708,10 @@ function ChangeRow({ change, excluded, edit, busy, onToggle, onTitle, onKeepCarr
       ))}
       {(change.sections ?? []).length > 0 && (
         <>
-          <button type="button" className="btn-ghost btn-sm project-tidy-evidence-toggle" aria-expanded={showEvidence}
+          <Button variant="default" size="xs" type="button" className="project-tidy-evidence-toggle" aria-expanded={showEvidence}
             onClick={() => setShowEvidence((v) => !v)}>
             근거 {change.sections.length}곳 {showEvidence ? '접기' : '보기'}
-          </button>
+          </Button>
           {showEvidence && (
             <ul className="project-tidy-evidence">
               {change.sections.map((section) => (

@@ -21,6 +21,7 @@ import {
   describeDueEstimate, formatAssignmentDue, isOverdue,
 } from '../../lib/analysisLabels.js';
 
+import { Button, Checkbox, TextInput } from '@mantine/core';
 export default function AssignmentSection({ courseId, todayIso, refreshToken = 0, onChanged = null }) {
   const [assignments, setAssignments] = useState([]);
   const [error, setError] = useState(null);
@@ -127,10 +128,10 @@ export default function AssignmentSection({ courseId, todayIso, refreshToken = 0
         <p className="view-dim assignment-later">
           나중에 보기로 한 항목 {later.length}개
           {later.map((a) => (
-            <button key={a.assignmentId} type="button" className="btn-ghost btn-sm" disabled={busyId === a.assignmentId}
+            <Button variant="default" size="xs" key={a.assignmentId} type="button" disabled={busyId === a.assignmentId}
               onClick={() => answer(a, 'CONFIRMED')}>
               「{a.title}」 과제로 등록
-            </button>
+            </Button>
           ))}
         </p>
       )}
@@ -153,9 +154,9 @@ export default function AssignmentSection({ courseId, todayIso, refreshToken = 0
       )}
 
       <div className="material-detail-actions">
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setAdding((v) => !v)}>
+        <Button variant="default" size="xs" type="button" onClick={() => setAdding((v) => !v)}>
           {adding ? '닫기' : '과제 직접 추가'}
-        </button>
+        </Button>
       </div>
       {adding && (
         <AddAssignmentForm courseId={courseId} onDone={async () => { setAdding(false); await load(); onChanged?.(); }}
@@ -194,20 +195,20 @@ function AssignmentQuestion({ assignment: a, busy, todayIso, onAnswer, onDue }) 
         <p className="hint">비슷한 과제가 이미 있어요: 「{a.duplicateOfTitle}」</p>
       )}
       <div className="assignment-question-actions">
-        <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={() => onAnswer('CONFIRMED')}>
+        <Button size="xs" type="button" disabled={busy} onClick={() => onAnswer('CONFIRMED')}>
           과제 맞아요
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onAnswer('NOT_ASSIGNMENT')}>
+        </Button>
+        <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => onAnswer('NOT_ASSIGNMENT')}>
           연습용이에요
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onAnswer('LATER')}>
+        </Button>
+        <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => onAnswer('LATER')}>
           나중에
-        </button>
+        </Button>
         {a.duplicateOfAssignmentId && (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy}
+          <Button variant="default" size="xs" type="button" disabled={busy}
             onClick={() => onAnswer('DUPLICATE')}>
             같은 과제예요
-          </button>
+          </Button>
         )}
         {a.sectionId && (
           <button type="button" className="link-btn" onClick={openSource} aria-expanded={sourceOpen}>
@@ -236,12 +237,12 @@ function AssignmentQuestion({ assignment: a, busy, todayIso, onAnswer, onDue }) 
             마감 {formatAssignmentDue(a, todayIso)}
             {a.dueSource === 'SOURCE' && a.dueQuote && <span className="view-dim"> · 원문: “{a.dueQuote}”</span>}
             {a.dueSource === 'USER' && <span className="view-dim"> · 직접 입력</span>}
-            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDueMode(true)}>고치기</button>
+            <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setDueMode(true)}>고치기</Button>
           </p>
         ) : a.dueKind === 'NONE' && !dueMode ? (
           <p className="assignment-due-line">
             마감 없음 <span className="view-dim">· 직접 정함</span>
-            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDueMode(true)}>고치기</button>
+            <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setDueMode(true)}>고치기</Button>
           </p>
         ) : (
           <>
@@ -251,10 +252,10 @@ function AssignmentQuestion({ assignment: a, busy, todayIso, onAnswer, onDue }) 
                   <li key={i}>
                     <span>{describeDueEstimate(e)}</span>
                     {e.isoDate && (
-                      <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                      <Button variant="default" size="xs" type="button" disabled={busy}
                         onClick={() => onDue({ dueKind: 'DATE', dueDate: e.isoDate })}>
                         이 날짜 맞아요
-                      </button>
+                      </Button>
                     )}
                   </li>
                 ))}
@@ -263,18 +264,18 @@ function AssignmentQuestion({ assignment: a, busy, todayIso, onAnswer, onDue }) 
             {!dueMode ? (
               <p className="assignment-due-line">
                 <span className="view-dim">마감:</span>
-                <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDueMode(true)}>날짜 선택</button>
-                <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onDue({ dueKind: 'UNKNOWN' })}>아직 몰라요</button>
-                <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onDue({ dueKind: 'NONE' })}>마감 없음</button>
+                <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setDueMode(true)}>날짜 선택</Button>
+                <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => onDue({ dueKind: 'UNKNOWN' })}>아직 몰라요</Button>
+                <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => onDue({ dueKind: 'NONE' })}>마감 없음</Button>
               </p>
             ) : (
               <p className="assignment-due-line">
-                <input type="date" value={dateValue} aria-label="마감 날짜" onChange={(e) => setDateValue(e.target.value)} />
-                <button type="button" className="btn-primary btn-sm" disabled={busy || !dateValue}
+                <TextInput type="date" value={dateValue} aria-label="마감 날짜" onChange={(e) => setDateValue(e.target.value)} />
+                <Button size="xs" type="button" disabled={busy || !dateValue}
                   onClick={() => { onDue({ dueKind: 'DATE', dueDate: dateValue }); setDueMode(false); }}>
                   저장
-                </button>
-                <button type="button" className="btn-ghost btn-sm" onClick={() => setDueMode(false)}>취소</button>
+                </Button>
+                <Button variant="default" size="xs" type="button" onClick={() => setDueMode(false)}>취소</Button>
               </p>
             )}
           </>
@@ -295,7 +296,7 @@ function AssignmentRow({ assignment: a, todayIso, busy, onToggle, onDue }) {
   return (
     <li className={`assignment-row${a.completed ? ' is-done' : ''}${overdue ? ' is-overdue' : ''}`}>
       <label className="assignment-row-main">
-        <input type="checkbox" checked={Boolean(a.completed)} disabled={busy} onChange={onToggle}
+        <Checkbox size="xs" checked={Boolean(a.completed)} disabled={busy} onChange={onToggle}
           aria-label={`${a.title} ${a.completed ? '완료 해제' : '완료'}`} />
         <span className="assignment-row-title">{a.title}</span>
         <span className={`assignment-row-due${overdue ? ' is-overdue' : ''}`}>
@@ -310,26 +311,26 @@ function AssignmentRow({ assignment: a, todayIso, busy, onToggle, onDue }) {
         {onDue && noDue && !dueMode && (
           <>
             {estimates.map((e, i) => (
-              <button key={i} type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" key={i} type="button" disabled={busy}
                 onClick={() => onDue({ dueKind: 'DATE', dueDate: e.isoDate })}>
                 {describeDueEstimate(e)} · 이 날짜 맞아요
-              </button>
+              </Button>
             ))}
-            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDueMode(true)}>날짜 선택</button>
+            <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setDueMode(true)}>날짜 선택</Button>
             {a.dueKind !== 'NONE' && (
-              <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onDue({ dueKind: 'NONE' })}>마감 없음</button>
+              <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => onDue({ dueKind: 'NONE' })}>마감 없음</Button>
             )}
           </>
         )}
         {onDue && !noDue && !dueMode && (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDueMode(true)}>마감 고치기</button>
+          <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setDueMode(true)}>마감 고치기</Button>
         )}
         {onDue && dueMode && (
           <>
-            <input type="date" value={dateValue} aria-label="마감 날짜" onChange={(e) => setDateValue(e.target.value)} />
-            <button type="button" className="btn-primary btn-sm" disabled={busy || !dateValue}
-              onClick={() => { onDue({ dueKind: 'DATE', dueDate: dateValue }); setDueMode(false); }}>저장</button>
-            <button type="button" className="btn-ghost btn-sm" onClick={() => setDueMode(false)}>취소</button>
+            <TextInput type="date" value={dateValue} aria-label="마감 날짜" onChange={(e) => setDateValue(e.target.value)} />
+            <Button size="xs" type="button" disabled={busy || !dateValue}
+              onClick={() => { onDue({ dueKind: 'DATE', dueDate: dateValue }); setDueMode(false); }}>저장</Button>
+            <Button variant="default" size="xs" type="button" onClick={() => setDueMode(false)}>취소</Button>
           </>
         )}
       </span>
@@ -357,11 +358,11 @@ function AddAssignmentForm({ courseId, onDone, onCancel }) {
         setBusy(false);
       }
     }}>
-      <input type="text" className="input" value={title} placeholder="과제 제목" aria-label="과제 제목" autoFocus
+      <TextInput type="text" className="input" value={title} placeholder="과제 제목" aria-label="과제 제목" autoFocus
         onChange={(e) => setTitle(e.target.value)} />
-      <input type="date" value={date} aria-label="마감 날짜(선택)" onChange={(e) => setDate(e.target.value)} />
-      <button type="submit" className="btn-ghost btn-sm" disabled={busy || !title.trim()}>추가</button>
-      <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onCancel}>취소</button>
+      <TextInput type="date" value={date} aria-label="마감 날짜(선택)" onChange={(e) => setDate(e.target.value)} />
+      <Button variant="default" size="xs" type="submit" disabled={busy || !title.trim()}>추가</Button>
+      <Button variant="default" size="xs" type="button" disabled={busy} onClick={onCancel}>취소</Button>
       {error && <p className="view-error">{error}</p>}
     </form>
   );

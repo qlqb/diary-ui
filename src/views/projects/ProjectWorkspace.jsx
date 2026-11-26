@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, FileText, Sparkles, Upload, Archive, Pencil, Loader2, Link2, X,
+  MessageSquare, MoreHorizontal, Unlink, Download,
 } from 'lucide-react';
 import ExecutionRow from '../../components/ExecutionRow.jsx';
 import DraftRow from '../../components/DraftRow.jsx';
@@ -43,9 +44,10 @@ import {
 } from '../../types/learning.js';
 import MaterialTypeSelect from '../../components/MaterialTypeSelect.jsx';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
+import { downloadMaterialFile } from '../../lib/materialFile.js';
 import { MATERIAL_ACCEPT, SHELL_SCRIPT_HINT, isArchiveFile } from '../../lib/materialFormats.js';
 import MaterialStages from '../materials/MaterialStages.jsx';
-import { CONSULT_BEFORE_APPROVAL, dailyLimitCopy } from '../../lib/materialStages.js';
+import { CONSULT_BEFORE_APPROVAL, dailyLimitCopy, materialStages } from '../../lib/materialStages.js';
 import ZipImportPanel from '../../components/ZipImportPanel.jsx';
 import { todayString } from '../../lib/datetime.js';
 import { formatDateKo, toIsoDate } from '../../lib/planTime.js';
@@ -56,7 +58,19 @@ import '../../styles/material-weeks.css';
 import {
   currentSlotKey, materialWeekChip, slotOptions, slotRequest,
 } from '../../lib/materialWeeks.js';
+import {
+  groupMaterialsByWeek, MATERIAL_SORT_LABEL, MaterialSort, MaterialView, sortMaterials,
+} from '../../lib/materialListView.js';
 
+/** 화면 보기 설정 읽기·쓰기. 저장소가 막힌 환경(사생활 보호 창 등)에서도 화면은 그대로 돈다. */
+function readPref(key, fallback) {
+  try { return window.localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
+function writePref(key, value) {
+  try { window.localStorage.setItem(key, value); } catch { /* 기억하지 못해도 화면은 돈다 */ }
+}
+
+import { ActionIcon, Badge, Button, Menu, NativeSelect, SegmentedControl, TextInput } from '@mantine/core';
 /**
  * 교재 정보 한 줄.
  *
@@ -253,24 +267,24 @@ export default function ProjectWorkspace({
     <div className="view">
       <header className="view-head">
         <div className="project-head">
-          <button type="button" className="icon-btn" onClick={onBack} aria-label="프로젝트 목록으로">
+          <ActionIcon variant="subtle" color="gray" type="button" onClick={onBack} aria-label="프로젝트 목록으로">
             <ArrowLeft size={18} />
-          </button>
+          </ActionIcon>
           <div>
             <h1 className="view-title">{project?.title}</h1>
             <p className="view-sub">
-              {project?.groupLabel && <span className="chip">{project.groupLabel}</span>}
+              {project?.groupLabel && <Badge component="span" color="gray" className="chip">{project.groupLabel}</Badge>}
               {project?.textbookTitle && <TextbookLine project={project} />}
             </p>
           </div>
         </div>
         <div className="project-head-actions">
-          <button type="button" className="icon-btn" onClick={() => setRenaming(true)} aria-label="이름/분류 수정" title="이름·분류 수정">
+          <ActionIcon variant="subtle" color="gray" type="button" onClick={() => setRenaming(true)} aria-label="이름/분류 수정" title="이름·분류 수정">
             <Pencil size={15} />
-          </button>
-          <button
+          </ActionIcon>
+          <ActionIcon variant="subtle" color="gray"
             type="button"
-            className="icon-btn"
+
             aria-label="프로젝트 보관"
             title="프로젝트 보관"
             onClick={async () => {
@@ -290,7 +304,7 @@ export default function ProjectWorkspace({
             }}
           >
             <Archive size={15} />
-          </button>
+          </ActionIcon>
         </div>
       </header>
 
@@ -321,14 +335,14 @@ export default function ProjectWorkspace({
                 : '아직 계획을 세우지 않았어요'}
           </span>
           {!planLoading && !currentPlan && onCreatePlan && (
-            <button type="button" className="btn-primary btn-sm" onClick={() => onCreatePlan(courseId)}>
+            <Button size="xs" type="button" onClick={() => onCreatePlan(courseId)}>
               계획 만들기
-            </button>
+            </Button>
           )}
           {currentPlan && onOpenPlan && (
-            <button type="button" className="btn-ghost btn-sm" onClick={() => onOpenPlan(currentPlan.planVersionId)}>
+            <Button variant="default" size="xs" type="button" onClick={() => onOpenPlan(currentPlan.planVersionId)}>
               계획 열기
-            </button>
+            </Button>
           )}
         </div>
         {nextPlanItem && (
@@ -351,22 +365,22 @@ export default function ProjectWorkspace({
         )}
         <div className="project-ask-row">
           {nextPlanItem && (
-            <button type="button" className="btn-primary btn-sm"
+            <Button size="xs" type="button"
               onClick={() => onAsk(`${nextPlanItem.title} 이어서 하려고 해. 어디부터 보면 좋을까?`)}>
               <Sparkles size={13} /> 이어하기
-            </button>
+            </Button>
           )}
-          <button type="button" className="btn-ghost btn-sm" onClick={() => onAsk('오늘 30분만 해보고 싶어. 뭘 하면 좋을까?')}>
+          <Button variant="default" size="xs" type="button" onClick={() => onAsk('오늘 30분만 해보고 싶어. 뭘 하면 좋을까?')}>
             오늘 30분 해보기
-          </button>
+          </Button>
           {materials.length > 0 && (
-            <button type="button" className="btn-ghost btn-sm" onClick={() => onAsk('올린 자료 내용을 요약해줘.')}>
+            <Button variant="default" size="xs" type="button" onClick={() => onAsk('올린 자료 내용을 요약해줘.')}>
               자료 내용 물어보기
-            </button>
+            </Button>
           )}
-          <button type="button" className="btn-ghost btn-sm" onClick={() => onAsk('이번 주 계획을 짜줘.')}>
+          <Button variant="default" size="xs" type="button" onClick={() => onAsk('이번 주 계획을 짜줘.')}>
             이번 주 계획 요청
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -522,21 +536,21 @@ function RenameForm({ project, onCancel, onSaved }) {
       }}
     >
       <div className="project-edit-row">
-        <input className="project-create-title" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="프로젝트 이름" />
-        <input className="project-create-group" value={groupLabel} placeholder="분류 (선택)"
+        <TextInput className="project-create-title" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="프로젝트 이름" />
+        <TextInput className="project-create-group" value={groupLabel} placeholder="분류 (선택)"
           onChange={(e) => setGroupLabel(e.target.value)} aria-label="분류" />
       </div>
 
       <div className="project-edit-row">
-        <input className="project-edit-textbook" value={textbook.textbookTitle} placeholder="교재명 (선택)"
+        <TextInput className="project-edit-textbook" value={textbook.textbookTitle} placeholder="교재명 (선택)"
           onChange={setField('textbookTitle')} aria-label="교재명" />
-        <input className="project-edit-textbook" value={textbook.textbookAuthor} placeholder="저자"
+        <TextInput className="project-edit-textbook" value={textbook.textbookAuthor} placeholder="저자"
           onChange={setField('textbookAuthor')} aria-label="교재 저자" />
-        <input className="project-edit-textbook" value={textbook.textbookPublisher} placeholder="출판사"
+        <TextInput className="project-edit-textbook" value={textbook.textbookPublisher} placeholder="출판사"
           onChange={setField('textbookPublisher')} aria-label="교재 출판사" />
-        <input className="project-edit-textbook" value={textbook.textbookIsbn} placeholder="ISBN"
+        <TextInput className="project-edit-textbook" value={textbook.textbookIsbn} placeholder="ISBN"
           onChange={setField('textbookIsbn')} aria-label="교재 ISBN" />
-        <input className="project-edit-textbook" value={textbook.textbookEdition} placeholder="판 (예: 개정 4판)"
+        <TextInput className="project-edit-textbook" value={textbook.textbookEdition} placeholder="판 (예: 개정 4판)"
           onChange={setField('textbookEdition')} aria-label="교재 판" />
       </div>
 
@@ -546,8 +560,8 @@ function RenameForm({ project, onCancel, onSaved }) {
       {saveError && <p className="view-error" role="alert">{saveError}</p>}
 
       <div className="project-edit-row">
-        <button type="submit" className="btn-primary" disabled={saving || !title.trim()}>저장</button>
-        <button type="button" className="btn-ghost" onClick={onCancel}>취소</button>
+        <Button type="submit" disabled={saving || !title.trim()}>저장</Button>
+        <Button variant="default" type="button" onClick={onCancel}>취소</Button>
       </div>
     </form>
   );
@@ -791,6 +805,16 @@ function MaterialsSection({
   };
 
   /** 연결 해제. 자료 원본도, 다른 프로젝트 연결도, 이미 적용한 학습 내용도 그대로 남는다. */
+  /** ⋯ 메뉴의 [파일 내려받기]. PDF도 새 탭이 아니라 파일로 저장한다. */
+  const handleDownload = async (m) => {
+    setError(null);
+    try {
+      await downloadMaterialFile(m.materialId, m.originalFilename);
+    } catch (err) {
+      setError(err.message || '파일을 내려받지 못했어요.');
+    }
+  };
+
   const handleUnlink = async (materialId) => {
     setBusyId(materialId);
     setError(null);
@@ -812,6 +836,138 @@ function MaterialsSection({
     });
   };
 
+  /**
+   * 보기(전체/주차별)와 정렬. 이 브라우저에서만 기억한다 — 저장소가 막혀 있어도 기본값으로 돈다.
+   * 주차별 보기의 주차는 서버의 주차 확인 결과(확정 또는 AI 추천)를 그대로 쓴다.
+   */
+  const [materialView, setMaterialView] = useState(() => readPref('projectMaterialView', MaterialView.WEEK));
+  const [materialSort, setMaterialSort] = useState(() => readPref('projectMaterialSort', MaterialSort.WEEK));
+  const changeMaterialView = (v) => { setMaterialView(v); writePref('projectMaterialView', v); };
+  const changeMaterialSort = (v) => { setMaterialSort(v); writePref('projectMaterialSort', v); };
+
+  /**
+   * 자료 한 줄 = 표의 한 줄(파일 · 역할 · 주차 · 분석 · 동작).
+   *
+   * 자료가 수십 개가 되면 카드 세 줄짜리 목록은 한 화면에 다섯 개밖에 안 들어간다. 그래서 한 줄로 줄이고,
+   * 다 끝난 처리 단계는 숨긴다 — 진행 중·대기·실패처럼 볼 이유가 있을 때만 줄 아래에 펼친다.
+   * 역할·주차는 줄 안의 드롭다운에서 바로 바꾼다. 연결 해제는 자주 누르지 않고 잘못 누르면 곤란해서 ⋯ 메뉴 안에 둔다.
+   */
+  const renderMaterial = (m) => {
+    const status = analysisStatus[m.materialId] ?? null;
+    const busy = busyId === m.materialId;
+    const weekItem = weekItemById.get(m.materialId);
+    const stagesSettled = materialStages(m, status).every((st) => st.state === 'done') && !status?.waitingReason;
+    const draftNote = m.extractionStatus === ExtractionStatus.SUCCESS ? draftStatus[m.materialId] : null;
+    return (
+      <li key={m.materialId} className="material-item project-material-row">
+        <FileText size={14} className="pm-icon" aria-hidden="true" />
+        <span className="material-name" title={m.originalFilename}>{m.originalFilename}</span>
+        {/* 역할은 자료가 아니라 이 연결의 속성이라 여기서 바로 바꿀 수 있어야 한다. */}
+        <span className="pm-cell pm-role">
+          <MaterialTypeSelect
+            size="xs"
+            value={m.materialType ?? MaterialType.OTHER}
+            disabled={busy}
+            label={`${m.originalFilename}의 자료 역할`}
+            onChange={(t) => handleRoleChange(m.materialId, t)}
+          />
+        </span>
+        <span className="pm-cell pm-week">
+          {weekItem ? (
+            <MaterialWeekControl item={weekItem} filename={m.originalFilename}
+              weekCount={weekReview?.weekCount} busy={weekBusyId === m.materialId}
+              onChange={(key) => changeWeek(m.materialId, key)} />
+          ) : <span className="view-dim">—</span>}
+        </span>
+        <span className="pm-cell pm-status">
+          {m.extractionStatus === ExtractionStatus.SUCCESS ? (
+            status
+              ? <AnalysisStatusChip status={status} busy={busy} limit={analysisLimit}
+                  onRetry={() => retryAnalysis(m.materialId)} />
+              : <Badge component="span" color="gray" className="chip chip-status">확인 중</Badge>
+          ) : (
+            <Badge component="span" color="orange" className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</Badge>
+          )}
+        </span>
+        <span className="material-actions pm-actions">
+          {/* 여기 이름만 보이면 "이게 무슨 파일이었지"에 답할 길이 없다. */}
+          <MaterialFileLink
+            materialId={m.materialId}
+            filename={m.originalFilename}
+            contentType={m.contentType}
+            disabled={busy}
+            iconOnly
+          />
+          {m.extractionStatus === ExtractionStatus.SUCCESS && (
+            <Button variant="subtle" color="gray" size="xs" type="button"
+              aria-label={`이 자료로 질문 — ${m.originalFilename}`}
+              title="이 자료로 질문"
+              onClick={() => onAsk(`${m.originalFilename} 내용 중에 중요한 걸 알려줘.`)}>
+              <MessageSquare size={13} /> 질문
+            </Button>
+          )}
+          <Menu position="bottom-end" withinPortal shadow="sm" width={240}>
+            <Menu.Target>
+              <ActionIcon variant="subtle" color="gray" size="md" disabled={busy}
+                aria-label={`${m.originalFilename} 더보기`}>
+                {busy ? <Loader2 size={14} className="spin" /> : <MoreHorizontal size={15} />}
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item leftSection={<Download size={14} />}
+                onClick={() => handleDownload(m)}>
+                파일 내려받기
+              </Menu.Item>
+              <Menu.Divider />
+              <Menu.Item color="red" leftSection={<Unlink size={14} />}
+                title="이 프로젝트에서만 연결을 끊어요. 자료는 자료함에 남아요."
+                onClick={() => handleUnlink(m.materialId)}>
+                이 프로젝트에서 연결 해제
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </span>
+        {!stagesSettled && (
+          <div className="pm-detail">
+            <MaterialStages material={m} status={status} limit={analysisLimit} pendingOnly />
+          </div>
+        )}
+        {/*
+          조회가 끝나기 전에는 초안 버튼을 열지 않는다. 잠깐 보였다 사라지는 깜빡임도 없어야 하고, 그 잠깐 사이의
+          클릭이 곧 중복 분석이다. (2026-09-29) 예전 수동 [구조 분석]으로 새 초안을 만드는 길은 닫았다 — 이미 검토 중이던
+          예전 초안만 아래에서 그대로 검토·적용·버릴 수 있다.
+        */}
+        {draftNote === 'loading' && <div className="pm-detail view-dim">초안 확인 중...</div>}
+        {draftNote === 'error' && (
+          <div className="pm-detail material-draft-error">
+            초안을 확인하지 못했어요
+            <Button variant="default" size="xs" type="button"
+              onClick={() => retryDraft(m.materialId)}>다시 시도</Button>
+          </div>
+        )}
+        {analyses[m.materialId] && (
+          <div className="material-review-slot pm-detail">
+            <MaterialReview
+              analysis={analyses[m.materialId]}
+              onApplied={async () => { clearAnalysis(m.materialId); await onChanged(); }}
+              onDismiss={async () => {
+                await materialAnalysisAPI.dismiss(analyses[m.materialId].analysisId);
+                clearAnalysis(m.materialId);
+              }}
+            />
+          </div>
+        )}
+      </li>
+    );
+  };
+
+  /** 표 머리. 주차별 보기에서도 묶음들 위에 한 번만 둔다. */
+  const materialTableHead = (
+    <div className="pm-head" aria-hidden="true">
+      <span /><span>파일</span><span>역할</span><span>주차</span><span>분석</span><span className="pm-head-actions">동작</span>
+    </div>
+  );
+
   return (
     <section className="view-section">
       <h2 className="section-title">연결된 자료 {materials.length > 0 ? materials.length : ''}</h2>
@@ -826,9 +982,9 @@ function MaterialsSection({
           {weekReview.needsReview > 0
             ? <span className="material-week-chip is-warn">주차 확인 필요 {weekReview.needsReview}개</span>
             : <span className="view-dim">모든 자료의 주차를 확인했어요</span>}
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setWeekReviewOpen(true)}>
+          <Button variant="default" size="xs" type="button" onClick={() => setWeekReviewOpen(true)}>
             자료 주차 확인
-          </button>
+          </Button>
         </p>
       )}
       {weekReviewOpen && (
@@ -859,98 +1015,51 @@ function MaterialsSection({
       {materials.length === 0 ? (
         <p className="view-dim">아직 연결된 자료가 없어요. 없어도 AI와 이야기할 수 있어요.</p>
       ) : (
-        <ul className="material-list">
-          {materials.map((m) => (
-            <li key={m.materialId} className="material-item">
-              <FileText size={14} />
-              <span className="material-name">{m.originalFilename}</span>
-              {/* 역할은 자료가 아니라 이 연결의 속성이라 여기서 바로 바꿀 수 있어야 한다. */}
-              <MaterialTypeSelect
-                value={m.materialType ?? MaterialType.OTHER}
-                disabled={busyId === m.materialId}
-                label={`${m.originalFilename}의 자료 역할`}
-                onChange={(t) => handleRoleChange(m.materialId, t)}
-              />
-              {weekItemById.has(m.materialId) && (
-                <MaterialWeekControl item={weekItemById.get(m.materialId)} filename={m.originalFilename}
-                  weekCount={weekReview?.weekCount} busy={weekBusyId === m.materialId}
-                  onChange={(key) => changeWeek(m.materialId, key)} />
-              )}
-              {m.extractionStatus === ExtractionStatus.SUCCESS ? (
-                analysisStatus[m.materialId]
-                  ? <AnalysisStatusChip status={analysisStatus[m.materialId]} busy={busyId === m.materialId}
-                      limit={analysisLimit}
-                      onRetry={() => retryAnalysis(m.materialId)} />
-                  : <span className="chip chip-status">분석 상태 확인 중</span>
-              ) : (
-                <span className="chip chip-warn">{EXTRACTION_STATUS_LABEL[m.extractionStatus]}</span>
-              )}
-              <span className="material-actions">
-                {/* 여기 이름만 보이면 "이게 무슨 파일이었지"에 답할 길이 없다. */}
-                <MaterialFileLink
-                  materialId={m.materialId}
-                  filename={m.originalFilename}
-                  contentType={m.contentType}
-                  disabled={busyId === m.materialId}
-                />
-                {m.extractionStatus === ExtractionStatus.SUCCESS && (
-                  <>
-                    <button type="button" className="btn-ghost btn-sm"
-                      onClick={() => onAsk(`${m.originalFilename} 내용 중에 중요한 걸 알려줘.`)}>
-                      이 자료로 질문
-                    </button>
-                    {/*
-                      조회가 끝나기 전에는 버튼을 열지 않는다. 잠깐 보였다 사라지는 깜빡임도
-                      없어야 하고, 그 잠깐 사이의 클릭이 곧 중복 분석이다.
-                    */}
-                    {draftStatus[m.materialId] === 'loading' && (
-                      <span className="view-dim">초안 확인 중...</span>
-                    )}
-                    {draftStatus[m.materialId] === 'error' && (
-                      <span className="material-draft-error">
-                        초안을 확인하지 못했어요
-                        <button type="button" className="btn-ghost btn-sm"
-                          onClick={() => retryDraft(m.materialId)}>다시 시도</button>
-                      </span>
-                    )}
-                    {/*
-                      (2026-09-29) 예전 수동 [구조 분석]으로 새 초안을 만드는 길은 닫았다. 교재 정보는 [교재] 구역이, 학습 구조는
-                      [이 프로젝트 자료 정리]가 자동 분석 결과로 맡는다 — 두 길이 같은 교재·항목을 서로 다르게(덧붙여) 적용하던
-                      원인이었다. 이미 검토 중이던 예전 초안은 아래에서 그대로 검토·적용·버릴 수 있다.
-                    */}
-                  </>
-                )}
-                <button type="button" className="btn-ghost btn-sm" disabled={busyId === m.materialId}
-                  title="이 프로젝트에서만 연결을 끊어요. 자료는 자료함에 남아요."
-                  onClick={() => handleUnlink(m.materialId)}>
-                  <X size={13} /> 연결 해제
-                </button>
-              </span>
-              <MaterialStages material={m} status={analysisStatus[m.materialId] ?? null} limit={analysisLimit} />
-              {analyses[m.materialId] && (
-                <div className="material-review-slot">
-                  <MaterialReview
-                    analysis={analyses[m.materialId]}
-                    onApplied={async () => { clearAnalysis(m.materialId); await onChanged(); }}
-                    onDismiss={async () => {
-                      await materialAnalysisAPI.dismiss(analyses[m.materialId].analysisId);
-                      clearAnalysis(m.materialId);
-                    }}
-                  />
+        <>
+          <div className="material-list-toolbar">
+            <SegmentedControl size="xs" aria-label="자료 보기"
+              value={materialView}
+              onChange={changeMaterialView}
+              data={[
+                { value: MaterialView.ALL, label: '전체' },
+                { value: MaterialView.WEEK, label: '주차별' },
+              ]} />
+            <NativeSelect size="xs" aria-label="자료 정렬" value={materialSort}
+              onChange={(e) => changeMaterialSort(e.target.value)}>
+              {Object.entries(MATERIAL_SORT_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="project-material-table">
+            {materialTableHead}
+            {materialView === MaterialView.WEEK ? (
+              groupMaterialsByWeek(materials, materialSort, weekItemById).map((group) => (
+                <div key={group.key} className="material-week-group">
+                  <h3 className="material-week-group-title">
+                    {group.title} <span className="view-dim">{group.materials.length}</span>
+                  </h3>
+                  <ul className="material-list">{group.materials.map(renderMaterial)}</ul>
                 </div>
-              )}
-            </li>
-          ))}
-        </ul>
+              ))
+            ) : (
+              <div className="material-week-group">
+                <ul className="material-list">
+                  {sortMaterials(materials, materialSort, weekItemById).map(renderMaterial)}
+                </ul>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       <div className="material-detail-actions">
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setUploadOpen((v) => !v)}>
+        <Button variant="default" size="xs" type="button" onClick={() => setUploadOpen((v) => !v)}>
           <Upload size={13} /> 새 자료 업로드
-        </button>
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setPicking(true)}>
+        </Button>
+        <Button variant="default" size="xs" type="button" onClick={() => setPicking(true)}>
           <Link2 size={13} /> 내 자료에서 연결
-        </button>
+        </Button>
       </div>
 
       {uploadOpen && (
@@ -993,12 +1102,13 @@ function MaterialWeekControl({ item, filename, weekCount, busy, onChange }) {
   return (
     <span className="material-week">
       {chip && <span className={`material-week-chip is-${chip.tone}`}>{chip.text}</span>}
-      <select className="mw-select" value={value} disabled={busy} aria-label={`${filename}의 주차`}
+      <NativeSelect className="mw-select" size="xs" value={value} disabled={busy} aria-label={`${filename}의 주차`}
         title="여러 주차에 놓인 자료는 여기서 고르면 한 주차로 바뀌어요. 여러 주차는 자료 주차 확인에서 더해요."
         onChange={(e) => onChange(e.target.value)}>
-        {value === '' && <option value="" disabled>주차 선택</option>}
+        {/* 아직 고르지 않은 자료는 추천을 안내 문구로 보인다(표에서는 칩을 빼므로 여기서 말한다). 고르기 전까지 확정되지 않는다. */}
+        {value === '' && <option value="" disabled>{chip?.text ?? '주차 선택'}</option>}
         {slotOptions(weekCount).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      </NativeSelect>
     </span>
   );
 }
@@ -1071,10 +1181,10 @@ function UploadForm({ courseId, startBatch, starting, onCancel, onUploaded, refr
       <input type="file" accept={MATERIAL_ACCEPT} multiple aria-label="새 자료 파일" disabled={starting}
         onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
       <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={starting} />
-      <button type="submit" className="btn-primary btn-sm" disabled={files.length === 0 || starting}>
+      <Button size="xs" type="submit" disabled={files.length === 0 || starting}>
         {starting ? <><Loader2 size={13} className="spin" /> 시작하는 중</> : '분석 시작'}
-      </button>
-      <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={starting}>취소</button>
+      </Button>
+      <Button variant="default" size="xs" type="button" onClick={onCancel} disabled={starting}>취소</Button>
 
       {files.length > 0 && (
         <ul className="upload-picked">
@@ -1150,7 +1260,7 @@ function MaterialPicker({ courseId, linkedIds, onCancel, onLinked }) {
     return (
       <div className="material-link-form">
         <span className="view-dim">연결할 수 있는 다른 자료가 없어요.</span>
-        <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>닫기</button>
+        <Button variant="default" size="xs" type="button" onClick={onCancel}>닫기</Button>
       </div>
     );
   }
@@ -1172,15 +1282,15 @@ function MaterialPicker({ courseId, linkedIds, onCancel, onLinked }) {
         }
       }}
     >
-      <select className="material-type" value={materialId} aria-label="연결할 자료"
+      <NativeSelect className="material-type" value={materialId} aria-label="연결할 자료"
         onChange={(e) => setMaterialId(e.target.value)}>
         {available.map((m) => (
           <option key={m.materialId} value={m.materialId}>{m.originalFilename}</option>
         ))}
-      </select>
+      </NativeSelect>
       <MaterialTypeSelect value={materialType} onChange={setMaterialType} disabled={busy} />
-      <button type="submit" className="btn-ghost btn-sm" disabled={busy || !materialId}>연결</button>
-      <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}>취소</button>
+      <Button variant="default" size="xs" type="submit" disabled={busy || !materialId}>연결</Button>
+      <Button variant="default" size="xs" type="button" onClick={onCancel} disabled={busy}>취소</Button>
       <p className="material-form-hint">{MATERIAL_TYPE_HINT}</p>
     </form>
   );

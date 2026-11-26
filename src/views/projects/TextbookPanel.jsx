@@ -20,6 +20,7 @@ import { courseAPI, textbookAPI } from '../../api/api.js';
 import '../../styles/learning-flow.css';
 import { countBelow, tocTree } from '../../lib/tocTree.js';
 
+import { Badge, Button, Checkbox, TextInput } from '@mantine/core';
 const FIELD_LABEL = { title: '제목', author: '저자', publisher: '출판사', isbn: 'ISBN', edition: '판' };
 const SOURCE_LABEL = { USER: '직접 적음', MATERIAL: '자료에서 찾아 적용함', WEB: '웹에서 판을 확인함' };
 const ROLE_LABEL = { MAIN: '주교재', SUPPLEMENT: '부교재', REFERENCE: '참고', UNKNOWN: '교재' };
@@ -150,7 +151,7 @@ export default function TextbookPanel({ courseId, refreshToken = 0, onChanged, o
             <p className="textbook-current">
               {currentLine || <span className="view-dim">아직 정한 교재가 없어요.</span>}
               {current.isbn && <span className="view-sub-dim"> · ISBN {current.isbn}</span>}
-              {SOURCE_LABEL[current.source] && <span className="chip chip-status">{SOURCE_LABEL[current.source]}</span>}
+              {SOURCE_LABEL[current.source] && <Badge component="span" color="gray" className="chip chip-status">{SOURCE_LABEL[current.source]}</Badge>}
             </p>
             {current.web && (
               <p className="view-sub-dim textbook-source">
@@ -165,9 +166,9 @@ export default function TextbookPanel({ courseId, refreshToken = 0, onChanged, o
               </p>
             )}
             {!editing && (
-              <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setEditing(true)}>
+              <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setEditing(true)}>
                 {currentLine ? '실제 교재가 달라요' : '교재 직접 적기'}
-              </button>
+              </Button>
             )}
             {editing && (
               <TextbookEditForm current={current} busy={busy} onCancel={() => setEditing(false)}
@@ -183,20 +184,20 @@ export default function TextbookPanel({ courseId, refreshToken = 0, onChanged, o
               <ul className="textbook-clues">
                 {syllabus.map((c, i) => (
                   <li key={`${c.materialId}-${i}`}>
-                    <span className="chip chip-status">{ROLE_LABEL[c.role] ?? '교재'}</span>{' '}
+                    <Badge component="span" color="gray" className="chip chip-status">{ROLE_LABEL[c.role] ?? '교재'}</Badge>{' '}
                     <strong>{c.title}</strong>
                     {[c.author, c.publisher, c.edition].filter(Boolean).length > 0 && (
                       <span className="view-sub-dim"> · {[c.author, c.publisher, c.edition].filter(Boolean).join(' · ')}</span>
                     )}
                     <span className="view-sub-dim textbook-quote">「{c.filename}」 p.{c.unit}{c.source === 'MODEL' ? ' · AI가 표에서 짚은 칸' : ''}</span>
                     {c.sameAsCurrent
-                      ? <span className="chip chip-ok">지금 교재와 같아요</span>
+                      ? <Badge component="span" color="green" className="chip chip-ok">지금 교재와 같아요</Badge>
                       : (
-                        <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                        <Button variant="default" size="xs" type="button" disabled={busy}
                           onClick={() => act(() => textbookAPI.applyClue(courseId,
                             { materialId: c.materialId, title: c.title, expectedVersion: version }))}>
                           이 교재로 정하기
-                        </button>
+                        </Button>
                       )}
                   </li>
                 ))}
@@ -228,10 +229,10 @@ export default function TextbookPanel({ courseId, refreshToken = 0, onChanged, o
             <div key={u.materialId} className="textbook-candidate">
               <p className="textbook-candidate-head">「{u.filename}」의 목차가 어느 책의 것인지 적혀 있지 않아요</p>
               <p className="view-sub-dim">지금 교재의 목차가 맞으면 이어 주세요. 다른 책의 목차라면 그대로 두면 돼요(쓰지 않아요).</p>
-              <button type="button" className="btn-primary btn-sm" disabled={busy}
+              <Button size="xs" type="button" disabled={busy}
                 onClick={() => act(() => textbookAPI.linkToc(courseId, { materialId: u.materialId, expectedVersion: version }))}>
                 이 교재 목차로 쓰기
-              </button>
+              </Button>
             </div>
           ))}
 
@@ -249,7 +250,7 @@ export default function TextbookPanel({ courseId, refreshToken = 0, onChanged, o
                     return (
                       <li key={key}>
                         <label>
-                          <input type="checkbox" checked={!!picked[key]} disabled={busy}
+                          <Checkbox size="xs" checked={!!picked[key]} disabled={busy}
                             onChange={() => setPicked((prev) => ({ ...prev, [key]: !prev[key] }))} />
                           <span className="textbook-field">{FIELD_LABEL[f.field]}</span> {f.value}
                         </label>
@@ -261,11 +262,11 @@ export default function TextbookPanel({ courseId, refreshToken = 0, onChanged, o
                     );
                   })}
                 </ul>
-                <button type="button" className="btn-primary btn-sm" disabled={busy
+                <Button size="xs" type="button" disabled={busy
                   || !open.some((f) => picked[`${candidate.materialId}:${f.field}`])}
                   onClick={() => applyFrom(candidate)}>
                   {busy ? <Loader2 size={13} className="spin" /> : null} 고른 칸 적용
-                </button>
+                </Button>
               </div>
             );
           })}
@@ -293,9 +294,9 @@ function LookupBlock({ courseId, review, lookup, version, busy, act, onEdit, lin
     <div className="textbook-block" aria-live="polite">
       <p className="textbook-block-head">
         웹에서 찾기
-        {lookup && <span className={`chip ${status === 'FOUND' ? 'chip-ok' : status === 'NEEDS_CHOICE' || status === 'CLUE_CONFLICT' ? 'chip-warn' : 'chip-status'}`}>
+        {lookup && <Badge component="span" color={status === 'FOUND' ? 'chip-ok' : status === 'NEEDS_CHOICE' || status === 'CLUE_CONFLICT' ? 'orange' : 'gray'} className={`chip ${status === 'FOUND' ? 'chip-ok' : status === 'NEEDS_CHOICE' || status === 'CLUE_CONFLICT' ? 'chip-warn' : 'chip-status'}`}>
           {isSearching(lookup) && <Loader2 size={12} className="spin" />} {LOOKUP_LABEL[status] ?? status}
-        </span>}
+        </Badge>}
       </p>
 
       {!lookup && enabled && (
@@ -326,11 +327,11 @@ function LookupBlock({ courseId, review, lookup, version, busy, act, onEdit, lin
             {lookup.editions.map((e) => (
               <li key={e.key}>
                 <EditionLine edition={e} others={lookup.editions} />
-                <button type="button" className="btn-primary btn-sm" disabled={busy}
+                <Button size="xs" type="button" disabled={busy}
                   onClick={() => act(() => textbookAPI.choose(courseId,
                     { lookupId: lookup.lookupId, revisionId: e.bestRevisionId, expectedVersion: version }))}>
                   이 판으로 정하기
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -343,10 +344,10 @@ function LookupBlock({ courseId, review, lookup, version, busy, act, onEdit, lin
             <li key={i}>
               <strong>{o.title}</strong>
               <span className="view-sub-dim"> · {[o.author, o.publisher].filter(Boolean).join(' · ')} · 「{o.filename}」</span>
-              <button type="button" className="btn-primary btn-sm" disabled={busy}
+              <Button size="xs" type="button" disabled={busy}
                 onClick={() => act(() => textbookAPI.applyClue(courseId, { materialId: o.materialId, title: o.title, expectedVersion: version }))}>
                 이 교재로 정하기
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -360,24 +361,24 @@ function LookupBlock({ courseId, review, lookup, version, busy, act, onEdit, lin
         <div className="textbook-alternatives">
           {status === 'BOOK_NO_TOC' && <p className="view-sub-dim">목차 쪽 사진이나 PDF를 자료로 올리면 그 목차를 써요.</p>}
           {status === 'NOT_FOUND' && (
-            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onEdit}>ISBN·판 적기</button>
+            <Button variant="default" size="xs" type="button" disabled={busy} onClick={onEdit}>ISBN·판 적기</Button>
           )}
         </div>
       )}
 
       <div className="textbook-actions">
         {settled && enabled && (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => act(() => textbookAPI.retry(courseId))}>
+          <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => act(() => textbookAPI.retry(courseId))}>
             <RotateCcw size={13} /> 다시 찾기
-          </button>
+          </Button>
         )}
         {enabled && (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setLinkOpen((v) => !v)}>
+          <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setLinkOpen((v) => !v)}>
             상세 페이지 링크로 찾기
-          </button>
+          </Button>
         )}
         <label className="textbook-toggle">
-          <input type="checkbox" checked={enabled} disabled={busy}
+          <Checkbox size="xs" checked={enabled} disabled={busy}
             onChange={(e) => act(() => textbookAPI.setEnabled(courseId, e.target.checked))} />
           교재 이름으로 웹에서 목차 찾기 <span className="view-sub-dim">(제목·저자·출판사·판·ISBN만 보내요)</span>
         </label>
@@ -414,9 +415,9 @@ function LinkForm({ busy, onSubmit }) {
   const [url, setUrl] = useState('');
   return (
     <form className="textbook-link-form" onSubmit={(e) => { e.preventDefault(); if (url.trim()) onSubmit(url.trim()); }}>
-      <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… (출판사·서점의 책 상세 페이지)"
+      <TextInput type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… (출판사·서점의 책 상세 페이지)"
         aria-label="교재 상세 페이지 링크" />
-      <button type="submit" className="btn-primary btn-sm" disabled={busy || !url.trim()}>이 링크로 찾기</button>
+      <Button size="xs" type="submit" disabled={busy || !url.trim()}>이 링크로 찾기</Button>
     </form>
   );
 }
@@ -437,17 +438,17 @@ function TextbookEditForm({ current, busy, onCancel, onSave }) {
       const trimmed = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim() || null]));
       onSave(trimmed);
     }}>
-      <input value={values.textbookTitle} onChange={set('textbookTitle')} placeholder="교재명" aria-label="교재명" />
-      <input value={values.textbookAuthor} onChange={set('textbookAuthor')} placeholder="저자" aria-label="교재 저자" />
-      <input value={values.textbookPublisher} onChange={set('textbookPublisher')} placeholder="출판사" aria-label="교재 출판사" />
-      <input value={values.textbookIsbn} onChange={set('textbookIsbn')} placeholder="ISBN" aria-label="교재 ISBN" />
-      <input value={values.textbookEdition} onChange={set('textbookEdition')} placeholder="판 (예: 개정 2판)" aria-label="교재 판" />
+      <TextInput value={values.textbookTitle} onChange={set('textbookTitle')} placeholder="교재명" aria-label="교재명" />
+      <TextInput value={values.textbookAuthor} onChange={set('textbookAuthor')} placeholder="저자" aria-label="교재 저자" />
+      <TextInput value={values.textbookPublisher} onChange={set('textbookPublisher')} placeholder="출판사" aria-label="교재 출판사" />
+      <TextInput value={values.textbookIsbn} onChange={set('textbookIsbn')} placeholder="ISBN" aria-label="교재 ISBN" />
+      <TextInput value={values.textbookEdition} onChange={set('textbookEdition')} placeholder="판 (예: 개정 2판)" aria-label="교재 판" />
       <p className="view-sub-dim">저장하면 이 교재로 다시 찾아요. 강의계획서의 교재는 후보로 남고, 이 교재가 계획·상담에 쓰여요.</p>
       <div className="textbook-actions">
-        <button type="submit" className="btn-primary btn-sm" disabled={busy || !values.textbookTitle.trim() && !values.textbookIsbn.trim()}>
+        <Button size="xs" type="submit" disabled={busy || !values.textbookTitle.trim() && !values.textbookIsbn.trim()}>
           저장
-        </button>
-        <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>취소</button>
+        </Button>
+        <Button variant="default" size="xs" type="button" onClick={onCancel}>취소</Button>
       </div>
     </form>
   );
