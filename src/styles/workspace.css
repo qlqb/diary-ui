@@ -243,80 +243,14 @@
 
 .row-list { display: flex; flex-direction: column; gap: 6px; }
 
-/* ===================== 공통 버튼 ===================== */
-
-.btn-primary,
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-
-.btn-primary { background: var(--ws-accent); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: #4338ca; }
-
-.btn-ghost {
-  background: var(--ws-surface);
-  border-color: var(--ws-border-strong);
-  color: var(--ws-text-dim);
-}
-
-.btn-ghost:hover:not(:disabled) { background: #f0f2f5; color: var(--ws-text); border-color: var(--ws-text-faint); }
-.btn-ghost.is-selected { background: var(--ws-accent-soft); border-color: var(--ws-accent); color: var(--ws-accent-text); }
-
-.btn-primary:focus-visible,
-.btn-ghost:focus-visible,
-.icon-btn:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 2px; }
-
-.btn-primary:disabled,
-.btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: 7px; }
-
-.icon-btn {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: none;
-  color: var(--ws-text-dim);
-  cursor: pointer;
-}
-
-.icon-btn:hover { background: #f0f2f5; color: var(--ws-text); }
+/* 공통 버튼은 Mantine Button/ActionIcon이 그린다(2026-11-20). */
 
 .spin { animation: ws-spin 0.9s linear infinite; }
 @keyframes ws-spin { to { transform: rotate(360deg); } }
 
 /* ===================== 칩 ===================== */
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 5px;
-  background: #eef0f3;
-  color: var(--ws-text-dim);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.chip-project { background: var(--ws-accent-soft); color: var(--ws-accent-text); }
-.chip-status { background: #e7eaee; color: var(--ws-text-faint); }
-.chip-ok { background: var(--ws-ok-soft); color: var(--ws-ok); }
-.chip-warn { background: var(--ws-warn-soft); color: var(--ws-warn); }
+/* 칩은 Mantine Badge(표시)와 둥근 Button(선택)이 그린다. chip-* 클래스는 표시용 이름으로만 남는다. */
 
 /* ===================== 실행 조각 한 줄 ===================== */
 
@@ -377,7 +311,6 @@
 
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .block-row-range { font-variant-numeric: tabular-nums; font-weight: 600; }
-.chip-block { background: #e7eaee; color: var(--ws-text-dim); }
 .exec-row.has-draft { border-color: var(--ws-draft); box-shadow: 0 0 0 1px var(--ws-draft-soft); }
 
 .exec-row-main { min-width: 0; flex: 1; }
@@ -403,6 +336,8 @@
 
 .exec-row-time { display: inline-flex; align-items: center; gap: 4px; }
 .exec-row-dim { color: var(--ws-text-faint); }
+/* 앞 일정 기준 표현(lib/precededBy.js). 시각보다 먼저 읽히라고 본문색으로 둔다. */
+.exec-row-after { color: var(--ws-text-dim); font-weight: 600; }
 
 .exec-row-reason {
   margin: 6px 0 0;
@@ -581,20 +516,11 @@
   background: var(--ws-warn-soft);
 }
 
-.overdue-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-  padding: 9px 12px;
-  border: 1px solid var(--ws-warn);
-  border-radius: 9px;
-  background: var(--ws-warn-soft);
-}
-
-.overdue-strip .empty-title { margin: 0; font-size: 14px; color: var(--ws-warn); }
-.overdue-strip .overdue-actions { margin-left: auto; }
+.overdue-notes { margin: 6px 0 10px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.overdue-notes li { display: flex; flex-direction: column; gap: 2px; }
+.overdue-note-title { font-size: 14px; font-weight: 600; color: var(--ws-text); overflow-wrap: anywhere; }
+/* 자리 설명. 원인을 사람이 아니라 배치로 말하는 문장이라 경고색이 아니라 본문색으로 둔다. */
+.overdue-note-why { font-size: 13.5px; line-height: 1.55; color: var(--ws-text-dim); }
 
 .overdue-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
@@ -719,7 +645,7 @@
   border-top: 1px solid var(--ws-border);
 }
 
-.reschedule-foot .btn-primary { margin-left: auto; }
+.reschedule-foot .mantine-Button-filled { margin-left: auto; }
 
 /* ===================== 빈 상태 ===================== */
 
@@ -908,6 +834,23 @@
 
 .material-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 
+/* 자료 보기(전체/주차별)와 정렬. 목록 바로 위 한 줄. */
+.material-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 8px;
+}
+.material-week-group + .material-week-group { margin-top: 14px; }
+.material-week-group-title {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ws-text-dim);
+}
+
 .material-item {
   display: flex;
   align-items: center;
@@ -923,6 +866,90 @@
 .material-name { font-weight: 600; }
 .material-actions { margin-left: auto; display: flex; gap: 6px; }
 .material-review-slot { flex-basis: 100%; margin-top: 8px; }
+
+/*
+  프로젝트 화면의 연결된 자료 = 표. 한 자료가 한 줄이다(파일 · 역할 · 주차 · 분석 · 동작).
+  자료함 등 다른 화면의 .material-item 카드 모양은 건드리지 않도록 .project-material-table 아래로만 건다.
+*/
+.project-material-table {
+  --pm-cols: 16px minmax(0, 1fr) 148px 112px 104px 150px;
+}
+.pm-head {
+  display: grid;
+  grid-template-columns: var(--pm-cols);
+  gap: 0 10px;
+  padding: 0 12px 6px;
+  font-size: 12px;
+  color: var(--ws-text-faint);
+}
+.pm-head-actions { text-align: right; }
+.project-material-table .material-week-group {
+  border: 1px solid var(--ws-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--ws-surface);
+}
+.project-material-table .material-week-group + .material-week-group { margin-top: 10px; }
+.project-material-table .material-week-group-title {
+  margin: 0;
+  padding: 7px 12px;
+  background: var(--ws-bg);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--ws-border);
+}
+.project-material-table .material-list { gap: 0; }
+.project-material-row {
+  display: grid;
+  grid-template-columns: var(--pm-cols);
+  align-items: center;
+  gap: 0 10px;
+  padding: 5px 12px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 13px;
+}
+.project-material-row + .project-material-row { border-top: 1px solid var(--ws-border); }
+.project-material-row:hover { background: var(--ws-bg); }
+.project-material-row .pm-icon { color: var(--ws-text-faint); }
+.project-material-row .material-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pm-cell { min-width: 0; }
+/* 역할·주차 드롭다운: 표 안에서 조용하게, 그래도 늘 드롭다운으로 보이게(화살표 유지). */
+.project-material-row .material-type,
+.project-material-row .mw-select { width: 100%; padding: 0; border: 0; background: transparent; }
+.project-material-row .mantine-NativeSelect-input {
+  border-color: var(--ws-border);
+  background: var(--ws-surface);
+}
+.project-material-row .mantine-NativeSelect-input:hover { border-color: var(--ws-border-strong); }
+.project-material-row .material-week { display: flex; width: 100%; }
+/* 주차 칩은 드롭다운과 같은 말을 한 번 더 하므로 표에서는 뺀다. AI 추천은 드롭다운 글자색으로 구분한다. */
+.project-material-row .material-week-chip { display: none; }
+.project-material-row .material-week:has(.material-week-chip.is-suggested) .mantine-NativeSelect-input { color: var(--ws-draft); border-style: dashed; border-color: var(--ws-draft); }
+.project-material-row .material-week:has(.material-week-chip.is-warn) .mantine-NativeSelect-input { color: var(--ws-warn); }
+.project-material-row .chip { font-size: 11.5px; }
+.project-material-row .analysis-status-detail { display: none; }
+.pm-actions { margin-left: 0; display: flex; justify-content: flex-end; align-items: center; gap: 2px; }
+.pm-detail { grid-column: 2 / -1; margin: 2px 0 4px; }
+.pm-detail .material-stages { margin: 0; }
+.pm-detail .material-stage-next { display: none; }
+.project-material-row .material-review-slot { margin-top: 6px; }
+
+@media (max-width: 760px) {
+  .project-material-table { --pm-cols: 16px minmax(0, 1fr) auto; }
+  .pm-head { display: none; }
+  .project-material-row { row-gap: 4px; }
+  .project-material-row .pm-role,
+  .project-material-row .pm-week,
+  .project-material-row .pm-status { grid-column: 2 / -1; }
+  .project-material-row .pm-actions { grid-row: 1; grid-column: 3; }
+}
 
 /* 자료함 (최상위 자료 화면) */
 
@@ -1039,10 +1066,6 @@
 
 .material-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
-/* 파일 input을 감싼 label을 버튼처럼 쓴다 — 브라우저 기본 파일 위젯을 노출하지 않는다. */
-label.btn-ghost { cursor: pointer; position: relative; }
-label.btn-ghost.is-disabled { opacity: 0.45; cursor: not-allowed; }
-
 /*
   시각적으로만 감춘다. hidden 속성이나 display:none은 접근성 트리에서 요소를 제거해
   키보드·스크린리더로 도달할 수 없게 만든다.
@@ -1058,8 +1081,6 @@ label.btn-ghost.is-disabled { opacity: 0.45; cursor: not-allowed; }
   clip-path: inset(50%);
   white-space: nowrap;
 }
-
-label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offset: 2px; }
 
 .material-link-form {
   display: flex;
@@ -1110,24 +1131,6 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 
 .material-confirm-line { margin: 0 0 6px; font-size: 14px; line-height: 1.55; }
 .material-confirm .material-detail-actions { margin-top: 12px; }
-
-/*
-  App.css의 .btn-danger는 자체 padding/색을 갖고 있어 .btn-ghost.btn-sm과 섞이면
-  크기가 어긋난다. 자료함에서는 색만 바꾸는 수식자로 쓴다.
-*/
-.btn-ghost.btn-danger {
-  background: var(--ws-surface);
-  border-color: #f0c9c4;
-  color: var(--ws-danger);
-  padding: 5px 10px;
-  font-size: 13.5px;
-}
-
-.btn-ghost.btn-danger:hover:not(:disabled) {
-  background: #fdeeec;
-  border-color: var(--ws-danger);
-  color: var(--ws-danger);
-}
 
 /* ===================== 주간 격자 ===================== */
 
@@ -1652,6 +1655,9 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 }
 .schedule-import-preview li.is-off { color: var(--ws-text-faint); }
 .schedule-import-day { color: var(--ws-text-dim); }
+/* 휴무 칸은 체크가 없다. 체크 칸과 날짜 글자를 맞춘다(체크 16px + 간격 8px). */
+.schedule-import-day-off { padding-left: 24px; }
+.schedule-import-preview li { align-items: center; }
 
 /* 두 버튼에 시각적 우열을 주지 않는다. 가져오는 것과 나중에 하는 것 모두 정상 선택이다. */
 .schedule-import-actions {
@@ -1680,21 +1686,6 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
   min-width: 0;
 }
 .ai-schedule-days { display: inline-flex; gap: 3px; flex-wrap: wrap; }
-.chip-toggle {
-  padding: 3px 8px;
-  border: 1px solid var(--ws-border-strong);
-  border-radius: 6px;
-  background: #fff;
-  font-size: 13px;
-  color: var(--ws-text-dim);
-  cursor: pointer;
-}
-.chip-toggle.is-on {
-  border-color: var(--ws-accent);
-  background: var(--ws-accent-soft);
-  color: var(--ws-accent-text);
-  font-weight: 700;
-}
 
 /* 열기(button)와 삭제(icon button)는 각각 독립된 조작이므로 행은 container다 —
    button 안에 button을 중첩하지 않는다. */
@@ -1799,8 +1790,6 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .plan-period { display: flex; flex-direction: column; gap: 8px; }
 .plan-period-label { font-size: 13px; color: var(--ws-text-dim); }
 .plan-period-presets { display: flex; flex-wrap: wrap; gap: 6px; }
-.plan-period-presets .chip { cursor: pointer; border: 1px solid var(--ws-border); background: transparent; }
-.plan-period-presets .chip.is-active { background: var(--ws-accent-soft); color: var(--ws-accent-text); border-color: transparent; }
 .plan-period-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .plan-period-range input { padding: 6px 8px; border: 1px solid var(--ws-border); border-radius: 8px; }
 .plan-period-days { font-size: 13px; color: var(--ws-text-dim); }
@@ -1809,7 +1798,6 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 .plan-purpose { border: 1px solid var(--ws-border); border-radius: 10px; padding: 8px 12px; margin: 0; }
 .plan-purpose legend { font-size: 14px; font-weight: 600; padding: 0 4px; }
 .plan-purpose-options { display: flex; flex-wrap: wrap; gap: 6px; }
-.plan-purpose-options .chip { cursor: pointer; font-size: 14px; border: 1px solid var(--ws-border); }
 .plan-intensity-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .plan-intensity-options { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .plan-intensity-option { display: flex; align-items: center; gap: 8px; cursor: pointer; }
@@ -2012,6 +2000,27 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 /* ===== plan draft review (shared by plan tab and AI panel period plans) ===== */
 .plan-summary { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
 .plan-summary-line { margin: 0; font-size: 13px; color: var(--ws-text); }
+
+/* 분량 3층(VolumeFactCard). 경고가 아니라 사실이라 경고색 면을 쓰지 않는다 — 테두리와 본문색으로만. */
+.volume-fact { margin: 6px 0 4px 26px; padding: 10px 12px; border: 1px solid var(--ws-border-strong); border-radius: 8px; background: var(--ws-surface); display: flex; flex-direction: column; gap: 6px; }
+.volume-fact-layer { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ws-text); }
+.volume-fact-label { display: block; font-size: 12.5px; font-weight: 650; color: var(--ws-text-faint); }
+.volume-fact-weeks { margin: 0; font-size: 12.5px; color: var(--ws-text-faint); font-variant-numeric: tabular-nums; }
+.volume-fact-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.volume-fact-perspective { margin: 0; padding-top: 8px; border-top: 1px dashed var(--ws-border-strong); font-size: 13.5px; line-height: 1.6; color: var(--ws-text-dim); }
+
+/* 비어 있는 시간 막대(FreeTimeBars). 막대 = 그날 비어 있는 시간, 채운 부분 = 이번 초안 */
+.free-bars { margin: 10px 0 4px; padding: 10px 0 12px; border-bottom: 1px solid var(--ws-border); }
+.free-bars-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 6px; }
+.free-bars-title { font-size: 13px; font-weight: 650; color: var(--ws-text-dim); }
+.free-bars-sum { font-size: 13px; color: var(--ws-text-faint); }
+.free-bar-row { display: grid; grid-template-columns: 70px minmax(0, 1fr) 132px; gap: 10px; align-items: center; margin: 5px 0; font-size: 13px; color: var(--ws-text-dim); }
+.free-bar { position: relative; display: block; height: 12px; border-radius: 4px; background: var(--ws-ok-soft); border: 1px solid #b8e0c8; overflow: hidden; }
+.free-bar-used { position: absolute; inset: 0 auto 0 0; background: var(--ws-accent); }
+.free-bar-num { font-variant-numeric: tabular-nums; text-align: right; }
+@media (max-width: 520px) {
+  .free-bar-row { grid-template-columns: 56px minmax(0, 1fr) 104px; gap: 6px; font-size: 12.5px; }
+}
 .plan-summary-low { color: var(--ws-text-dim); }
 .plan-item-time { margin: 2px 0 0 24px; font-size: 12px; color: var(--ws-text-dim); display: flex; align-items: center; gap: 4px; }
 .plan-item-time.is-unplaced { color: var(--ws-warn, #b45309); }
@@ -2105,7 +2114,6 @@ label.btn-ghost:focus-within { outline: 2px solid var(--ws-accent); outline-offs
 
 
 /* ===== 자료 자동 분석 상태 ===== */
-.chip-accent { background: var(--ws-accent-soft); color: var(--ws-accent-text); }
 .analysis-status { display: inline-flex; align-items: center; gap: 6px; }
 .analysis-status-detail { font-size: 13px; color: var(--ws-text-faint); }
 .analysis-overview {

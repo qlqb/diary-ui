@@ -7,6 +7,7 @@
 
 import { Loader2, Sparkles } from 'lucide-react';
 
+import { Button } from '@mantine/core';
 export default function ApplyBar({ draft, applying, error, onApply, onDiscard, placing }) {
   if (!draft) return null;
   const active = draft.cards.filter((c) => !c.excluded);
@@ -28,12 +29,12 @@ export default function ApplyBar({ draft, applying, error, onApply, onDiscard, p
       </div>
       {error && <p className="apply-bar-error">{error}</p>}
       <div className="apply-bar-actions">
-        <button type="button" className="btn-ghost" onClick={onDiscard} disabled={applying}>
+        <Button variant="default" type="button" onClick={onDiscard} disabled={applying}>
           초안 버리기
-        </button>
-        <button type="button" className="btn-primary" onClick={onApply} disabled={applying || active.length === 0}>
+        </Button>
+        <Button type="button" onClick={onApply} disabled={applying || active.length === 0}>
           {applying ? <><Loader2 size={14} className="spin" /> 적용 중...</> : `변경 ${active.length}개 적용`}
-        </button>
+        </Button>
       </div>
     </div>
   );

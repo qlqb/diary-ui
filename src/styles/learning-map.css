@@ -97,7 +97,7 @@
   margin: 2px 0; border: 1px dashed var(--ws-draft); background: var(--ws-draft-soft);
 }
 .lm-proposed-head { display: flex; flex-wrap: wrap; gap: 4px; }
-.lm-proposed-chip { border: 1px dashed var(--ws-draft); background: var(--ws-draft-soft); color: var(--ws-draft); font-weight: 600; }
+.lm-proposed-chip { border: 1px dashed var(--ws-draft); }
 .lm-proposed-note { margin: 2px 0 0; font-size: 12px; color: var(--ws-text-dim); }
 .lm-proposed-review { align-self: flex-start; }
 .lm-proposed-roots { margin-top: 10px; }

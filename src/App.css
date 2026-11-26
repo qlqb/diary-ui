@@ -22,43 +22,7 @@ body {
   gap: 8px;
 }
 
-/* ===== 공통 버튼 ===== */
-.btn-primary {
-  padding: 9px 18px;
-  background: #6366f1;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-primary:hover:not(:disabled) { background: #4f46e5; }
-.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.btn-ghost {
-  padding: 9px 14px;
-  background: transparent;
-  color: #6b7280;
-  border: 0.5px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-ghost:hover { background: #f3f4f6; }
-
-.btn-danger {
-  padding: 7px 13px;
-  background: #fef2f2;
-  color: #dc2626;
-  border: 0.5px solid #fecaca;
-  border-radius: 7px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.btn-danger:hover { background: #fee2e2; }
+/* 공통 버튼은 Mantine이 그린다(2026-11-20). */
 
 /* ===== 공통 입력 ===== */
 .input {
@@ -6784,15 +6748,7 @@ body {
   gap: 8px;
   margin-top: auto;
 }
-.learning-course-card-actions .btn-primary,
-.learning-course-card-actions .btn-ghost {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: 0.8rem;
-}
+.learning-course-card-actions .mantine-Button-root { flex: 1; }
 
 .learning-course-progress-badge {
   font-size: 0.72rem;
@@ -7721,16 +7677,6 @@ body {
   color: var(--ws-text-faint);
 }
 
-/* App.css의 .btn-primary는 큰 폼 기준 크기라 이 줄에서는 조금 줄입니다. */
-.upload-tray-foot .btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  font-size: 13.5px;
-}
-
-.upload-tray-foot .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ---------- 자료 연결 제안 ---------- */
 
@@ -7859,22 +7805,13 @@ body {
 
 .proposal-dialog-later { margin-left: auto; }
 
-.proposal-dialog-foot .btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 15px;
-  font-size: 13.5px;
-}
-
-.proposal-dialog-foot .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* 좁은 화면에서는 사실상 전체 화면이 됩니다. 별도 컴포넌트를 만들지 않고 CSS만으로 처리합니다. */
 @media (max-width: 700px) {
   .proposal-dialog { max-height: 90vh; }
   .proposal-dialog-foot { flex-direction: column; align-items: stretch; }
   .proposal-dialog-later { margin-left: 0; order: 2; }
-  .proposal-dialog-foot .btn-primary { order: 1; justify-content: center; }
+  .proposal-dialog-foot .mantine-Button-root:not(.proposal-dialog-later) { order: 1; }
 }
 
 .proposal-group-list {

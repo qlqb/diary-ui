@@ -3,10 +3,12 @@ import { Sparkles } from 'lucide-react';
 
 import './App.css';
 import './styles/workspace.css';
+import './styles/mantine-tokens.css';
 
 import { authAPI } from './api/api';
 import MainShell from './shell/MainShell.jsx';
 
+import { Button, TextInput } from '@mantine/core';
 /**
  * 로그인/회원가입과 셸 전환만 맡는다. 화면 구성은 전부 MainShell 아래에 있다.
  */
@@ -122,7 +124,7 @@ function AuthView({ mode, onAuth, onSwitch }) {
           {!isLogin && (
             <div className="input-wrap">
               <span className="input-icon">👤</span>
-              <input
+              <TextInput
                 className="input"
                 type="text"
                 placeholder="닉네임"
@@ -134,7 +136,7 @@ function AuthView({ mode, onAuth, onSwitch }) {
           )}
           <div className="input-wrap">
             <span className="input-icon">✉️</span>
-            <input
+            <TextInput
               className="input"
               type="email"
               placeholder="이메일"
@@ -145,7 +147,7 @@ function AuthView({ mode, onAuth, onSwitch }) {
           </div>
           <div className="input-wrap">
             <span className="input-icon">🔒</span>
-            <input
+            <TextInput
               className="input"
               type="password"
               placeholder={isLogin ? '비밀번호' : '비밀번호 (최소 4자)'}
@@ -158,9 +160,9 @@ function AuthView({ mode, onAuth, onSwitch }) {
 
           {error && <div className="error-message">⚠️ {error}</div>}
 
-          <button type="submit" className="btn-primary" style={{ padding: '10px', marginTop: 2 }} disabled={submitting}>
+          <Button type="submit" style={{ padding: '10px', marginTop: 2 }} disabled={submitting}>
             {submitting ? (isLogin ? '로그인 중...' : '가입 중...') : (isLogin ? '로그인' : '회원가입')}
-          </button>
+          </Button>
         </form>
 
         <button type="button" className="link-button" onClick={onSwitch}>

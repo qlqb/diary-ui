@@ -11,6 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mantine/core": "^9.8.1",
+    "@mantine/dates": "^9.8.1",
+    "@mantine/hooks": "^9.8.1",
+    "dayjs": "^1.11.23",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

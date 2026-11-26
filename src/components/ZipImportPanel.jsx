@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Check, FileArchive, Info, Loader2, RotateCcw, X } from 'lucide-react';
 import { zipImportAPI } from '../api/api.js';
 import { NOT_USED_IMPACT } from '../lib/materialStages.js';
+import { ActionIcon, Button, Checkbox } from '@mantine/core';
 import '../styles/material-status.css';
 
 const POLL_MS = 1500;
@@ -120,8 +121,7 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
             className={`zip-import-item${entry.supported ? '' : ' is-unsupported'}`}>
           {waiting && entry.supported && entry.status === 'PENDING' ? (
               <label className="zip-import-check">
-                <input
-                    type="checkbox"
+                <Checkbox size="xs"
                     checked={selected.has(entry.entryId)}
                     onChange={() => toggle(entry.entryId)}
                     disabled={busy}
@@ -144,10 +144,10 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
             {entry.skipReason || entry.errorMessage || ENTRY_LABEL[entry.status]}
           </span>
           {entry.status === 'FAILED' && current.archiveAvailable && (
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" type="button" disabled={busy}
                       onClick={() => run(() => zipImportAPI.retryEntry(current.importId, entry.entryId))}>
                 <RotateCcw size={12} /> 다시
-              </button>
+              </Button>
           )}
           {problem && <span className="zip-import-impact">{NOT_USED_IMPACT}</span>}
         </li>
@@ -164,9 +164,9 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
             <strong>{current.originalFilename}</strong>
             <span className="zip-import-sub">{statusLine(current)}</span>
           </div>
-          <button type="button" className="icon-btn" aria-label="가져오기 닫기" onClick={onClose}>
+          <ActionIcon variant="subtle" color="gray" type="button" aria-label="가져오기 닫기" onClick={onClose}>
             <X size={14} />
-          </button>
+          </ActionIcon>
         </header>
 
         {error && <p className="view-error">{error}</p>}
@@ -207,14 +207,14 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
                 : '고른 파일이 자료로 등록되면 자동 분석이 이어서 돌아요'}
           </span>
           {waiting && (
-              <button type="button" className="btn-primary btn-sm"
+              <Button size="xs" type="button"
                       disabled={busy || selected.size === 0}
                       onClick={() => run(() => zipImportAPI.confirm(current.importId, [...selected]))}>
                 {busy ? <><Loader2 size={13} className="spin" /> 시작하는 중</> : `${selected.size}개 가져오기`}
-              </button>
+              </Button>
           )}
           {!waiting && failed.length > 0 && current.archiveAvailable && (
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" type="button" disabled={busy}
                       onClick={() => run(async () => {
                         let latest = current;
                         for (const entry of failed) {
@@ -223,13 +223,13 @@ export default function ZipImportPanel({ zipImport, onChanged, onClose }) {
                         return latest;
                       })}>
                 <RotateCcw size={13} /> 실패한 {failed.length}개 다시
-              </button>
+              </Button>
           )}
           {current.status === 'READY' && (
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" type="button" disabled={busy}
                       onClick={() => run(() => zipImportAPI.cancel(current.importId))}>
                 가져오기 취소
-              </button>
+              </Button>
           )}
         </div>
       </section>

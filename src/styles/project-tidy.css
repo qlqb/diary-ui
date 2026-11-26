@@ -112,7 +112,7 @@
 
 .project-tidy-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .project-tidy-head .section-title { margin: 0; }
-.project-tidy-head .btn-primary { margin-left: auto; }
+.project-tidy-head .mantine-Button-root { margin-left: auto; }
 
 .project-tidy-summary {
   margin: 8px 0;

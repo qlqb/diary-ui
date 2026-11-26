@@ -21,6 +21,7 @@ import { useState } from 'react';
 import { ExternalLink, Download, Loader2 } from 'lucide-react';
 import { materialStoreAPI } from '../api/api.js';
 
+import { Button } from '@mantine/core';
 /**
  * blob 주소를 즉시 거두지 않는다. 새 탭이 아직 읽는 중일 수 있어서, 넉넉히 두고 나중에
  * 거둔다. 페이지를 떠나면 어차피 브라우저가 정리한다.
@@ -41,6 +42,7 @@ function isPdfMaterial(filename, contentType) {
  */
 export default function MaterialFileLink({
   materialId, filename, contentType, disabled = false, label = null, onError = null, page = null,
+  iconOnly = false,
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -85,9 +87,10 @@ export default function MaterialFileLink({
         파일명을 앞에 두지 않는 것은 의도다 — 앞에 두면 행 제목 버튼과 이름이 같은
         접두사로 시작해 "그 자료의 행"을 이름으로 특정할 수 없게 된다.
       */}
-      <button
+      <Button variant={iconOnly ? 'subtle' : 'default'} color={iconOnly ? 'gray' : undefined} size="xs"
         type="button"
-        className="btn-ghost btn-sm"
+        title={iconOnly ? text : undefined}
+
         disabled={disabled || busy}
         aria-label={`${text} — ${filename ?? '자료'}`}
         onClick={open}
@@ -95,8 +98,9 @@ export default function MaterialFileLink({
         {busy
           ? <Loader2 size={13} className="spin" />
           : (pdf ? <ExternalLink size={13} /> : <Download size={13} />)}
-        {text}
-      </button>
+        {/* iconOnly: 표처럼 좁은 줄에서 쓴다. 이름은 aria-label과 마우스를 올리면 뜨는 title에 남는다. */}
+        {!iconOnly && text}
+      </Button>
       {error && <span className="material-file-error">{error}</span>}
     </>
   );

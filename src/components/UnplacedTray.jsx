@@ -12,6 +12,8 @@
 import { useState } from 'react';
 import { AlertTriangle, ArrowRight, Ban, CalendarClock, Clock3, Minimize2, RotateCcw } from 'lucide-react';
 import { formatSlot, slotOf, slotParts as parts } from '../lib/unplacedSlot.js';
+import { Button, TextInput } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 import '../styles/unplaced-tray.css';
 
 function minutesLabel(minutes) {
@@ -68,45 +70,45 @@ export default function UnplacedTray({ items, defaultDate, onPlace, onExclude, o
                   {item.status === 'deferred' && '날짜 미정으로 둬요'}
                   {item.status === 'excluded' && '이번 계획에서 뺐어요'}
                 </span>
-                <button type="button" className="btn-ghost btn-sm" onClick={() => onUndo(item.id)}>
+                <Button variant="default" size="xs" type="button" onClick={() => onUndo(item.id)}>
                   <RotateCcw size={12} /> 되돌리기
-                </button>
+                </Button>
               </div>
             ) : (
               <>
                 <div className="unplaced-tray-actions">
                   {item.nextSlot && (
-                    <button type="button" className="btn-primary btn-sm" onClick={() => onPlace(item.id, item.nextSlot)}>
+                    <Button size="xs" type="button" onClick={() => onPlace(item.id, item.nextSlot)}>
                       <ArrowRight size={12} /> {formatSlot(item.nextSlot.start, item.nextSlot.end)}에 넣기
-                    </button>
+                    </Button>
                   )}
                   {item.fit && (
-                    <button type="button" className="btn-ghost btn-sm"
+                    <Button variant="default" size="xs" type="button"
                       onClick={() => onPlace(item.id, { ...slotOf(parts(item.fit.start).date, parts(item.fit.start).time, item.fit.minutes), minutes: item.fit.minutes })}>
                       <Minimize2 size={12} /> {minutesLabel(item.fit.minutes)}으로 줄여 {parts(item.fit.start).time}에 넣기
-                    </button>
+                    </Button>
                   )}
-                  <button type="button" className="btn-ghost btn-sm" aria-expanded={manualId === item.id}
+                  <Button variant="default" size="xs" type="button" aria-expanded={manualId === item.id}
                     onClick={() => (manualId === item.id ? setManualId(null) : startManual(item))}>
                     <CalendarClock size={12} /> 직접 정하기
-                  </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => onDefer(item.id)}>{deferLabel}</button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => onExclude(item.id)}>
+                  </Button>
+                  <Button variant="default" size="xs" type="button" onClick={() => onDefer(item.id)}>{deferLabel}</Button>
+                  <Button variant="default" size="xs" type="button" onClick={() => onExclude(item.id)}>
                     <Ban size={12} /> 빼기
-                  </button>
+                  </Button>
                 </div>
                 {manualId === item.id && (
                   <div className="unplaced-tray-manual">
                     <label><span>날짜</span>
-                      <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} />
+                      <TextInput type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} />
                     </label>
                     <label><span>시작</span>
-                      <input type="time" value={manualTime} step="900" onChange={(e) => setManualTime(e.target.value)} />
+                      <TimeInput value={manualTime} step="900" onChange={(e) => setManualTime(e.target.value)} />
                     </label>
-                    <button type="button" className="btn-primary btn-sm" disabled={!manualDate || !manualTime}
+                    <Button size="xs" type="button" disabled={!manualDate || !manualTime}
                       onClick={() => submitManual(item)}>
                       {minutesLabel(item.minutes)} 놓기
-                    </button>
+                    </Button>
                   </div>
                 )}
               </>

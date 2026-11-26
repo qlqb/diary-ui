@@ -17,6 +17,8 @@ import {
 import ExecutionItemEvidence from '../views/plan/ExecutionItemEvidence.jsx';
 import { BLOCKER_OPTIONS, SUPPORT_OPTIONS } from '../lib/recordLabels.js';
 import { ItemWorkspaceContext } from '../views/today/itemWorkspaceContext.js';
+import { Badge, Button, NativeSelect, TextInput } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 import '../styles/records.css';
 
 const PRIORITY_LABEL = { MUST: '꼭', SHOULD: '하면 좋음', OPTIONAL: '여유 있으면' };
@@ -109,15 +111,15 @@ function SupportPicker({ value, onChange, stuck, onStuckChange, disabled }) {
       <legend className="exec-blocker-legend">어떻게 했나요 (선택)</legend>
       <div className="exec-blocker-options">
         {SUPPORT_OPTIONS.map((o) => (
-          <button key={o.level} type="button"
-            className={`btn-ghost btn-sm exec-blocker-option${value === o.level ? ' is-active' : ''}`}
+          <Button variant={value === o.level ? 'light' : 'default'} size="xs" key={o.level} type="button"
+            className={`exec-blocker-option${value === o.level ? ' is-active' : ''}`}
             aria-pressed={value === o.level}
             onClick={() => onChange(value === o.level ? null : o.level)}>
             {value === o.level && <Check size={12} aria-hidden="true" />} {o.label}
-          </button>
+          </Button>
         ))}
       </div>
-      <input type="text" className="exec-blocker-note" aria-label="막힌 단계 (선택)"
+      <TextInput type="text" className="exec-blocker-note" aria-label="막힌 단계 (선택)"
         placeholder="막힌 단계가 있었다면 (예: 직접 작성하는 부분)"
         maxLength={300} value={stuck} onChange={(e) => onStuckChange(e.target.value)} />
     </fieldset>
@@ -134,15 +136,15 @@ function BlockerPicker({ value, onChange, note, onNoteChange, disabled }) {
       <legend className="exec-blocker-legend">걸린 점이 있었다면 (선택)</legend>
       <div className="exec-blocker-options">
         {BLOCKER_OPTIONS.map((o) => (
-          <button key={o.kind} type="button"
-            className={`btn-ghost btn-sm exec-blocker-option${value === o.kind ? ' is-active' : ''}`}
+          <Button variant={value === o.kind ? 'light' : 'default'} size="xs" key={o.kind} type="button"
+            className={`exec-blocker-option${value === o.kind ? ' is-active' : ''}`}
             aria-pressed={value === o.kind}
             onClick={() => onChange(value === o.kind ? null : o.kind)}>
             {value === o.kind && <Check size={12} aria-hidden="true" />} {o.label}
-          </button>
+          </Button>
         ))}
       </div>
-      <input type="text" className="exec-blocker-note" aria-label="메모 (선택)" placeholder="메모 (선택)"
+      <TextInput type="text" className="exec-blocker-note" aria-label="메모 (선택)" placeholder="메모 (선택)"
         maxLength={300} value={note} onChange={(e) => onNoteChange(e.target.value)} />
       <p className="exec-blocker-hint">고르지 않아도 기록돼요. 다음 상담에서 분량을 다시 잡을 때만 참고해요.</p>
     </fieldset>
@@ -172,10 +174,10 @@ function failureMessage(result) {
  */
 function DeleteButton({ busy, onDelete }) {
   return (
-    <button type="button" className="btn-ghost btn-sm exec-row-delete" disabled={busy}
+    <Button variant="default" size="xs" type="button" className="exec-row-delete" disabled={busy}
       title="삭제 (Ctrl+Z로 되돌릴 수 있어요)" onClick={onDelete}>
       <Trash2 size={13} /> 삭제
-    </button>
+    </Button>
   );
 }
 
@@ -190,6 +192,8 @@ export default function ExecutionRow({
   compact,
   onOpenSource,
   hideEvidence = false,
+  /** 앞 일정 기준 표현("자료구조 끝나고 30분 뒤"). 보여줄 때 계산한 값이다(lib/precededBy.js). */
+  afterLabel = null,
 }) {
   const [tray, setTray] = useState(null); // null | 'complete' | 'partial' | 'reduce' | 'move'
   const [reduceMinutes, setReduceMinutes] = useState(item.estimatedMinutes ?? 30);
@@ -291,7 +295,7 @@ export default function ExecutionRow({
           ) : (
             <span className="exec-row-title">{item.title}</span>
           )}
-          {projectTitle && <span className="chip chip-project">{projectTitle}</span>}
+          {projectTitle && <Badge component="span" color="blue" className="chip chip-project">{projectTitle}</Badge>}
         </div>
         <div className="exec-row-meta">
           <span className="exec-row-time">
@@ -301,10 +305,11 @@ export default function ExecutionRow({
           {item.estimatedMinutes != null && item.startTime && (
             <span className="exec-row-dim">{formatMinutes(item.estimatedMinutes)}</span>
           )}
+          {afterLabel && <span className="exec-row-after">{afterLabel}</span>}
           {item.priority && item.priority !== 'SHOULD' && !isDone && (
-            <span className="chip">{PRIORITY_LABEL[item.priority]}</span>
+            <Badge component="span" color="gray" className="chip">{PRIORITY_LABEL[item.priority]}</Badge>
           )}
-          {(isDone || isHold) && <span className="chip chip-status">{STATUS_LABEL[item.status]}</span>}
+          {(isDone || isHold) && <Badge component="span" color="gray" className="chip chip-status">{STATUS_LABEL[item.status]}</Badge>}
         </div>
 
         {adjustment && !adjustment.excluded && (
@@ -314,7 +319,7 @@ export default function ExecutionRow({
             {adjustment.operation === 'REDUCE' && (
               <label className="inline-field">
                 <span>분</span>
-                <input
+                <TextInput
                   type="number"
                   min="5"
                   step="5"
@@ -328,26 +333,26 @@ export default function ExecutionRow({
             {adjustment.operation === 'MOVE' && (
               <label className="inline-field">
                 <span>날짜</span>
-                <input
+                <TextInput
                   type="date"
                   value={adjustment.scheduledDate ?? ''}
                   onChange={(e) => onAdjustmentPatch?.(adjustment.proposalItemId, { scheduledDate: e.target.value })}
                 />
               </label>
             )}
-            <button type="button" className="btn-ghost btn-sm"
+            <Button variant="default" size="xs" type="button"
               onClick={() => onAdjustmentExclude?.(adjustment.proposalItemId)}>
               이건 빼기
-            </button>
+            </Button>
           </div>
         )}
         {adjustment?.excluded && (
           <div className="exec-row-draft is-excluded">
             <span>이 변경은 적용하지 않아요</span>
-            <button type="button" className="btn-ghost btn-sm"
+            <Button variant="default" size="xs" type="button"
               onClick={() => onAdjustmentExclude?.(adjustment.proposalItemId)}>
               되돌리기
-            </button>
+            </Button>
           </div>
         )}
 
@@ -371,10 +376,10 @@ export default function ExecutionRow({
 
       {canRevive && (
         <div className="exec-row-actions">
-          <button type="button" className="btn-primary btn-sm" disabled={busy}
+          <Button size="xs" type="button" disabled={busy}
             onClick={() => run('resume')}>
             <RotateCcw size={13} /> 다시 시작
-          </button>
+          </Button>
           <DeleteButton busy={busy} onDelete={() => run('delete')} />
         </div>
       )}
@@ -383,21 +388,21 @@ export default function ExecutionRow({
         <div className="exec-row-actions">
           {tray === null && (
             <>
-              <button type="button" className="btn-primary btn-sm" disabled={busy} onClick={() => openTray('complete')}>
+              <Button size="xs" type="button" disabled={busy} onClick={() => openTray('complete')}>
                 완료
-              </button>
-              <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => openTray('partial')}>
+              </Button>
+              <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => openTray('partial')}>
                 일부 했어요
-              </button>
-              <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => openTray('reduce')}>
+              </Button>
+              <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => openTray('reduce')}>
                 줄이기
-              </button>
+              </Button>
               {/* "미루기"가 아니라 "이동"이다 — 언제 할지를 바꾸는 것이고, 오늘 안에서 뒤로
                   미는 것도 여기에 포함된다. 보류("당분간 실행 대상에서 빼두기")는 의미가 달라
                   이 버튼에 합치지 않는다. */}
-              <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => openTray('move')}>
+              <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => openTray('move')}>
                 이동
-              </button>
+              </Button>
               <DeleteButton busy={busy} onDelete={() => run('delete')} />
             </>
           )}
@@ -413,24 +418,24 @@ export default function ExecutionRow({
             <div className="exec-tray exec-tray-record">
               <span className="exec-tray-lead">실제로 얼마나 걸렸어요?</span>
               <label className="inline-field">
-                <input type="number" min="1" step="1" inputMode="numeric"
+                <TextInput type="number" min="1" step="1" inputMode="numeric"
                   aria-label="실제 걸린 시간(분)"
                   value={completeMinutes}
                   onChange={(e) => setCompleteMinutes(e.target.value)} />
                 <span>분</span>
               </label>
-              <button type="button" className="btn-primary btn-sm" disabled={busy || !completeInput.valid}
+              <Button size="xs" type="button" disabled={busy || !completeInput.valid}
                 onClick={() => run('complete', withBlocker(withActualMinutes({}, completeInput), blockerKind, blockerNote, reflection))}>
                 <Check size={13} /> 완료 기록
-              </button>
+              </Button>
               {/* 모른다고 하면 그대로 "시간 미기록"이다. 예상값을 대신 채워 넣지 않는다. */}
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" type="button" disabled={busy}
                 onClick={() => run('complete', withBlocker({}, blockerKind, blockerNote, reflection))}>
                 모르겠어요
-              </button>
-              <button type="button" className="btn-ghost btn-sm" onClick={closeTray} aria-label="완료 기록 취소">
+              </Button>
+              <Button variant="default" size="xs" type="button" onClick={closeTray} aria-label="완료 기록 취소">
                 <X size={13} />
-              </button>
+              </Button>
               <p className="exec-tray-note">내가 적은 시간으로 남아요. 비워 두면 &quot;시간 미기록&quot;이에요.</p>
               {/* 끝냈어도 힘들었던 점은 있을 수 있다. 다만 대부분은 필요 없으니 접어 둔다. */}
               {completeBlockerOpen ? (
@@ -441,10 +446,10 @@ export default function ExecutionRow({
                     note={blockerNote} onNoteChange={setBlockerNote} disabled={busy} />
                 </>
               ) : (
-                <button type="button" className="btn-ghost btn-sm" aria-expanded={false}
+                <Button variant="default" size="xs" type="button" aria-expanded={false}
                   onClick={() => setCompleteBlockerOpen(true)}>
                   어떻게 했는지·걸린 점 남기기 (선택)
-                </button>
+                </Button>
               )}
               {trayError && <p className="exec-tray-error">{trayError}</p>}
             </div>
@@ -454,33 +459,33 @@ export default function ExecutionRow({
             <div className="exec-tray exec-tray-record">
               <label className="inline-field">
                 <span>얼마나</span>
-                <select value={partialPercent} onChange={(e) => setPartialPercent(Number(e.target.value))}>
+                <NativeSelect value={partialPercent} onChange={(e) => setPartialPercent(Number(e.target.value))}>
                   <option value={25}>조금 (25%)</option>
                   <option value={50}>절반 (50%)</option>
                   <option value={75}>거의 다 (75%)</option>
-                </select>
+                </NativeSelect>
               </label>
               {/* 시간은 곁들이는 값이다. 없다고 PARTIAL 기록 자체를 막지 않는다. */}
               <label className="inline-field">
                 <span>내가 적은 시간</span>
-                <input type="number" min="1" step="1" inputMode="numeric"
+                <TextInput type="number" min="1" step="1" inputMode="numeric"
                   aria-label="실제 걸린 시간(분)"
                   value={partialMinutes}
                   onChange={(e) => setPartialMinutes(e.target.value)} />
                 <span>분</span>
               </label>
-              <button type="button" className="btn-primary btn-sm" disabled={busy || !partialInput.valid}
+              <Button size="xs" type="button" disabled={busy || !partialInput.valid}
                 onClick={() => run('partial', withBlocker(
                   withActualMinutes({ completionPercent: partialPercent }, partialInput), blockerKind, blockerNote, reflection))}>
                 <Check size={13} /> 기록
-              </button>
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              </Button>
+              <Button variant="default" size="xs" type="button" disabled={busy}
                 onClick={() => run('partial', withBlocker({ completionPercent: partialPercent }, blockerKind, blockerNote, reflection))}>
                 시간은 모르겠어요
-              </button>
-              <button type="button" className="btn-ghost btn-sm" onClick={closeTray} aria-label="일부 수행 기록 취소">
+              </Button>
+              <Button variant="default" size="xs" type="button" onClick={closeTray} aria-label="일부 수행 기록 취소">
                 <X size={13} />
-              </button>
+              </Button>
               <SupportPicker value={supportLevel} onChange={setSupportLevel}
                 stuck={stuckStep} onStuckChange={setStuckStep} disabled={busy} />
               <BlockerPicker value={blockerKind} onChange={setBlockerKind}
@@ -493,16 +498,16 @@ export default function ExecutionRow({
             <div className="exec-tray">
               <label className="inline-field">
                 <span>분</span>
-                <input type="number" min="5" step="5" value={reduceMinutes}
+                <TextInput type="number" min="5" step="5" value={reduceMinutes}
                   onChange={(e) => setReduceMinutes(Number(e.target.value) || 0)} />
               </label>
-              <button type="button" className="btn-primary btn-sm" disabled={busy || reduceMinutes <= 0}
+              <Button size="xs" type="button" disabled={busy || reduceMinutes <= 0}
                 onClick={() => run('reduce', { expectedMinutes: reduceMinutes })}>
                 <Check size={13} /> 줄이기
-              </button>
-              <button type="button" className="btn-ghost btn-sm" onClick={closeTray} aria-label="줄이기 취소">
+              </Button>
+              <Button variant="default" size="xs" type="button" onClick={closeTray} aria-label="줄이기 취소">
                 <X size={13} />
-              </button>
+              </Button>
               {trayError && <p className="exec-tray-error">{trayError}</p>}
             </div>
           )}
@@ -511,28 +516,28 @@ export default function ExecutionRow({
             <div className="exec-tray exec-tray-move">
               {canMoveLaterToday && (
                 <span className="exec-tray-group">
-                  <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={runLaterToday}>
+                  <Button variant="default" size="xs" type="button" disabled={busy} onClick={runLaterToday}>
                     오늘 뒤로
-                  </button>
-                  <input type="time" step="300" aria-label="오늘 뒤로 옮길 시각"
+                  </Button>
+                  <TimeInput step="300" aria-label="오늘 뒤로 옮길 시각"
                     value={laterTime} onChange={(e) => setLaterTime(e.target.value)} />
                 </span>
               )}
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" type="button" disabled={busy}
                 onClick={() => run('move', { toDate: shiftDate(item.scheduledDate ?? todayString(), 1) })}>
                 내일로
-              </button>
+              </Button>
               <span className="exec-tray-group">
-                <input type="date" aria-label="옮길 날짜"
+                <TextInput type="date" aria-label="옮길 날짜"
                   value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
-                <button type="button" className="btn-primary btn-sm" disabled={busy || !moveDate}
+                <Button size="xs" type="button" disabled={busy || !moveDate}
                   onClick={() => run('move', { toDate: moveDate })}>
                   <Check size={13} /> 이 날짜로
-                </button>
+                </Button>
               </span>
-              <button type="button" className="btn-ghost btn-sm" onClick={closeTray} aria-label="이동 취소">
+              <Button variant="default" size="xs" type="button" onClick={closeTray} aria-label="이동 취소">
                 <X size={13} />
-              </button>
+              </Button>
               {trayError && <p className="exec-tray-error">{trayError}</p>}
             </div>
           )}

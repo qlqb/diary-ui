@@ -12,7 +12,11 @@
 import { Clock, Loader2, RotateCcw } from 'lucide-react';
 import { analysisStateLabel } from '../lib/analysisLabels.js';
 import { waitingCopy } from '../lib/materialStages.js';
+import { Badge, Button } from '@mantine/core';
 import '../styles/material-status.css';
+
+// 기존 chip-* 색 이름 → Mantine 색(2026-11-20 Mantine 전환). chip-* 클래스는 표시용 이름으로만 남는다.
+const TONE_COLOR = { status: 'gray', warn: 'orange', ok: 'green', accent: 'blue' };
 
 export default function AnalysisStatusChip({
   status, onRetry = null, busy = false, limit = null, showWaitingDetail = false,
@@ -31,20 +35,21 @@ export default function AnalysisStatusChip({
 
   return (
     <span className="analysis-status">
-      <span className={`chip chip-${tone}`} title={detail || undefined} aria-label={`분석 상태: ${label}${progress}`}>
+      <Badge component="span" color={TONE_COLOR[tone] ?? 'gray'} className={`chip chip-${tone}`}
+        title={detail || undefined} aria-label={`분석 상태: ${label}${progress}`}>
         {status.state === 'RUNNING' && <Loader2 size={12} className="spin" />}
         {waiting && <Clock size={12} aria-hidden="true" />}
         {label}{progress}
-      </span>
+      </Badge>
       {waiting && showWaitingDetail && <span className="analysis-waiting-note" role="status">{waiting.detail}</span>}
       {status.state === 'DONE' && status.sectionCount > 0 && (
         <span className="analysis-status-detail">구간 {status.sectionCount}개</span>
       )}
       {retryable && onRetry && (
-        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onRetry}
+        <Button variant="default" size="xs" type="button" disabled={busy} onClick={onRetry}
           aria-label="분석 다시 시도">
           <RotateCcw size={12} /> 다시 시도
-        </button>
+        </Button>
       )}
     </span>
   );

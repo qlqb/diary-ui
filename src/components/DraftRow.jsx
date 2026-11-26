@@ -9,6 +9,8 @@
 import { Sparkles, Ban, RotateCcw } from 'lucide-react';
 import { formatMinutes } from '../lib/datetime.js';
 
+import { Badge, Button, NativeSelect, TextInput } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 const PRIORITY_OPTIONS = [
   { value: 'MUST', label: '꼭' },
   { value: 'SHOULD', label: '하면 좋음' },
@@ -23,10 +25,10 @@ export default function DraftRow({ card, onPatch, onToggleExclude, showDate }) {
       <div className="exec-row-main">
         <div className="exec-row-headline">
           <span className="draft-badge"><Sparkles size={12} /> AI 초안 · 적용 전</span>
-          {card.unplacedReason && !card.unplacedResolved && <span className="chip chip-warn">시간을 못 찾았어요</span>}
+          {card.unplacedReason && !card.unplacedResolved && <Badge component="span" color="orange" className="chip chip-warn">시간을 못 찾았어요</Badge>}
         </div>
 
-        <input
+        <TextInput
           className="draft-title-input"
           type="text"
           value={card.title}
@@ -39,31 +41,31 @@ export default function DraftRow({ card, onPatch, onToggleExclude, showDate }) {
           {showDate && (
             <label className="inline-field">
               <span>날짜</span>
-              <input type="date" value={card.scheduledDate ?? ''} disabled={excluded}
+              <TextInput type="date" value={card.scheduledDate ?? ''} disabled={excluded}
                 onChange={(e) => onPatch(card.proposalItemId, { scheduledDate: e.target.value })} />
             </label>
           )}
           <label className="inline-field">
             <span>시작</span>
-            <input type="time" value={card.startTime ?? ''} disabled={excluded}
+            <TimeInput value={card.startTime ?? ''} disabled={excluded}
               onChange={(e) => onPatch(card.proposalItemId, { startTime: e.target.value, autoPlaced: false })} />
           </label>
           <label className="inline-field">
             <span>종료</span>
-            <input type="time" value={card.endTime ?? ''} disabled={excluded}
+            <TimeInput value={card.endTime ?? ''} disabled={excluded}
               onChange={(e) => onPatch(card.proposalItemId, { endTime: e.target.value, autoPlaced: false })} />
           </label>
           <label className="inline-field">
             <span>분</span>
-            <input type="number" min="5" step="5" value={card.expectedMinutes} disabled={excluded}
+            <TextInput type="number" min="5" step="5" value={card.expectedMinutes} disabled={excluded}
               onChange={(e) => onPatch(card.proposalItemId, { expectedMinutes: Number(e.target.value) || 0 })} />
           </label>
           <label className="inline-field">
             <span>중요도</span>
-            <select value={card.priority} disabled={excluded}
+            <NativeSelect value={card.priority} disabled={excluded}
               onChange={(e) => onPatch(card.proposalItemId, { priority: e.target.value })}>
               {PRIORITY_OPTIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
+            </NativeSelect>
           </label>
         </div>
 
@@ -74,9 +76,9 @@ export default function DraftRow({ card, onPatch, onToggleExclude, showDate }) {
       </div>
 
       <div className="exec-row-actions">
-        <button type="button" className="btn-ghost btn-sm" onClick={() => onToggleExclude(card.proposalItemId)}>
+        <Button variant="default" size="xs" type="button" onClick={() => onToggleExclude(card.proposalItemId)}>
           {excluded ? <><RotateCcw size={13} /> 되돌리기</> : <><Ban size={13} /> 빼기</>}
-        </button>
+        </Button>
       </div>
     </article>
   );

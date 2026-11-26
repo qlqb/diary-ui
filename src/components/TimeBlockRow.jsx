@@ -14,6 +14,7 @@
 
 import { Repeat, MapPin } from 'lucide-react';
 import { toHHmm } from '../lib/datetime.js';
+import { Badge } from '@mantine/core';
 
 const KIND_LABEL = {
   ROUTINE: '반복 일정',
@@ -31,10 +32,10 @@ export default function TimeBlockRow({ entry, running = false, compact = false }
           <span className="exec-row-title">{entry.title}</span>
         </div>
         <div className="exec-row-meta">
-          <span className="chip chip-block">
+          <Badge component="span" color="gray" className="chip chip-block">
             {entry.kind === 'ROUTINE' ? <Repeat size={11} /> : <MapPin size={11} />}
             {KIND_LABEL[entry.kind] ?? '일정'}
-          </span>
+          </Badge>
           {running && <span className="exec-row-dim">진행 중</span>}
           {entry.locationText && <span className="exec-row-dim">{entry.locationText}</span>}
         </div>

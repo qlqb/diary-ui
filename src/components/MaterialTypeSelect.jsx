@@ -7,11 +7,13 @@
  */
 
 import { MaterialType, MATERIAL_TYPE_LABEL } from '../types/learning.js';
+import { NativeSelect } from '@mantine/core';
 
-export default function MaterialTypeSelect({ value, onChange, disabled = false, label = '자료 역할' }) {
+export default function MaterialTypeSelect({ value, onChange, disabled = false, label = '자료 역할', size = undefined }) {
   return (
-    <select
+    <NativeSelect
       className="material-type"
+      size={size}
       value={value}
       aria-label={label}
       disabled={disabled}
@@ -20,6 +22,6 @@ export default function MaterialTypeSelect({ value, onChange, disabled = false, 
       {Object.values(MaterialType).map((t) => (
         <option key={t} value={t}>{MATERIAL_TYPE_LABEL[t]}</option>
       ))}
-    </select>
+    </NativeSelect>
   );
 }

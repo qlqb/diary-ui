@@ -36,4 +36,3 @@
 .exec-tray-note { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; color: var(--ws-text-dim); }
 
 .record-chip-missing { border-style: dashed; color: var(--ws-text-dim); }
-.record-chip-blocker { background: var(--ws-warn-soft); color: var(--ws-warn); }
