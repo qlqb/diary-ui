@@ -19,6 +19,7 @@ import {
   AVAILABILITY_BASIS_NOTE, MATERIAL_STATE_LABEL, NEXT_ACTION_HINT, PROJECT_DISPOSITION_LABEL,
 } from '../../lib/planLabels.js';
 
+import { Button } from '@mantine/core';
 /** 다시 만든 초안으로 옮겨 온 편집 필드의 이름. 개발 용어를 그대로 보이지 않는다. */
 const FIELD_LABEL = {
   title: '제목',
@@ -67,7 +68,7 @@ export default function PlanDraftOverview({
             <span className="plan-overview-dim">달라진 것: {staleReasons.join(', ')}</span>
           )}
           {onRemake && !regenerating && (
-            <button type="button" className="btn-primary btn-sm" onClick={onRemake}>다시 만들기</button>
+            <Button size="xs" type="button" onClick={onRemake}>다시 만들기</Button>
           )}
         </div>
       )}
@@ -86,7 +87,7 @@ export default function PlanDraftOverview({
       {missing.length > 0 && (
         <p className="plan-overview-line plan-overview-missing-line">
           <span className="plan-overview-label">들어가지 않은 프로젝트 {missing.length}개</span>
-          {onShowWhy && <button type="button" className="btn-ghost btn-sm" onClick={onShowWhy}>이유 보기</button>}
+          {onShowWhy && <Button variant="default" size="xs" type="button" onClick={onShowWhy}>이유 보기</Button>}
         </p>
       )}
 
@@ -100,7 +101,7 @@ export default function PlanDraftOverview({
           {onRetrySchedule && (
             <>
               {' — '}
-              <button type="button" className="btn-ghost btn-sm" onClick={onRetrySchedule}>다시 시도</button>
+              <Button variant="default" size="xs" type="button" onClick={onRetrySchedule}>다시 시도</Button>
             </>
           )}
         </p>
@@ -113,7 +114,7 @@ export default function PlanDraftOverview({
           <span className="plan-overview-label">아직 열려 있는 질문</span>
           {openQuestion}
           {onAnswerQuestion && (
-            <button type="button" className="btn-ghost btn-sm" onClick={() => onAnswerQuestion(openQuestion)}>답하기</button>
+            <Button variant="default" size="xs" type="button" onClick={() => onAnswerQuestion(openQuestion)}>답하기</Button>
           )}
         </p>
       )}
@@ -174,12 +175,12 @@ export default function PlanDraftOverview({
       )}
 
       <div className="plan-overview-actions">
-        {onReview && <button type="button" className="btn-ghost btn-sm" onClick={onReview}>검토·수정</button>}
+        {onReview && <Button variant="default" size="xs" type="button" onClick={onReview}>검토·수정</Button>}
         {onApply && (
-          <button type="button" className="btn-primary btn-sm" disabled={applyDisabled} onClick={onApply}>{applyLabel}</button>
+          <Button size="xs" type="button" disabled={applyDisabled} onClick={onApply}>{applyLabel}</Button>
         )}
         {onContinueConsult && (
-          <button type="button" className="btn-ghost btn-sm" onClick={onContinueConsult}>계속 상담</button>
+          <Button variant="default" size="xs" type="button" onClick={onContinueConsult}>계속 상담</Button>
         )}
       </div>
     </section>

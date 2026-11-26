@@ -15,7 +15,7 @@
  * 게 적용된 것인지"가 흐려진다. 일정 화면 하나에서 확정된 배치와 적용 전 초안을 함께 본다.
  * "학습"도 최상위에서 사라졌다 — 학습은 별도 활동이 아니라 프로젝트의 한 종류다.
  *
- * 계획 탭의 기본 화면은 "상담으로 계획하기"다(왼쪽 범위·자료 · 가운데 대화 · 오른쪽 계획 방향/초안). 가운데 대화는
+ * 계획 탭의 기본 화면은 "상담으로 계획하기"다(대화 · 오른쪽 계획 방향/초안, 범위·자료는 대화 머리의 버튼으로 여는 서랍). 대화는
  * 새로 만든 것이 아니라 늘 있던 AI 패널 그 하나다 — 자리만 가운데로 옮긴다. 그래서 오른쪽 좁은 AI 칸과 작업 공간이
  * 같은 대화·같은 초안을 보고, 같은 질문이나 서로 다른 초안이 두 군데에 뜨지 않는다. 조건을 직접 정해 만드는 기존
  * 화면은 "직접 조건 정해서 만들기"로 그대로 남아 있다.
@@ -445,7 +445,14 @@ export default function MainShell({ user, onLogout }) {
     const alreadySaid = consultDraft.draft?.freshness?.state === 'STALE';
     return consultDraft.stale && !alreadySaid ? `${base} · 최신 답변 반영 전` : base;
   }, [consultDraft.draft, consultDraft.stale]);
-  const paneOpenOf = (name) => layout !== 'inline' && openPane === name;
+  /*
+   * 범위·자료는 화면 폭과 상관없이 늘 서랍(좁으면 시트)이다 — 계획을 세우는 동안 늘 볼 정보가 아니라
+   * 확인·조정할 때만 여는 정보라서 칸을 내주지 않는다(handoff plan-experience-plan-2026-11-20 §1의 1단계).
+   * 계획 미리보기는 넓은 화면에서 계속 칸이다.
+   */
+  const scopeLayout = layout === 'inline' ? 'drawer' : layout;
+  const paneOpenOf = (name) => openPane === name && (name === 'scope' || layout !== 'inline');
+  const scopeSectionCount = consultDraft.draft?.materialSelection?.sections?.length ?? 0;
 
   return (
     <ItemWorkspaceContext.Provider value={workspaceValue}>
@@ -669,7 +676,7 @@ export default function MainShell({ user, onLogout }) {
       </main>
 
       {consultActive && (
-        <ConsultPaneFrame side="left" title="범위·자료" layout={layout}
+        <ConsultPaneFrame side="left" title="범위·자료" layout={scopeLayout}
           open={paneOpenOf('scope')} onClose={() => setOpenPane(null)}>
           <ConsultScopePane
             projects={projects}
@@ -696,7 +703,8 @@ export default function MainShell({ user, onLogout }) {
           /* 상담이 기억을 남기면 프로젝트 화면의 사실 카드가 다시 읽는다(전체 새로고침은 하지 않는다). */
           onMemoryChanged={() => setRefreshToken((v) => v + 1)}
           draftNotice={consultActive && layout !== 'inline' ? draftNotice : null}
-          onOpenScopePane={consultActive && layout !== 'inline' ? () => setOpenPane('scope') : undefined}
+          onOpenScopePane={consultActive ? () => setOpenPane('scope') : undefined}
+          scopeSectionCount={consultActive ? scopeSectionCount : 0}
           onOpenPreviewPane={consultActive && layout !== 'inline' ? () => setOpenPane('preview') : undefined}
           /* 좁은 화면에서는 AI가 본문을 덮고 있다 — 닫아야 방금 연 화면이 보인다. */
           onOpenMemory={() => { setMemoryOpen(true); setOpenPane(null); if (layout !== 'inline') setAiOpen(false); }}

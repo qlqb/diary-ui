@@ -11,6 +11,7 @@
 
 import { FAMILIARITY_CHOICE, FALLBACK_FAMILIARITY_CHOICE } from '../../lib/planLabels.js';
 
+import { Button } from '@mantine/core';
 export default function PlanAskCard({ ask, onAnswer, answering = false }) {
   if (!ask) return null;
 
@@ -27,7 +28,7 @@ export default function PlanAskCard({ ask, onAnswer, answering = false }) {
       <p className="plan-ask-question">{ask.question}</p>
       <div className="plan-ask-options">
         {(ask.options ?? []).map((option) => (
-          <button
+          <Button variant="default" size="xs" radius="xl"
             key={option}
             type="button"
             className="chip"
@@ -35,16 +36,16 @@ export default function PlanAskCard({ ask, onAnswer, answering = false }) {
             onClick={() => send(option)}
           >
             {option}
-          </button>
+          </Button>
         ))}
-        <button
+        <Button variant="default" size="xs"
           type="button"
-          className="btn-ghost btn-sm"
+
           disabled={answering}
           onClick={() => send(null)}
         >
           건너뛰기
-        </button>
+        </Button>
       </div>
       {answering && <p className="hint">답을 반영해 다시 만들고 있어요…</p>}
     </section>

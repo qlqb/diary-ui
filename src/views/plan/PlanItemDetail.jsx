@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { planAPI } from '../../api/api.js';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 
+import { Button, Textarea } from '@mantine/core';
 /**
  * @param mode 'draft' | 'item'  초안 항목이면 proposalItemId, 확정 조각이면 executionItemId
  */
@@ -95,22 +96,22 @@ export default function PlanItemDetail({ mode = 'draft', id, expanded }) {
     <div className="plan-item-detail-user">
       <label>
         <span className="plan-item-done-label">내 메모</span>
-        <textarea rows={2} value={memoDraft} onChange={(e) => setMemoDraft(e.target.value)}
+        <Textarea rows={2} value={memoDraft} onChange={(e) => setMemoDraft(e.target.value)}
           placeholder="이 항목을 할 때 기억할 것" />
       </label>
       <span className="plan-item-actions">
-        <button type="button" className="btn-ghost btn-sm" disabled={memoSaving} onClick={saveMemo}>저장</button>
-        <button type="button" className="btn-ghost btn-sm" disabled={memoSaving} onClick={() => setMemoOpen(false)}>취소</button>
+        <Button variant="default" size="xs" type="button" disabled={memoSaving} onClick={saveMemo}>저장</Button>
+        <Button variant="default" size="xs" type="button" disabled={memoSaving} onClick={() => setMemoOpen(false)}>취소</Button>
       </span>
     </div>
   ) : (
     <p className="plan-item-detail-user">
       {detail.userText && <><span className="plan-item-done-label">내 메모</span>{detail.userText} </>}
       {memoSaver && (
-        <button type="button" className="btn-ghost btn-sm"
+        <Button variant="default" size="xs" type="button"
           onClick={() => { setMemoDraft(detail.userText ?? ''); setMemoOpen(true); }}>
           {detail.userText ? '메모 고치기' : '메모 남기기'}
-        </button>
+        </Button>
       )}
     </p>
   );
@@ -133,9 +134,9 @@ export default function PlanItemDetail({ mode = 'draft', id, expanded }) {
         <p className="plan-item-detail-stale">
           이전 원문 기준으로 만든 안내예요. 항목이나 자료가 그 뒤에 바뀌었어요.
           {creator && (
-            <button type="button" className="btn-ghost btn-sm" disabled={refreshing} onClick={refresh}>
+            <Button variant="default" size="xs" type="button" disabled={refreshing} onClick={refresh}>
               {refreshing ? '다시 만드는 중…' : '지금 원문으로 다시 만들기'}
-            </button>
+            </Button>
           )}
         </p>
       )}

@@ -17,6 +17,7 @@ import {
   buildPlanUnderstanding, fitLine, groundingLine, USER_STATE_KIND_LABEL,
 } from '../../lib/planUnderstanding.js';
 
+import { Button } from '@mantine/core';
 export default function PlanStrategyPanel({
   strategy, projectTitles = {}, provenance = null, selection = null, items = [], defaultOpen = true,
 }) {
@@ -241,10 +242,10 @@ export default function PlanStrategyPanel({
             </div>
           )}
 
-          <button type="button" className="btn-ghost btn-sm plan-strategy-more" aria-expanded={more}
+          <Button variant="default" size="xs" type="button" className="plan-strategy-more" aria-expanded={more}
             onClick={() => setMore((v) => !v)}>
             {more ? '간단히 보기' : '자세히 보기'}
-          </button>
+          </Button>
         </div>
       )}
     </section>

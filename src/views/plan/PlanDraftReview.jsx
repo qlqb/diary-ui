@@ -31,6 +31,10 @@ import { GOAL_BASIS_LABEL, GOAL_BASIS_TITLE } from '../../lib/studyLabels.js';
 import { acquirePreview, previewInputKey, replacePreview, storedOrRecompute } from '../../ai/previewSolveCache.js';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import PlanDraftOverview, { PlanOverviewDetails } from './PlanDraftOverview.jsx';
+import FreeTimeBars from './FreeTimeBars.jsx';
+import VolumeFactCard from './VolumeFactCard.jsx';
+import { chunkSlots, slotSig, slotsKey, slotsOf, volumeFact } from '../../lib/volumeFact.js';
+import { precededByLabel } from '../../lib/precededBy.js';
 import PlanStrategyPanel from './PlanStrategyPanel.jsx';
 import PlanScopeReport from './PlanScopeReport.jsx';
 import { actionOf, startSourceLine } from '../../lib/planItemText.js';
@@ -41,6 +45,7 @@ import PlanWeekPreview from './PlanWeekPreview.jsx';
 import UnplacedTray from '../../components/UnplacedTray.jsx';
 import { formatSlot } from '../../lib/unplacedSlot.js';
 
+import { Badge, Button, Checkbox, TextInput } from '@mantine/core';
 import '../../styles/learning-flow.css';
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -324,6 +329,81 @@ export default function PlanDraftReview({
     [minutesEdits],
   );
   const selectedMinutes = selectedItems.reduce((sum, item) => sum + minutesOf(item), 0);
+
+  /*
+   * 분량 3층의 근거 — 항목이 놓인 자리(과목·요일·시간대)의 지난 4주 실제 시간(lib/volumeFact.js 머리말).
+   * 자리가 바뀔 때만 다시 묻는다. 분량을 고친 것은 화면에서 다시 비교한다(서버를 다시 부르지 않는다).
+   * 못 읽으면 조용히 비운다 — 이 숫자가 없어도 검토와 확정은 그대로 된다.
+   */
+  const [slotHistory, setSlotHistory] = useState(() => new Map()); // id → { sig, history }
+  const [volumeKept, setVolumeKept] = useState(() => new Map()); // id → "자리 서명|분량" (그때 "그대로 둘게요"를 고른 상태)
+  // 이번에 빼기로 한 항목은 묻지 않는다.
+  const historySlots = useMemo(
+    () => slotsOf(items.filter((i) => !excluded.has(i.proposalItemId)), placedById, minutesOf),
+    [items, excluded, placedById, minutesOf],
+  );
+  const historyKey = slotsKey(historySlots);
+  useEffect(() => {
+    // planAPI를 부분만 모킹한 테스트에서도 이 화면이 죽지 않게 메서드가 있을 때만 부른다(이웃한 조회들과 같은 방어).
+    if (!planAPI?.slotHistory || historySlots.length === 0) return undefined;
+    let cancelled = false;
+    const sigByKey = new Map(historySlots.map((slot) => [slot.key, slotSig(slot)]));
+    // 호출이 바로 예외를 던져도 잡히게 then 안에서 부른다. 상한(60개)을 넘으면 나눠 묻는다.
+    Promise.all(chunkSlots(historySlots).map((chunk) => Promise.resolve().then(() => planAPI.slotHistory(chunk))))
+      .then((lists) => {
+        if (cancelled) return;
+        setSlotHistory(new Map(lists.flat().filter(Boolean)
+          .map((h) => [Number(h.key), { sig: sigByKey.get(String(h.key)), history: h }])));
+      })
+      .catch(() => { if (!cancelled) setSlotHistory(new Map()); });
+    return () => { cancelled = true; };
+    // 자리(historyKey)가 바뀔 때만 다시 묻는다. 분량만 고친 것으로는 부르지 않는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyKey]);
+  const volumeFactOf = useCallback((item) => {
+    const slot = historySlots.find((s) => s.key === String(item.proposalItemId));
+    if (!slot) return null;
+    // 받아 둔 기록이 지금 자리의 것일 때만 쓴다 — 옮긴 직후 새 응답이 오기 전에 예전 자리 숫자를 보이지 않게.
+    const entry = slotHistory.get(item.proposalItemId);
+    if (!entry || entry.sig !== slotSig(slot)) return null;
+    // "그대로 둘게요"는 그때의 자리와 분량에만 적용한다. 옮기거나 분량을 다시 바꾸면 다시 말한다.
+    if (volumeKept.get(item.proposalItemId) === `${slotSig(slot)}|${minutesOf(item)}`) return null;
+    return volumeFact(entry.history, minutesOf(item));
+  }, [historySlots, slotHistory, volumeKept, minutesOf]);
+  /*
+   * 앞 일정 기준 표현("자료구조 끝나고 30분 뒤")의 재료 — 미리보기 기간의 반복 일정·약속. 다른 초안 조각도 앞 일정이다.
+   * 저장하지 않고 그릴 때마다 계산한다(lib/precededBy.js 머리말). 못 읽으면 시각만 보인다.
+   */
+  // 받은 고정 일정은 어느 기간 것인지와 함께 둔다 — 기간이 바뀐 직후 새 응답 전에 이전 기간 일정으로 문장을 만들지 않게.
+  const [fixed, setFixed] = useState({ key: null, blocks: [] });
+  const horizonFrom = effectivePreview?.horizonStart ?? null;
+  const horizonTo = effectivePreview?.horizonEnd ?? null;
+  const horizonKey = horizonFrom && horizonTo ? `${horizonFrom}~${horizonTo}` : null;
+  useEffect(() => {
+    if (!planAPI?.fixedSchedule || !horizonKey) return undefined;
+    let cancelled = false;
+    Promise.resolve().then(() => planAPI.fixedSchedule(horizonFrom, horizonTo))
+      .then((list) => { if (!cancelled) setFixed({ key: horizonKey, blocks: Array.isArray(list) ? list : [] }); })
+      .catch(() => { if (!cancelled) setFixed({ key: horizonKey, blocks: [] }); });
+    return () => { cancelled = true; };
+    // horizonFrom·horizonTo는 horizonKey에 들어 있다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [horizonKey]);
+  const fixedBlocks = useMemo(() => (fixed.key === horizonKey ? fixed.blocks : []), [fixed, horizonKey]);
+  const afterLabelOf = useCallback((item) => {
+    const placed = placedById.get(item.proposalItemId);
+    if (!placed?.scheduledStartAt) return null;
+    const others = (effectivePreview?.placedItems ?? [])
+      .filter((p) => p.proposalItemId !== item.proposalItemId && !excluded.has(p.proposalItemId) && p.scheduledEndAt)
+      .map((p) => ({ title: p.title, startAt: p.scheduledStartAt, endAt: p.scheduledEndAt }));
+    return precededByLabel(placed.scheduledStartAt, [...fixedBlocks, ...others]);
+  }, [placedById, effectivePreview, excluded, fixedBlocks]);
+
+  const keepVolume = useCallback((item) => {
+    const slot = historySlots.find((s) => s.key === String(item.proposalItemId));
+    if (!slot) return;
+    setVolumeKept((prev) => new Map(prev).set(item.proposalItemId, `${slotSig(slot)}|${minutesOf(item)}`));
+  }, [historySlots, minutesOf]);
   const allExcluded = items.length + adjustments.length > 0
     && items.every((i) => excluded.has(i.proposalItemId)) && adjustments.every((i) => excluded.has(i.proposalItemId));
   const longPlan = (current?.days ?? 0) > 7;
@@ -623,9 +703,9 @@ export default function PlanDraftReview({
         {current.availabilityConfidenceSummary && <p className="hint">{current.availabilityConfidenceSummary}</p>}
         <p className="hint">남는 시간을 고치거나 기간·강도를 다시 고르면 다시 만들 수 있어요.</p>
         <div className="plan-draft-actions">
-          {onDiscard && <button type="button" className="btn-ghost" onClick={onDiscard}>기간·강도 다시 고르기</button>}
+          {onDiscard && <Button variant="default" type="button" onClick={onDiscard}>기간·강도 다시 고르기</Button>}
           {onOpenSchedule && (
-            <button type="button" className="btn-primary" onClick={onOpenSchedule}>일정에서 남는 시간 확인</button>
+            <Button type="button" onClick={onOpenSchedule}>일정에서 남는 시간 확인</Button>
           )}
         </div>
       </div>
@@ -637,7 +717,7 @@ export default function PlanDraftReview({
       <div className="plan-draft-head">
         {/* 이름은 제목 자리에서 바로 고친다 — 따로 입력칸 한 줄을 두지 않는다. */}
         <label className="plan-title-inline">
-          <input type="text" aria-label="계획 이름" title="눌러서 이름 고치기" value={title}
+          <TextInput type="text" aria-label="계획 이름" title="눌러서 이름 고치기" value={title}
             onChange={(e) => setTitle(e.target.value)} />
           <Pencil size={14} aria-hidden="true" />
         </label>
@@ -645,6 +725,8 @@ export default function PlanDraftReview({
           <strong>{PLAN_INTENSITY_LABEL[current.intensity] ?? ''} 계획</strong>
           {' · '}기간 {formatDateKo(current.startDate)} ~ {formatDateKo(current.endDate)}
         </p>
+        {/* 비어 있는 시간과 이번 초안이 쓰는 시간. "세우기 전" 화면을 여기에 흡수했다(FreeTimeBars 머리말). */}
+        <FreeTimeBars preview={effectivePreview} excluded={excluded} />
         <PlanDraftOverview
           draft={current}
           selectedCount={selectedItems.length}
@@ -674,7 +756,7 @@ export default function PlanDraftReview({
             <span className="plan-overview-badge">확인 필요</span>
             {' '}{whyAlerts.join(' · ')}
             {' '}
-            <button type="button" className="btn-ghost btn-sm" onClick={showWhy}>이유 보기</button>
+            <Button variant="default" size="xs" type="button" onClick={showWhy}>이유 보기</Button>
           </p>
         )}
         {intentWarnings.length > 0 && (
@@ -725,10 +807,10 @@ export default function PlanDraftReview({
         <p className="plan-toast" role="status">
           {toast.message}
           {toast.undo && (
-            <button type="button" className="btn-ghost btn-sm"
+            <Button variant="default" size="xs" type="button"
               onClick={() => { const undo = toast.undo; setToast(null); undo(); }}>
               되돌리기
-            </button>
+            </Button>
           )}
         </p>
       )}
@@ -776,7 +858,7 @@ export default function PlanDraftReview({
             {adjustments.map((item) => (
               <li key={item.proposalItemId} className="plan-item">
                 <label>
-                  <input type="checkbox" checked={!excluded.has(item.proposalItemId)}
+                  <Checkbox size="xs" checked={!excluded.has(item.proposalItemId)}
                     onChange={() => toggleItem(item.proposalItemId)} />
                   <span className="plan-item-title">{item.beforeTitle ?? item.title}</span>
                   <span className="plan-item-meta">
@@ -820,6 +902,9 @@ export default function PlanDraftReview({
             return next;
           })}
           onEditMinutes={editMinutes}
+          volumeFactOf={volumeFactOf}
+          afterLabelOf={afterLabelOf}
+          onKeepVolume={keepVolume}
           onExcludeThisTime={onExcludeThisTime}
           detailOpen={detailOpen}
           onToggleDetail={(proposalItemId) => setDetailOpen((prev) => {
@@ -916,31 +1001,31 @@ export default function PlanDraftReview({
         <span className="plan-confirm-total">{selectedItems.length}개 · {formatMinutes(selectedMinutes)}</span>
         {(onDiscard || strategy) && (
           <span className="plan-more">
-            <button type="button" className="btn-ghost btn-sm" aria-label="다른 동작" aria-expanded={moreOpen}
+            <Button variant="default" size="xs" type="button" aria-label="다른 동작" aria-expanded={moreOpen}
               onClick={() => setMoreOpen((v) => !v)}>
               <MoreHorizontal size={16} />
-            </button>
+            </Button>
             {moreOpen && (
               <span className="plan-more-menu">
                 {strategy && (
-                  <button type="button" className="btn-ghost btn-sm" disabled={regenerating}
+                  <Button variant="default" size="xs" type="button" disabled={regenerating}
                     onClick={() => { setMoreOpen(false); regenerate({ message: '판단은 그대로 두고 실행 방법만 다시 만들었어요' }); }}>
                     {regenerating ? '다시 만드는 중…' : '실행 방법 다시 제안'}
-                  </button>
+                  </Button>
                 )}
                 {onDiscard && (
-                  <button type="button" className="btn-ghost btn-sm"
-                    onClick={() => { setMoreOpen(false); onDiscard(); }}>{discardLabel}</button>
+                  <Button variant="default" size="xs" type="button"
+                    onClick={() => { setMoreOpen(false); onDiscard(); }}>{discardLabel}</Button>
                 )}
               </span>
             )}
           </span>
         )}
-        <button type="button" className="btn-primary"
+        <Button type="button"
           disabled={confirming || allExcluded || !!confirmBlockedReason || remaking}
           title={confirmBlockedReason ?? undefined} onClick={handleConfirm}>
           {confirming ? '확정하는 중…' : '계획 확정'}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -984,7 +1069,7 @@ function PlanDraftGroup({
   onReloadProvenance, evidenceByItem, onOpenSource, projectTitles,
   onExcludeThisTime = null, detailAll = false, detailOpen = new Set(), onToggleDetail = null, topicIdOf = null,
   minutesOf = (item) => item.expectedMinutes || 0, minutesEdits = new Map(), minutesOpen = new Set(),
-  onToggleMinutes = null, onEditMinutes = null,
+  onToggleMinutes = null, onEditMinutes = null, volumeFactOf = null, onKeepVolume = null, afterLabelOf = null,
 }) {
   const groupMinutes = group.items
     .filter((item) => !excluded.has(item.proposalItemId))
@@ -1014,7 +1099,7 @@ function PlanDraftGroup({
         <span className="plan-group-meta">
           {formatMinutes(groupMinutes)} · {group.items.length}개
         </span>
-        <input type="checkbox" checked={allOn} onChange={onToggleGroup}
+        <Checkbox size="xs" checked={allOn} onChange={onToggleGroup}
           aria-label={`${group.title} 전체 선택`} />
       </div>
 
@@ -1034,15 +1119,18 @@ function PlanDraftGroup({
               요청 기간의 시작일로 강제하는 값이라 미배치 항목에도 값이 들어 있다.
             */
             let when = null;
-            if (placed) when = formatSpan(placed.scheduledStartAt, placed.scheduledEndAt);
+            if (placed) {
+              const after = afterLabelOf ? afterLabelOf(item) : null;
+              when = after ? `${after} · ${formatSpan(placed.scheduledStartAt, placed.scheduledEndAt)}` : formatSpan(placed.scheduledStartAt, placed.scheduledEndAt);
+            }
             else if (unplaced) when = '배치 안 됨';
             else if (later) when = '이번 주 이후';
             else if (item.placementType !== 'UNSCHEDULED' && item.targetDate) when = formatDateKo(item.targetDate);
+            const volume = volumeFactOf && !excluded.has(id) ? volumeFactOf(item) : null;
             return (
             <li key={id} className={`plan-item${open ? ' is-open' : ''}`}>
               <div className="plan-item-row">
-                <input
-                  type="checkbox"
+                <Checkbox size="xs"
                   aria-label={item.title}
                   checked={!excluded.has(id)}
                   onChange={() => onToggleItem(id)}
@@ -1063,6 +1151,13 @@ function PlanDraftGroup({
                   {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
               </div>
+
+              {/* 분량이 그 자리의 평소 크기보다 크면 항목 바로 아래에 사실 → 제안 → (가끔) 관점. 펼치지 않아도 보인다. */}
+              {volume && (
+                <VolumeFactCard fact={volume} itemTitle={item.title}
+                  onAccept={() => onEditMinutes?.(item, volume.suggestedMinutes)}
+                  onKeep={() => onKeepVolume?.(item)} />
+              )}
 
               {open && (
               <div className="plan-item-body">
@@ -1097,7 +1192,7 @@ function PlanDraftGroup({
                 <p className="plan-item-minutes">
                   <label>
                     예상 시간(분)
-                    <input type="number" min={5} max={600} step={5}
+                    <TextInput type="number" min={5} max={600} step={5}
                       aria-label={`${item.title} 예상 시간(분)`}
                       defaultValue={minutesOf(item)}
                       onChange={(e) => onEditMinutes(item, e.target.value)} />
@@ -1125,53 +1220,53 @@ function PlanDraftGroup({
                   「이미 알아요」는 표식을 저장해 다음 계획에서도 건너뛴다. 둘 다 되면 「빼기」 하나로 묶고 누른 뒤에 고른다.
                 */}
                 {canKnown && canSkip && (
-                  <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                  <Button variant="default" size="xs" type="button" disabled={busy}
                     aria-expanded={removeAsk === id}
                     onClick={() => setRemoveAsk(removeAsk === id ? null : id)}>
                     빼기
-                  </button>
+                  </Button>
                 )}
                 {canKnown && !canSkip && (
-                  <button type="button" className="btn-ghost btn-sm plan-item-known" disabled={busy}
+                  <Button variant="default" size="xs" type="button" className="plan-item-known" disabled={busy}
                     onClick={() => onMarkKnown(topicId)}>
                     이미 알아요
-                  </button>
+                  </Button>
                 )}
                 {canSkip && !canKnown && (
-                  <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                  <Button variant="default" size="xs" type="button" disabled={busy}
                     onClick={() => onExcludeThisTime(topicId, item.title)}>
                     이번만 빼기
-                  </button>
+                  </Button>
                 )}
                 {onEditMinutes && onToggleMinutes && (
-                  <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                  <Button variant="default" size="xs" type="button" disabled={busy}
                     aria-expanded={minutesOpen.has(id)}
                     onClick={() => onToggleMinutes(id)}>
                     시간 고치기
-                  </button>
+                  </Button>
                 )}
                 {/* 항목 하나만 자세히. 전체 전환과 독립이고, 선택·시간·마감은 그대로다. */}
                 {onToggleDetail && !detailAll && (
-                  <button type="button" className="btn-ghost btn-sm" aria-expanded={detailOpen.has(id)}
+                  <Button variant="default" size="xs" type="button" aria-expanded={detailOpen.has(id)}
                     onClick={() => onToggleDetail(id)}>
                     {detailOpen.has(id) ? '간단히' : '자세히'}
-                  </button>
+                  </Button>
                 )}
               </span>
               {canKnown && canSkip && removeAsk === id && (
                 <div className="plan-item-remove" role="group" aria-label={`${item.title} 빼는 방법`}>
                   <p>
-                    <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                    <Button variant="default" size="xs" type="button" disabled={busy}
                       onClick={() => { setRemoveAsk(null); onExcludeThisTime(topicId, item.title); }}>
                       이번만 빼기
-                    </button>
+                    </Button>
                     <span className="view-dim">다음 계획에는 다시 후보로 돌아와요</span>
                   </p>
                   <p>
-                    <button type="button" className="btn-ghost btn-sm plan-item-known" disabled={busy}
+                    <Button variant="default" size="xs" type="button" className="plan-item-known" disabled={busy}
                       onClick={() => { setRemoveAsk(null); onMarkKnown(topicId); }}>
                       이미 알아요
-                    </button>
+                    </Button>
                     <span className="view-dim">다음 계획부터도 건너뛰어요</span>
                   </p>
                 </div>
@@ -1206,7 +1301,7 @@ function PlanDraftGroup({
                 <p className="plan-evidence plan-evidence-pending error-text">
                   근거를 불러오지 못했어요.
                   {' '}
-                  <button type="button" className="btn-ghost btn-sm" onClick={onReloadProvenance}>다시 시도</button>
+                  <Button variant="default" size="xs" type="button" onClick={onReloadProvenance}>다시 시도</Button>
                 </p>
               )}
               </div>
@@ -1262,7 +1357,7 @@ function ItemFacts({ item, evidence, provenance, projectTitles, classAt, onMater
           <span className="plan-item-done-label">목표</span>
           <span>{goal}</span>
           {goalBasis && (
-            <span className="chip chip-status" title={GOAL_BASIS_TITLE[item.learningGoalBasis]}>{goalBasis}</span>
+            <Badge component="span" color="gray" className="chip chip-status" title={GOAL_BASIS_TITLE[item.learningGoalBasis]}>{goalBasis}</Badge>
           )}
         </p>
       )}

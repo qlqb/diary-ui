@@ -29,6 +29,7 @@ import {
 } from '../../lib/planEvidence.js';
 import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 
+import { Button } from '@mantine/core';
 /** 이 화면에서 여는 원본. 서버가 내려준 target 중 화면이 실제로 아는 것만 연다. */
 const LINK_TARGET_LABEL = {
   COURSE: '프로젝트 열기',
@@ -67,7 +68,7 @@ export default function PlanProvenancePanel({ provenance, loading, error, onOpen
           {error && (
             <p className="error-text">
               {error}
-              {onRetry && <> <button type="button" className="btn-ghost btn-sm" onClick={onRetry}>다시 시도</button></>}
+              {onRetry && <> <Button variant="default" size="xs" type="button" onClick={onRetry}>다시 시도</Button></>}
             </p>
           )}
           {!loading && !error && provenance && !provenance.recorded && (
@@ -157,13 +158,13 @@ export function SourceLine({ source, onOpenSource }) {
         </span>
       )}
       {canOpen && (
-        <button
+        <Button variant="default" size="xs"
           type="button"
-          className="btn-ghost btn-sm"
+
           onClick={() => onOpenSource(link.target, link.targetId, source.providedValue)}
         >
           <ExternalLink size={12} /> {LINK_TARGET_LABEL[link.target]}
-        </button>
+        </Button>
       )}
       {/*
         세 경우를 구분해 말한다. 열 수 있는 것, 원본은 남아 있지만 이 화면에서 갈 곳이
@@ -197,9 +198,9 @@ export function ItemEvidence({
 
   return (
     <div className="plan-evidence">
-      <button
+      <Button variant="default" size="xs"
         type="button"
-        className="btn-ghost btn-sm plan-evidence-toggle"
+        className="plan-evidence-toggle"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
@@ -207,7 +208,7 @@ export function ItemEvidence({
         {label}
         {statusLabel && <span className="plan-evidence-flag">{statusLabel}</span>}
         {changedAfterApply && <span className="plan-evidence-flag">적용 후 바뀜</span>}
-      </button>
+      </Button>
 
       {open && (
         <EvidenceBody
@@ -329,13 +330,13 @@ export function EvidenceBody({
             <p className="plan-evidence-line">
               <span className="muted">연결된 원본 자료가 없어요</span>
               {projectFallback && onOpenSource && (
-                <button
+                <Button variant="default" size="xs"
                   type="button"
-                  className="btn-ghost btn-sm"
+
                   onClick={() => onOpenSource(projectFallback.target, projectFallback.targetId, projectFallback.providedValue)}
                 >
                   <ExternalLink size={12} /> {LINK_TARGET_LABEL[projectFallback.target]}
-                </button>
+                </Button>
               )}
             </p>
           )}
@@ -353,14 +354,14 @@ export function EvidenceBody({
             </ul>
           )}
           {hiddenMaterialCount > 0 && (
-            <button type="button" className="btn-ghost btn-sm" onClick={() => setAllMaterials(true)}>
+            <Button variant="default" size="xs" type="button" onClick={() => setAllMaterials(true)}>
               자료 {hiddenMaterialCount}개 더 보기
-            </button>
+            </Button>
           )}
           {allMaterials && materials.length > MATERIALS_SHOWN_BY_DEFAULT && (
-            <button type="button" className="btn-ghost btn-sm" onClick={() => setAllMaterials(false)}>
+            <Button variant="default" size="xs" type="button" onClick={() => setAllMaterials(false)}>
               자료 접기
-            </button>
+            </Button>
           )}
         </section>
       )}
@@ -392,15 +393,15 @@ export function EvidenceBody({
         상세: 개별 인용 줄과 회차 전체 정보. 여기만 스크롤 영역이다. 닫으면 위의 기본 화면이
         그 자리에 그대로 있다 — 항목 검토 위치를 잃지 않는다.
       */}
-      <button
+      <Button variant="default" size="xs"
         type="button"
-        className="btn-ghost btn-sm plan-evidence-detail-toggle"
+        className="plan-evidence-detail-toggle"
         onClick={() => setDetailOpen((v) => !v)}
         aria-expanded={detailOpen}
       >
         {detailOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         {detailOpen ? '생성 당시 정보 접기' : '생성 당시 정보 자세히 보기'}
-      </button>
+      </Button>
       {detailOpen && (
         <div className="plan-evidence-detail">
           <EvidenceDetail provenance={provenance} item={item} onOpenSource={onOpenSource} />
@@ -453,13 +454,13 @@ function MaterialLine({ material, onOpenError, fallback, onOpenSource }) {
         />
       )}
       {!action && fallback && onOpenSource && (
-        <button
+        <Button variant="default" size="xs"
           type="button"
-          className="btn-ghost btn-sm"
+
           onClick={() => onOpenSource(fallback.target, fallback.targetId, fallback.providedValue)}
         >
           <ExternalLink size={12} /> {LINK_TARGET_LABEL[fallback.target]}
-        </button>
+        </Button>
       )}
     </li>
   );

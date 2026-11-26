@@ -21,6 +21,7 @@ import PlanStrategyPanel from './PlanStrategyPanel.jsx';
 import { ItemWorkspaceContext } from '../today/itemWorkspaceContext.js';
 import { actionOf } from '../../lib/planItemText.js';
 
+import { Button } from '@mantine/core';
 /** 항목 제목. 셸 안이면 누르면 작업 공간(할 일·자료·안내·기록)이 열린다 — 오늘 화면과 같은 창이다. */
 function ItemTitle({ item }) {
   const workspace = useContext(ItemWorkspaceContext);
@@ -132,7 +133,7 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
           </p>
           {plan.goalSummary && <p className="plan-view-goal">{plan.goalSummary}</p>}
         </div>
-        {onBack && <button type="button" className="btn-ghost btn-sm" onClick={onBack}>뒤로</button>}
+        {onBack && <Button variant="default" size="xs" type="button" onClick={onBack}>뒤로</Button>}
       </header>
 
       {/* 확정한 계획도 왜 이렇게 짰는지 다시 읽을 수 있어야 한다. 기본은 접어 둔다 — 여기서는 실행이 먼저다. */}
@@ -182,11 +183,11 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
                 {item.estimatedMinutes != null && <> · {item.estimatedMinutes}분</>}
                 {item.courseId != null && projectTitles[item.courseId] && <> · {projectTitles[item.courseId]}</>}
               </span>
-              <button type="button" className="btn-ghost btn-sm"
+              <Button variant="default" size="xs" type="button"
                 disabled={busyId === item.executionItemId}
                 onClick={() => handleUnschedule(item)}>
                 날짜 떼기
-              </button>
+              </Button>
               {/*
                 확정 이후에도 같은 근거를 본다. 확정할 때 값을 고쳤으면 그 사실이 함께
                 뜬다 — 고친 뒤에도 원래 근거만 보이면 AI가 그 값을 냈다고 오해한다.
@@ -222,10 +223,10 @@ export default function PlanView({ planVersionId, projectTitles = {}, onBack, on
         </ul>
 
         {canPlace && (
-          <button type="button" className="btn-primary" disabled={placing} onClick={handlePlace}>
+          <Button type="button" disabled={placing} onClick={handlePlace}>
             <RefreshCw size={16} />
             {placing ? '자리를 찾는 중…' : `${formatDateKo(windowStart)} ~ ${formatDateKo(windowEnd)} 배치하기`}
-          </button>
+          </Button>
         )}
         {!canPlace && unplaced.length > 0 && (
           <p className="muted">계획 기간이 지나 배치할 창이 없어요.</p>

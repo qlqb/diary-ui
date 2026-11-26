@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
+import { Button } from '@mantine/core';
 const OUTCOME_LABEL = {
   FULL: '원문 전체를 읽음',
   PARTIAL: '원문 일부를 읽음',
@@ -68,11 +69,11 @@ export default function PlanMaterialSelection({ selection, onChooseRequestedMate
         <div key={a.mention} className="plan-material-selection-ask" role="group" aria-label="자료 고르기">
           <span>「{a.mention}」이 여러 개예요. 어느 자료를 중심으로 볼까요?</span>
           {a.candidates.map((c) => (
-            <button key={c.materialId} type="button" className="btn-ghost btn-sm"
+            <Button variant="default" size="xs" key={c.materialId} type="button"
               disabled={!onChooseRequestedMaterial || busy}
               onClick={() => onChooseRequestedMaterial?.(c.materialId)}>
               {c.filename}{c.courseId ? '' : ''} (자료 {c.materialId})
-            </button>
+            </Button>
           ))}
         </div>
       ))}

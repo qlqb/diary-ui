@@ -13,11 +13,11 @@
 | `views/` 최상위 (4) | 오늘·기록 | 오늘 실행 목록 · 수행 기록·조정 이력 | `TodayView`, `RecordView` |
 | `views/today/` (4) | 오늘 | 항목 작업 공간(시작 도움·메모), 남은 오늘 다시 짜기 | `ItemWorkspace`, `ReschedulePanel` |
 | `views/classcheck/` (5) | 오늘·프로젝트 | 수업 회차 확인 카드·패널 | `TodayClassCheck`, `ClassCheckPanel` |
-| `views/materials/` (15) | 자료 | 자료함·업로드·분석 묶음·분석 현황·연결 제안 | `MaterialsView` |
+| `views/materials/` (18) | 자료 | 자료함·업로드·분석 묶음·분석 현황·연결 제안 | `MaterialsView` |
 | `views/projects/` (18) | 프로젝트 | 프로젝트 목록·작업 공간(교재·과제·학습 기억·자료 정리) | `ProjectsView`, `ProjectWorkspace` |
 | `views/learning/` (15) | 프로젝트 | 학습 지도·항목 상세·구조 편집·자료 주차·자기 점검 | `ProjectLearningMap`, `StructureEditor` |
 | `views/memory/` (2) | 프로젝트 | AI가 이해한 내 상황(user_contexts) 보기·고치기 | `MemoryView` |
-| `views/plan/` (26) | 계획 | 계획 만들기·초안 검토·말한 범위·근거·주간 미리보기·확정 계획 | `PlanCreateView`, `PlanView` |
+| `views/plan/` (30) | 계획 | 계획 만들기·초안 검토·말한 범위·근거·주간 미리보기·확정 계획 | `PlanCreateView`, `PlanView` |
 | `views/schedule/` (12) | 일정 | 주간 격자·반복 일정·예외·1회성 약속 | `ScheduleView` |
 
 합계 101 = 4 + 4 + 5 + 15 + 18 + 15 + 2 + 26 + 12. 대조: `bash scripts/check-context-layer.sh`.

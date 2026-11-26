@@ -2,9 +2,11 @@
  * 상담 작업 공간(계획 탭의 "상담으로 계획하기")의 스타일.
  *
  * 설계 기준:
- * - 1100px 이상: 세 칸(범위·자료 | 대화 | 계획 방향·초안). 가운데 대화는 늘 있던 AI 패널 그 하나가 자리만 옮긴 것이다.
- * - 700~1099px: 대화가 가운데를 다 쓰고, 옆 칸은 눌러서 여는 서랍이다.
- * - 700px 미만: 대화가 기본 화면이고 옆 칸은 아래에서 올라오는 시트다. 세 칸을 줄여 넣지 않는다.
+ * - 1100px 이상: 두 칸(대화 | 계획 방향·초안). 대화는 늘 있던 AI 패널 그 하나가 자리만 옮긴 것이다.
+ * - 범위·자료는 어느 폭에서든 칸이 아니라 대화 머리의 버튼으로 여는 서랍(700px 미만은 시트)이다.
+ *   계획을 세우는 동안 늘 볼 정보가 아니라 확인·조정할 때만 여는 정보다(2026-11-20).
+ * - 700~1099px: 대화가 가운데를 다 쓰고, 계획 미리보기도 눌러서 여는 서랍이다.
+ * - 700px 미만: 대화가 기본 화면이고 옆 칸은 아래에서 올라오는 시트다. 칸을 줄여 넣지 않는다.
  * - 상태는 색만으로 말하지 않는다. 배지에는 늘 글자가 있고, 색은 그 글자를 거들 뿐이다.
  * - 입력창·빠른 답·경고·적용 버튼은 고정 오버레이로 덮지 않는다. 100dvh 세로 flex 안에서 맨 아래 칸이거나
  *   스크롤 영역 안의 sticky다 — 모바일 키보드나 하단 탭 바에 가려지지 않게.
@@ -27,24 +29,37 @@
   box-sizing: border-box;
 }
 
-/* ===================== 세 칸 배치 (1100px 이상) ===================== */
+/* ===================== 두 칸 배치 (1100px 이상) ===================== */
 
 .shell.is-consult {
-  grid-template-columns: var(--nav-w) minmax(250px, 310px) minmax(360px, 1fr) minmax(380px, 38%);
+  grid-template-columns: var(--nav-w) minmax(360px, 1fr) minmax(420px, 46%);
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .shell.is-consult > .nav { grid-column: 1; grid-row: 1 / -1; }
-.shell.is-consult > .consult-pane-left { grid-column: 2; grid-row: 1; }
 .shell.is-consult > .ai-panel {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
   height: auto;
   min-height: 0;
-  border-right: 1px solid var(--ws-border);
 }
-.shell.is-consult > .consult-pane-right { grid-column: 4; grid-row: 1; }
-/* 본문 자리는 세 칸이 쓴다. main에는 되돌리기 안내와 적용 바만 남아 아래 줄에 선다. */
+/* 미리보기 칸은 흰 바탕 + 경계선. 예전 회색 바탕(--ws-bg)은 대화 칸과 붙어 탁해 보였다(2026-11-20 의견). */
+.shell.is-consult > .consult-pane-right {
+  grid-column: 3;
+  grid-row: 1;
+  background: var(--ws-surface);
+  border-left: 1px solid var(--ws-border);
+}
+/*
+ * 확정 바는 workspace.css에서 회색 바탕 + 같은 색 그림자(아래 여백 가리기)를 쓴다. 흰 칸·시트 안에서는
+ * 그 회색이 띠로 보이므로, 같은 장치를 흰색으로 맞춘다(지우면 여백으로 목록이 비친다).
+ */
+.consult-pane-right .plan-confirm-bar,
+.sheet-body .plan-confirm-bar {
+  background: var(--ws-surface);
+  box-shadow: 0 32px 0 0 var(--ws-surface);
+}
+/* 본문 자리는 두 칸이 쓴다. main에는 되돌리기 안내와 적용 바만 남아 아래 줄에 선다. */
 .shell.is-consult > .workspace { grid-column: 2 / -1; grid-row: 2; height: auto; }
 
 .consult-pane {
@@ -54,7 +69,6 @@
   padding: 16px 18px 24px;
   background: var(--ws-bg);
 }
-.consult-pane-left { background: var(--ws-surface); }
 
 .consult-pane-title {
   display: flex;
@@ -76,8 +90,10 @@
 .ai-panel-workspace .ai-panel-body { padding: 16px 20px; }
 .ai-panel-workspace .ai-bubble { max-width: min(640px, 88%); }
 
-/* 옆 칸 여는 버튼과 입력창 위 한 줄은 옆 칸이 접혀 있을 때만 쓴다. */
+/* 옆 칸 여는 버튼과 입력창 위 한 줄은 옆 칸이 접혀 있을 때만 쓴다. 범위·자료 버튼만은 늘 있다(서랍이라서). */
 .consult-pane-toggle { display: none; }
+.consult-pane-toggle.consult-scope-toggle { display: inline-flex; }
+.consult-scope-toggle-count { color: var(--ws-text-faint); font-weight: 500; }
 .consult-draft-notice { display: none; }
 
 /* ===================== 상태 배지 (글자 + 색) ===================== */
@@ -161,9 +177,7 @@
 .consult-question-text { margin: 0; font-size: 14.5px; font-weight: 650; line-height: 1.5; }
 .consult-question-why { margin: 0; font-size: 13px; color: var(--ws-text-dim); }
 .consult-question-choices { display: flex; flex-wrap: wrap; gap: 6px; }
-.consult-chip { min-height: 36px; cursor: pointer; border: 1px solid var(--ws-border-strong); background: var(--ws-surface); }
-.consult-chip.is-picked { border-color: var(--ws-accent); background: var(--ws-accent-soft); color: var(--ws-accent-text); font-weight: 650; }
-.consult-chip:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 1px; }
+.consult-chip { min-height: 36px; }
 .consult-question-multi { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .consult-question-escape { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 6px; border-top: 1px dashed var(--ws-border); }
 .consult-later { margin: 0; font-size: 13px; color: var(--ws-text-faint); }
@@ -334,7 +348,7 @@
   .shell.is-consult {
     grid-template-columns: var(--nav-w) minmax(0, 1fr);
   }
-  .shell.is-consult > .ai-panel { grid-column: 2; border-right: none; }
+  .shell.is-consult > .ai-panel { grid-column: 2; }
   .shell.is-consult > .workspace { grid-column: 2; }
 
   .consult-pane-toggle { display: inline-flex; }
@@ -373,7 +387,7 @@
   .ai-panel-workspace .ai-panel-head { flex-wrap: wrap; gap: 6px; }
   .ai-panel-workspace .ai-panel-body { padding: 12px 14px; }
   .ai-panel-workspace .ai-bubble { max-width: 92%; }
-  .consult-question-escape .btn-sm,
+  .consult-question-escape .mantine-Button-root,
   .consult-pane-toggle { min-height: 36px; }
 }
 
@@ -424,3 +438,10 @@
 .consult-evidence-meta { color: var(--ws-text-dim, #666); }
 .consult-evidence-reading { display: flex; align-items: center; gap: 6px; color: var(--ws-text-dim, #666); }
 .consult-chip-input { border-style: dashed; }
+
+/* ===================== 첫머리 질문(OpeningQuestions) ===================== */
+.opening-questions { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.opening-question { padding: 10px 12px; border: 1px solid var(--ws-border); border-radius: 10px; background: var(--ws-surface); }
+.opening-question-q { margin: 0 0 8px; font-size: 14px; line-height: 1.55; color: var(--ws-text); overflow-wrap: anywhere; }
+.opening-question-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.opening-question-choices .mantine-Button-root { min-height: 36px; }

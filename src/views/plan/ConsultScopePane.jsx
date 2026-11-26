@@ -17,6 +17,7 @@ import MaterialFileLink from '../../components/MaterialFileLink.jsx';
 import { TALK_STATUS_LABEL, talkStatusOf } from '../../ai/consultLabels.js';
 import { PROJECT_DISPOSITION_LABEL } from '../../lib/planLabels.js';
 
+import { Button } from '@mantine/core';
 const READ_OUTCOMES = new Set(['FULL', 'PARTIAL', 'EXCERPT_ONLY']);
 
 export default function ConsultScopePane({
@@ -110,18 +111,18 @@ export default function ConsultScopePane({
                 {used.length > 0 && <UsedSections sections={used} />}
                 <div className="consult-scope-project-actions">
                   {onOpenLearningMap && (
-                    <button type="button" className="btn-ghost btn-sm"
+                    <Button variant="default" size="xs" type="button"
                       aria-label={`${target.title} 학습 지도`}
                       onClick={() => onOpenLearningMap(target.courseId)}>
                       <MapIcon size={13} /> 학습 지도
-                    </button>
+                    </Button>
                   )}
                   {onOpenSource && (
-                    <button type="button" className="btn-ghost btn-sm"
+                    <Button variant="default" size="xs" type="button"
                       aria-label={`${target.title} 프로젝트에서 보기`}
                       onClick={() => onOpenSource('COURSE', target.courseId)}>
                       프로젝트에서 보기
-                    </button>
+                    </Button>
                   )}
                 </div>
               </li>
@@ -144,7 +145,7 @@ export default function ConsultScopePane({
 
       {onOpenManual && (
         <p className="consult-scope-foot">
-          <button type="button" className="btn-ghost btn-sm" onClick={onOpenManual}>직접 조건 정해서 만들기</button>
+          <Button variant="default" size="xs" type="button" onClick={onOpenManual}>직접 조건 정해서 만들기</Button>
         </p>
       )}
     </div>

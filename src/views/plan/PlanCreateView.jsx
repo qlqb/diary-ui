@@ -23,6 +23,7 @@ import { PLAN_INTENSITY_HINT, PLAN_INTENSITY_LABEL, PlanIntensity } from '../../
 import { addDays, daysBetween, formatMinutes, periodPresets, toIsoDate } from '../../lib/planTime.js';
 import PlanDraftReview from './PlanDraftReview.jsx';
 
+import { ActionIcon, Badge, Button, TextInput } from '@mantine/core';
 const MAX_PLAN_DAYS = 31;
 
 function newRequestKey() {
@@ -382,10 +383,10 @@ export default function PlanCreateView({
             : ' 계획 만들기'}
         </h1>
         {onOpenConsult && (
-          <button type="button" className="btn-ghost btn-sm" onClick={onOpenConsult}>상담으로 계획하기</button>
+          <Button variant="default" size="xs" type="button" onClick={onOpenConsult}>상담으로 계획하기</Button>
         )}
         {onCancel && (
-          <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>그만두기</button>
+          <Button variant="default" size="xs" type="button" onClick={onCancel}>그만두기</Button>
         )}
       </header>
 
@@ -397,10 +398,10 @@ export default function PlanCreateView({
         <p className="plan-scope">
           {projectTitles[scopeCourseId] ?? '이 프로젝트'} 항목만 제안받아요.
           {onClearScope && (
-            <button type="button" className="btn-ghost btn-sm"
+            <Button variant="default" size="xs" type="button"
               onClick={() => { onClearScope(); clearDraft(); }}>
               전체 프로젝트로
-            </button>
+            </Button>
           )}
         </p>
       )}
@@ -409,15 +410,15 @@ export default function PlanCreateView({
         <p className="plan-scope plan-requested-materials">
           이번 계획은 이 자료 중심으로 봐요:
           {requestedMaterials.map((m) => (
-            <span key={m.materialId} className="chip">
+            <Badge component="span" color="gray" key={m.materialId} className="chip">
               {m.filename}
               {onClearRequestedMaterial && (
-                <button type="button" className="icon-btn" aria-label={`${m.filename} 지정 해제`}
+                <ActionIcon variant="subtle" color="gray" type="button" aria-label={`${m.filename} 지정 해제`}
                   onClick={() => { onClearRequestedMaterial(m.materialId); clearDraft(); }}>
                   <X size={12} />
-                </button>
+                </ActionIcon>
               )}
-            </span>
+            </Badge>
           ))}
         </p>
       )}
@@ -432,21 +433,21 @@ export default function PlanCreateView({
             <span className="plan-period-label">기간</span>
             <div className="plan-period-presets">
               {presets.map((preset) => (
-                <button
+                <Button variant={startDate === preset.startDate && endDate === preset.endDate ? 'light' : 'default'} size="xs" radius="xl"
                   key={preset.key}
                   type="button"
                   className={`chip${startDate === preset.startDate && endDate === preset.endDate ? ' is-active' : ''}`}
                   onClick={() => applyPreset(preset)}
                 >
                   {preset.label}
-                </button>
+                </Button>
               ))}
             </div>
             <div className="plan-period-range">
-              <input type="date" value={startDate} max={endDate}
+              <TextInput type="date" value={startDate} max={endDate}
                 onChange={(e) => { setStartDate(e.target.value); clearDraft(); }} />
               <span>~</span>
-              <input type="date" value={endDate} min={startDate}
+              <TextInput type="date" value={endDate} min={startDate}
                 onChange={(e) => { setEndDate(e.target.value); clearDraft(); }} />
               <span className="plan-period-days">{periodValid ? `${days}일` : '기간을 다시 골라주세요'}</span>
             </div>
@@ -481,7 +482,7 @@ export default function PlanCreateView({
 
                 <label className="plan-instruction">
                   <span>덧붙일 말 (선택)</span>
-                  <input
+                  <TextInput
                     type="text"
                     value={instruction}
                     placeholder="예: 시험 전까지 자료구조 위주로, 개념부터"
@@ -493,10 +494,10 @@ export default function PlanCreateView({
           </div>
 
           {!draft && (
-            <button type="button" className="btn-primary" disabled={!periodValid || loading}
+            <Button type="button" disabled={!periodValid || loading}
               onClick={() => handleDraft()}>
               <Sparkles size={16} /> {loading ? `${stageLabel ?? '자료를 고르고 초안을 만들고 있어요'}…` : '초안 만들기'}
-            </button>
+            </Button>
           )}
         </>
       )}
@@ -515,22 +516,22 @@ export default function PlanCreateView({
         <p className="plan-toast" role="status">
           {notice.message}
           {notice.undo && (
-            <button type="button" className="btn-ghost btn-sm" disabled={loading}
+            <Button variant="default" size="xs" type="button" disabled={loading}
               onClick={() => { const undo = notice.undo; setNotice(null); undo(); }}>
               되돌리기
-            </button>
+            </Button>
           )}
         </p>
       )}
       {blocked && (
         <p className="plan-toast plan-toast-warn" role="alert">
           {blocked.message}
-          <button type="button" className="btn-ghost btn-sm" disabled={loading} onClick={blocked.retry}>초안 다시 만들기</button>
+          <Button variant="default" size="xs" type="button" disabled={loading} onClick={blocked.retry}>초안 다시 만들기</Button>
           {blocked.undo && (
-            <button type="button" className="btn-ghost btn-sm" disabled={loading}
+            <Button variant="default" size="xs" type="button" disabled={loading}
               onClick={async () => { const undo = blocked.undo; setBlocked(null); await undo(); }}>
               표시 되돌리기
-            </button>
+            </Button>
           )}
         </p>
       )}
@@ -539,10 +540,10 @@ export default function PlanCreateView({
           이번 계획에서만 뺀 항목: {excludedTopics.map((e) => e.title ?? `항목 ${e.topicId}`).join(', ')}
           {' — 다음 계획에는 다시 후보로 돌아와요.'}
           {redraftable && (
-            <button type="button" className="btn-ghost btn-sm" disabled={loading}
+            <Button variant="default" size="xs" type="button" disabled={loading}
               onClick={() => restoreExcluded(null)}>
               모두 되돌리기
-            </button>
+            </Button>
           )}
         </p>
       )}
@@ -626,11 +627,12 @@ function PurposePicker({ purpose, onSelect }) {
       <legend>이번 계획의 목적 (선택)</legend>
       <div className="plan-purpose-options">
         {PURPOSE_OPTIONS.map(([value, label]) => (
-          <button key={value} type="button" aria-pressed={purpose === value}
+          <Button key={value} type="button" aria-pressed={purpose === value} size="xs" radius="xl"
+            variant={purpose === value ? 'light' : 'default'}
             className={purpose === value ? 'chip chip-ok' : 'chip chip-status'}
             onClick={() => onSelect(purpose === value ? null : value)}>
             {label}
-          </button>
+          </Button>
         ))}
       </div>
     </fieldset>

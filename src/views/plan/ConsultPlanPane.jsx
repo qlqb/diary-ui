@@ -20,6 +20,7 @@ import { PLAN_PANE_STATE_LABEL } from '../../ai/consultLabels.js';
 import { toIsoDate } from '../../lib/planTime.js';
 import PlanDraftReview from './PlanDraftReview.jsx';
 
+import { Button } from '@mantine/core';
 export default function ConsultPlanPane({
   consultState = null, consultDraft, projectTitles = {},
   onOpenSource, onOpenSchedule, onOpenPlan, onConfirmed, onAsk, onFocusChat,
@@ -103,12 +104,12 @@ export default function ConsultPlanPane({
           <p>{applied.title ? `「${applied.title}」` : '계획'}을 적용했어요. 실제 일정에 반영됐어요.</p>
           <div className="plan-draft-actions">
             {onOpenPlan && applied.plan?.planVersionId != null && (
-              <button type="button" className="btn-primary btn-sm" onClick={() => onOpenPlan(applied.plan.planVersionId)}>
+              <Button size="xs" type="button" onClick={() => onOpenPlan(applied.plan.planVersionId)}>
                 계획 보기
-              </button>
+              </Button>
             )}
             {onOpenSchedule && (
-              <button type="button" className="btn-ghost btn-sm" onClick={onOpenSchedule}>일정에서 보기</button>
+              <Button variant="default" size="xs" type="button" onClick={onOpenSchedule}>일정에서 보기</Button>
             )}
           </div>
         </section>

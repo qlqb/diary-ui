@@ -295,7 +295,7 @@ describe('항목 카드', () => {
 
     const first = screen.getByText('have to 예약 문장 말하기').closest('li');
     expect(within(first).getByText('have to로 해야 할 일 말하기')).toBeInTheDocument();
-    const basis = within(first).getByText('목차에서 추론');
+    const basis = within(first).getByText('목차에서 추론').closest('.chip');
     expect(basis).toHaveAttribute('title', expect.stringContaining('단원 제목만 보고 추론했어요'));
     expect(within(first).getByText('AI가 만든 연습')).toBeInTheDocument();
     expect(within(first).getByText(/교재 문제가 아니에요/)).toBeInTheDocument();

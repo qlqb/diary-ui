@@ -20,6 +20,7 @@ import { EVIDENCE_STATUS_LABEL } from '../../lib/planLabels.js';
 import { evidenceCacheKey, forgetItemEvidence, getCachedEvidence, rememberEvidence } from '../../lib/evidenceCache.js';
 import PlanProvenancePanel, { EvidenceBody } from './PlanProvenance.jsx';
 
+import { Button } from '@mantine/core';
 export default function ExecutionItemEvidence({
   executionItemId, version = null, onOpenSource, label = '근거 보기', projectTitles = {},
 }) {
@@ -98,9 +99,9 @@ export default function ExecutionItemEvidence({
 
   return (
     <div className="plan-evidence">
-      <button
+      <Button variant="default" size="xs"
         type="button"
-        className="btn-ghost btn-sm plan-evidence-toggle"
+        className="plan-evidence-toggle"
         onClick={toggle}
         aria-expanded={open}
       >
@@ -108,7 +109,7 @@ export default function ExecutionItemEvidence({
         {label}
         {statusLabel && <span className="plan-evidence-flag">{statusLabel}</span>}
         {changedAfterApply && <span className="plan-evidence-flag">적용 후 바뀜</span>}
-      </button>
+      </Button>
 
       {open && (
         <div className="plan-evidence-loaded">
@@ -117,7 +118,7 @@ export default function ExecutionItemEvidence({
             <p className="error-text">
               {error}
               {' '}
-              <button type="button" className="btn-ghost btn-sm" onClick={retry}>다시 시도</button>
+              <Button variant="default" size="xs" type="button" onClick={retry}>다시 시도</Button>
             </p>
           )}
           {!loading && !error && provenance && !provenance.recorded && !item && (

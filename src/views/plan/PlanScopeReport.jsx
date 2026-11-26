@@ -8,6 +8,7 @@
 
 import '../../styles/learning-flow.css';
 import { rangeLabel, studyTimeLabel } from '../../lib/planScopeLabels.js';
+import { Badge } from '@mantine/core';
 
 const REFLECTION_LABEL = {
   ITEM: '계획에 담음',
@@ -48,7 +49,7 @@ export function StudyTimeCondition({ condition, budget }) {
   return (
     <div className="plan-scope-time" aria-label="말한 시간">
       <p>
-        <span className="chip-status">{adopted ? '말한 시간' : ambiguous ? '말한 시간 · 확인 필요' : '말한 시간 · 확인 못 함'}</span>
+        <Badge component="span" color="gray" className="chip-status">{adopted ? '말한 시간' : ambiguous ? '말한 시간 · 확인 필요' : '말한 시간 · 확인 못 함'}</Badge>
         {' '}
         {windows.length > 0 && <strong>{windows.map(rangeLabel).join(', ')}</strong>}
         {exclusions.length > 0 && (
@@ -100,13 +101,13 @@ export default function PlanScopeReport({ report }) {
     <section className="plan-scope-report" aria-label="말한 범위">
       <p className="plan-scope-head">
         <span className="plan-strategy-label">말한 범위</span>
-        {failedCheck && <span className="chip-status plan-scope-issue">검증 미통과</span>}
+        {failedCheck && <Badge component="span" color="red" className="chip-status plan-scope-issue">검증 미통과</Badge>}
       </p>
       {report.notice && <p className="plan-scope-notice">{report.notice}</p>}
       <StudyTimeCondition condition={report.timeCondition} budget={report.timeBudget} />
       {!report.timeCondition && report.studyTime && (
         <p className="plan-scope-time">
-          <span className="chip-status">말한 시간</span>
+          <Badge component="span" color="gray" className="chip-status">말한 시간</Badge>
           {' '}
           <strong>{studyTimeLabel(report.studyTime)}</strong>
           {report.studyTime.quote && <span className="view-dim"> · &ldquo;{report.studyTime.quote}&rdquo;</span>}
@@ -121,7 +122,7 @@ export default function PlanScopeReport({ report }) {
         {scopes.map((scope) => (
           <li key={scope.scopeId} className="plan-scope-item">
             <p className="plan-scope-title">
-              <span className="chip-status">{roleLabel(scope)}</span>
+              <Badge component="span" color="gray" className="chip-status">{roleLabel(scope)}</Badge>
               {' '}
               <strong>{scope.courseTitle ?? '과목 미확정'}</strong>
               {scope.boundary ? ` · ${scope.boundary}` : ''}
