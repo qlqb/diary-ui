@@ -16,6 +16,8 @@ import { useState } from 'react';
 import { Check, MapPin, Repeat, X } from 'lucide-react';
 import { formatDateShort, toHHmm } from '../lib/datetime.js';
 
+import { Badge, Button, TextInput } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 const WEEKDAYS = [
   ['MONDAY', '월'], ['TUESDAY', '화'], ['WEDNESDAY', '수'], ['THURSDAY', '목'],
   ['FRIDAY', '금'], ['SATURDAY', '토'], ['SUNDAY', '일'],
@@ -104,26 +106,26 @@ function CommitmentEditor({ draft, onChange }) {
     <div className="ai-schedule-editor">
       <label className="inline-field">
         <span>제목</span>
-        <input value={draft.title ?? ''} aria-label="약속 제목"
+        <TextInput value={draft.title ?? ''} aria-label="약속 제목"
           onChange={(e) => onChange({ ...draft, title: e.target.value })} />
       </label>
       <label className="inline-field">
         <span>시작</span>
-        <input type="date" value={start.date} aria-label="시작 날짜"
+        <TextInput type="date" value={start.date} aria-label="시작 날짜"
           onChange={(e) => push({ ...start, date: e.target.value }, end)} />
-        <input type="time" step="300" value={start.time} aria-label="시작 시각"
+        <TimeInput step="300" value={start.time} aria-label="시작 시각"
           onChange={(e) => push({ ...start, time: e.target.value }, end)} />
       </label>
       <label className="inline-field">
         <span>종료</span>
-        <input type="date" value={end.date} aria-label="종료 날짜"
+        <TextInput type="date" value={end.date} aria-label="종료 날짜"
           onChange={(e) => push(start, { ...end, date: e.target.value })} />
-        <input type="time" step="300" value={end.time} aria-label="종료 시각"
+        <TimeInput step="300" value={end.time} aria-label="종료 시각"
           onChange={(e) => push(start, { ...end, time: e.target.value })} />
       </label>
       <label className="inline-field">
         <span>장소</span>
-        <input value={draft.locationText ?? ''} placeholder="선택" aria-label="장소"
+        <TextInput value={draft.locationText ?? ''} placeholder="선택" aria-label="장소"
           onChange={(e) => onChange({ ...draft, locationText: e.target.value || null })} />
       </label>
     </div>
@@ -141,39 +143,39 @@ function RoutineEditor({ draft, onChange }) {
     <div className="ai-schedule-editor">
       <label className="inline-field">
         <span>제목</span>
-        <input value={draft.title ?? ''} aria-label="반복 일정 제목"
+        <TextInput value={draft.title ?? ''} aria-label="반복 일정 제목"
           onChange={(e) => onChange({ ...draft, title: e.target.value })} />
       </label>
       <div className="inline-field">
         <span>요일</span>
         <div className="ai-schedule-days">
           {WEEKDAYS.map(([value, label]) => (
-            <button key={value} type="button"
+            <Button variant={days.includes(value) ? 'light' : 'default'} size="xs" radius="xl" key={value} type="button"
               className={`chip-toggle${days.includes(value) ? ' is-on' : ''}`}
               aria-pressed={days.includes(value)}
               onClick={() => toggleDay(value)}>
               {label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
       <label className="inline-field">
         <span>시간</span>
-        <input type="time" step="300" value={draft.startTime ?? ''} aria-label="시작 시각"
+        <TimeInput step="300" value={draft.startTime ?? ''} aria-label="시작 시각"
           onChange={(e) => onChange({ ...draft, startTime: e.target.value })} />
-        <input type="time" step="300" value={draft.endTime ?? ''} aria-label="종료 시각"
+        <TimeInput step="300" value={draft.endTime ?? ''} aria-label="종료 시각"
           onChange={(e) => onChange({ ...draft, endTime: e.target.value })} />
       </label>
       <label className="inline-field">
         <span>적용</span>
-        <input type="date" value={draft.effectiveFrom ?? ''} aria-label="적용 시작일"
+        <TextInput type="date" value={draft.effectiveFrom ?? ''} aria-label="적용 시작일"
           onChange={(e) => onChange({ ...draft, effectiveFrom: e.target.value })} />
-        <input type="date" value={draft.effectiveUntil ?? ''} aria-label="적용 종료일"
+        <TextInput type="date" value={draft.effectiveUntil ?? ''} aria-label="적용 종료일"
           onChange={(e) => onChange({ ...draft, effectiveUntil: e.target.value || null })} />
       </label>
       <label className="inline-field">
         <span>장소</span>
-        <input value={draft.location ?? ''} placeholder="선택" aria-label="장소"
+        <TextInput value={draft.location ?? ''} placeholder="선택" aria-label="장소"
           onChange={(e) => onChange({ ...draft, location: e.target.value || null })} />
       </label>
     </div>
@@ -225,7 +227,7 @@ export default function ScheduleSuggestionCard({ suggestion, state, onApply, onD
     <div className="ai-schedule-card">
       <div className="ai-schedule-head">
         <span className="ai-schedule-title">{draft.title}</span>
-        <span className="chip chip-block"><Icon size={11} /> {kind.label}</span>
+        <Badge component="span" color="gray" className="chip chip-block"><Icon size={11} /> {kind.label}</Badge>
       </div>
 
       {/* 요약은 접힌 상태에서도 무엇이 저장될지 다 말한다. */}
@@ -257,18 +259,18 @@ export default function ScheduleSuggestionCard({ suggestion, state, onApply, onD
       {state?.status === 'error' && <p className="ai-error">{state.message}</p>}
 
       <div className="ai-schedule-actions">
-        <button type="button" className="btn-primary btn-sm" disabled={working || !applicable}
+        <Button size="xs" type="button" disabled={working || !applicable}
           onClick={() => onApply(suggestion.suggestionId, draft)}>
           <Check size={13} /> 적용
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={working}
+        </Button>
+        <Button variant="default" size="xs" type="button" disabled={working}
           onClick={() => setEditing((v) => !v)}>
           수정
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={working}
+        </Button>
+        <Button variant="default" size="xs" type="button" disabled={working}
           onClick={() => onDismiss(suggestion.suggestionId)}>
           <X size={13} /> 적용 안 함
-        </button>
+        </Button>
       </div>
     </div>
   );

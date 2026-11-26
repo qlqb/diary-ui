@@ -142,21 +142,28 @@ describe('AiPanel — 이미지에서 일정 가져오기', () => {
     expect(textarea).toHaveValue('내일 세 시에 약속');
   });
 
-  it('확정하면 후보 카드가 뜨고 다이얼로그가 닫힌다', async () => {
+  it('확정하면 고른 칸이 한 번의 요청으로 바로 적용되고 다이얼로그가 닫힌다', async () => {
     const user = userEvent.setup();
+    const onScheduleApplied = vi.fn();
     conversationAPI.create.mockResolvedValue({ conversationId: 9 });
     scheduleImportAPI.extract.mockResolvedValue(EXTRACTION);
-    scheduleImportAPI.confirm.mockResolvedValue([suggestion(1), suggestion(2)]);
+    scheduleImportAPI.confirm.mockResolvedValue([suggestion(1)]);
+    scheduleSuggestionAPI.applyBatch.mockResolvedValue([]);
 
-    render(<AiPanel scope={SCOPE} />);
+    render(<AiPanel scope={SCOPE} onScheduleApplied={onScheduleApplied} />);
     await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
     await user.upload(document.querySelector('input[type="file"]'), imageFile());
     await screen.findByRole('dialog');
 
-    await user.click(screen.getByRole('button', { name: '가져오기' }));
+    await user.click(screen.getByRole('button', { name: '1개 일정 추가' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByText('일정 후보 2개')).toBeInTheDocument();
+    await waitFor(() => expect(scheduleSuggestionAPI.applyBatch).toHaveBeenCalledWith([1]));
+    expect(scheduleSuggestionAPI.apply).not.toHaveBeenCalled();
+    expect(scheduleSuggestionAPI.dismiss).not.toHaveBeenCalled();
+    await waitFor(() => expect(onScheduleApplied).toHaveBeenCalled());
+    // 잘 들어간 후보는 패널에 카드로 남기지 않는다.
+    expect(screen.queryByText('일정에 넣었어요.')).not.toBeInTheDocument();
     // 확정 요청에는 표 원문만 실린다.
     const [, body] = scheduleImportAPI.confirm.mock.calls[0];
     expect(body.raw).toEqual(EXTRACTION.raw);

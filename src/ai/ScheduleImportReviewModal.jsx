@@ -13,12 +13,16 @@
  *
  * 전체 목록을 늘 보여준다. 서버가 이름으로 한 줄을 미리 골라 두지만 그것은 선택일 뿐이고,
  * 근무표의 실명과 로그인 표시명은 다를 수 있다. 잘못 고르면 남의 근무가 내 달력에 들어온다.
+ *
+ * 근무 칸마다 체크를 두고, [추가]를 누르면 체크한 칸만 바로 달력에 들어간다(패널에서 후보를
+ * 하나씩 다시 적용하지 않는다). 기본은 전부 체크다.
  */
 
 import { useMemo, useState } from 'react';
 import { CalendarDays, Loader2, X } from 'lucide-react';
 import { formatDateShort } from '../lib/datetime.js';
 
+import { Button, Checkbox, NativeSelect, TextInput } from '@mantine/core';
 const WEEKDAY_LABEL = ['월', '화', '수', '목', '금', '토', '일'];
 
 /** 서버가 준 날짜 문자열의 요일. Date 파싱은 여기서만 하고 시각 계산은 하지 않는다. */
@@ -39,7 +43,7 @@ export default function ScheduleImportReviewModal({
   extraction, conversationId, onCancel, onConfirm,
 }) {
   const rows = extraction?.rows ?? [];
-  const [rowIndex, setRowIndex] = useState(
+  const [rowIndex, setRowIndexRaw] = useState(
     extraction?.matchedRowIndex ?? (rows.length === 1 ? 0 : null),
   );
   const [startDate, setStartDate] = useState(extraction?.resolvedPeriod?.startDate ?? '');
@@ -47,6 +51,14 @@ export default function ScheduleImportReviewModal({
   const [legendOverrides, setLegendOverrides] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  /** 체크를 푼 칸(첫 칸으로부터 며칠째인지). 줄을 바꾸면 다시 전부 체크로 돌아간다. */
+  const [skipped, setSkipped] = useState(() => new Set());
+  const setRowIndex = (value) => { setRowIndexRaw(value); setSkipped(new Set()); };
+  const toggleSkip = (i) => setSkipped((prev) => {
+    const next = new Set(prev);
+    if (next.has(i)) next.delete(i); else next.add(i);
+    return next;
+  });
 
   const selected = rowIndex == null ? null : rows[rowIndex];
 
@@ -57,13 +69,21 @@ export default function ScheduleImportReviewModal({
   const askingCodes = useMemo(() => {
     if (!selected || selected.rowInvalid) return [];
     return [...new Set(
-      selected.cells.filter((c) => c.kind === 'UNRESOLVED').map((c) => c.raw).filter(Boolean),
+      selected.cells.filter((c, i) => c.kind === 'UNRESOLVED' && !skipped.has(i))
+        .map((c) => c.raw).filter(Boolean),
     )];
-  }, [selected]);
+  }, [selected, skipped]);
+
+  /** 체크한 근무 칸의 위치. 휴무 칸은 넣을 것이 없으니 고를 수 없다. */
+  const selectedOffsets = useMemo(() => {
+    if (!selected || selected.rowInvalid) return [];
+    return selected.cells.map((c, i) => (c.kind !== 'OFF' && !skipped.has(i) ? i : null))
+      .filter((i) => i != null);
+  }, [selected, skipped]);
 
   const answered = askingCodes.every((code) => (legendOverrides[code] ?? '').trim());
   const canSubmit = selected && !selected.rowInvalid && startDate && title.trim()
-    && answered && !submitting;
+    && answered && selectedOffsets.length > 0 && !submitting;
 
   const submit = async () => {
     setSubmitting(true);
@@ -76,6 +96,7 @@ export default function ScheduleImportReviewModal({
         rowIndex,
         periodStartDate: startDate,
         title: title.trim(),
+        selectedOffsets,
         legendOverrides: Object.fromEntries(
           askingCodes.map((code) => [code, legendOverrides[code].trim()]),
         ),
@@ -92,9 +113,9 @@ export default function ScheduleImportReviewModal({
       <div className="schedule-import-modal">
         <div className="schedule-import-head">
           <h3><CalendarDays size={15} /> 표에서 읽은 내용</h3>
-          <button type="button" className="btn-ghost btn-sm" onClick={onCancel} aria-label="닫기">
+          <Button variant="default" size="xs" type="button" onClick={onCancel} aria-label="닫기">
             <X size={14} />
-          </button>
+          </Button>
         </div>
 
         {extraction?.raw?.title && (
@@ -103,7 +124,7 @@ export default function ScheduleImportReviewModal({
 
         <label className="inline-field">
           <span>어느 줄이 나인가요</span>
-          <select
+          <NativeSelect
             aria-label="내 줄"
             value={rowIndex ?? ''}
             onChange={(e) => setRowIndex(e.target.value === '' ? null : Number(e.target.value))}
@@ -114,12 +135,12 @@ export default function ScheduleImportReviewModal({
                 {row.name || `${row.index + 1}번째 줄`}{row.tag ? ` · ${row.tag}` : ''}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
 
         <label className="inline-field">
           <span>첫 칸의 날짜</span>
-          <input type="date" aria-label="첫 칸의 날짜" value={startDate}
+          <TextInput type="date" aria-label="첫 칸의 날짜" value={startDate}
             onChange={(e) => setStartDate(e.target.value)} />
         </label>
         {extraction?.periodWeekdayMismatch && (
@@ -133,7 +154,7 @@ export default function ScheduleImportReviewModal({
 
         <label className="inline-field">
           <span>일정 이름</span>
-          <input aria-label="일정 이름" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <TextInput aria-label="일정 이름" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
 
         {askingCodes.length > 0 && (
@@ -144,7 +165,7 @@ export default function ScheduleImportReviewModal({
             {askingCodes.map((code) => (
               <label key={code} className="inline-field">
                 <span>{code}</span>
-                <input
+                <TextInput
                   aria-label={`${code} 시간`}
                   placeholder="예: 10~15"
                   value={legendOverrides[code] ?? ''}
@@ -157,26 +178,36 @@ export default function ScheduleImportReviewModal({
 
         {selected && !selected.rowInvalid && (
           <ul className="schedule-import-preview">
-            {selected.cells.map((cell, i) => (
-              <li key={cell.date ?? i} className={cell.kind === 'OFF' ? 'is-off' : ''}>
-                <span className="schedule-import-day">
-                  {cell.date ? `${formatDateShort(cell.date)} (${weekdayOf(cell.date)})` : '—'}
-                </span>
-                <span>{cellText(cell)}</span>
-              </li>
-            ))}
+            {selected.cells.map((cell, i) => {
+              const off = cell.kind === 'OFF';
+              const day = cell.date ? `${formatDateShort(cell.date)} (${weekdayOf(cell.date)})` : '—';
+              return (
+                <li key={cell.date ?? i} className={off || skipped.has(i) ? 'is-off' : ''}>
+                  {off ? (
+                    <span className="schedule-import-day schedule-import-day-off">{day}</span>
+                  ) : (
+                    <Checkbox size="xs" className="schedule-import-day" label={day}
+                      aria-label={`${day} 넣기`}
+                      checked={!skipped.has(i)} disabled={submitting}
+                      onChange={() => toggleSkip(i)} />
+                  )}
+                  <span>{cellText(cell)}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
 
         {error && <p className="ai-error">{error}</p>}
 
         <div className="schedule-import-actions">
-          <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={submitting}>
+          <Button variant="default" size="xs" type="button" onClick={onCancel} disabled={submitting}>
             나중에 하기
-          </button>
-          <button type="button" className="btn-ghost btn-sm" onClick={submit} disabled={!canSubmit}>
-            {submitting ? <Loader2 size={13} className="spin" /> : null} 가져오기
-          </button>
+          </Button>
+          <Button variant="default" size="xs" type="button" onClick={submit} disabled={!canSubmit}>
+            {submitting ? <Loader2 size={13} className="spin" /> : null}
+            {selectedOffsets.length > 0 ? ` ${selectedOffsets.length}개 일정 추가` : ' 추가'}
+          </Button>
         </div>
       </div>
     </div>

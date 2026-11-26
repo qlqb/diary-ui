@@ -14,6 +14,7 @@ import { Loader2 } from 'lucide-react';
 import { UNDERSTANDING_EVIDENCE_LABEL } from './consultLabels.js';
 import { FACT_KIND_LABEL } from '../lib/studyLabels.js';
 
+import { Button, Textarea } from '@mantine/core';
 export default function ConsultUnderstandingCard({ lines = [], onEdit, onRestate }) {
   const [editingId, setEditingId] = useState(null);
   const [text, setText] = useState('');
@@ -57,17 +58,17 @@ export default function ConsultUnderstandingCard({ lines = [], onEdit, onRestate
             <li key={line.id} className="consult-understanding-line">
               {editing ? (
                 <div className="consult-understanding-edit">
-                  <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)}
+                  <Textarea rows={2} value={text} onChange={(e) => setText(e.target.value)}
                     aria-label="고친 내용" />
                   <span className="consult-understanding-actions">
-                    <button type="button" className="btn-ghost btn-sm" onClick={() => setEditingId(null)}
+                    <Button variant="default" size="xs" type="button" onClick={() => setEditingId(null)}
                       disabled={lineState?.status === 'saving'}>
                       그대로 두기
-                    </button>
-                    <button type="button" className="btn-primary btn-sm" onClick={() => save(line)}
+                    </Button>
+                    <Button size="xs" type="button" onClick={() => save(line)}
                       disabled={lineState?.status === 'saving' || !text.trim()}>
                       {lineState?.status === 'saving' ? <Loader2 size={13} className="spin" /> : null} 이렇게 고치기
-                    </button>
+                    </Button>
                   </span>
                 </div>
               ) : (
@@ -84,9 +85,9 @@ export default function ConsultUnderstandingCard({ lines = [], onEdit, onRestate
                     {line.scopeLabel ? ` · ${line.scopeLabel}` : ''}
                     {line.isNew && lineState?.status !== 'fixed' ? ' · 이번에 새로 이해함' : ''}
                   </span>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => startEdit(line)}>
+                  <Button variant="default" size="xs" type="button" onClick={() => startEdit(line)}>
                     조금 달라요
-                  </button>
+                  </Button>
                   {lineState?.status === 'fixed' && (
                     <span className="consult-understanding-fixed" role="status">고쳤어요</span>
                   )}

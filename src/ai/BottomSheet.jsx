@@ -15,6 +15,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 
+import { ActionIcon } from '@mantine/core';
 export default function BottomSheet({
   open, title, onClose, children, placement = 'bottom', keepMounted = false, footer = null,
 }) {
@@ -57,9 +58,9 @@ export default function BottomSheet({
       >
         <header className="sheet-head">
           <h2 id={titleId} className="sheet-title">{title}</h2>
-          <button type="button" className="icon-btn" aria-label="닫기" onClick={onClose}>
+          <ActionIcon variant="subtle" color="gray" type="button" aria-label="닫기" onClick={onClose}>
             <X size={16} />
-          </button>
+          </ActionIcon>
         </header>
         <div className="sheet-body">{children}</div>
         {footer && <footer className="sheet-foot">{footer}</footer>}

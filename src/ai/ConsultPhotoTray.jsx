@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Loader2, RotateCcw, X } from 'lucide-react';
 import { photoTopicText } from '../lib/studyLabels.js';
 
+import { Badge, Button, NativeSelect } from '@mantine/core';
 const STATUS_TEXT = {
   UPLOADING: '글자를 읽는 중…',
   UNREADABLE: '교재 글자를 찾지 못했어요. 더 밝게, 글자가 크게 보이게 찍어 주세요.',
@@ -10,7 +11,7 @@ const STATUS_TEXT = {
 
 function TopicPicker({ photo, onPick, autoFocus }) {
   return (
-    <select
+    <NativeSelect
       className="ai-photo-topic-select"
       aria-label="이 사진의 단원"
       autoFocus={autoFocus}
@@ -21,7 +22,7 @@ function TopicPicker({ photo, onPick, autoFocus }) {
       {(photo.topics ?? []).map((t) => (
         <option key={t.topicId} value={t.topicId}>{photoTopicText(t)}</option>
       ))}
-    </select>
+    </NativeSelect>
   );
 }
 
@@ -36,14 +37,14 @@ function PhotoTopic({ photo, onPick }) {
   const guessed = photo.link === 'GUESSED';
   return (
     <span className="ai-photo-topic">
-      <span className={`chip ${guessed ? 'chip-warn' : 'chip-status'}`}
+      <Badge component="span" color={guessed ? 'orange' : 'gray'} className={`chip ${guessed ? 'chip-warn' : 'chip-status'}`}
             title={guessed ? '쪽 번호·단원 제목으로 추정했어요. 맞는지 확인해 주세요.' : '확인한 단원'}>
         {photoTopicText(photo.topic)}{guessed ? ' · 추정' : ''}
-      </span>
+      </Badge>
       {guessed && (
-        <button type="button" className="btn-ghost btn-sm" onClick={() => onPick(photo.topic.topicId)}>맞아요</button>
+        <Button variant="default" size="xs" type="button" onClick={() => onPick(photo.topic.topicId)}>맞아요</Button>
       )}
-      <button type="button" className="btn-ghost btn-sm" onClick={() => setChanging(true)}>바꾸기</button>
+      <Button variant="default" size="xs" type="button" onClick={() => setChanging(true)}>바꾸기</Button>
     </span>
   );
 }
@@ -85,20 +86,20 @@ export default function ConsultPhotoTray({ items, notice, onRetry, onRemove, onT
                 )}
                 {read && it.error && <p className="ai-error">{it.error}</p>}
                 {(it.status === 'FAILED' || it.status === 'ERROR' || it.status === 'UNREADABLE') && (
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => onRetry(it.localId)}>
+                  <Button variant="default" size="xs" type="button" onClick={() => onRetry(it.localId)}>
                     <RotateCcw size={12} aria-hidden="true" /> 다시
-                  </button>
+                  </Button>
                 )}
               </div>
-              <button
+              <Button variant="default"
                 type="button"
-                className="btn-ghost ai-photo-remove"
+                className="ai-photo-remove"
                 onClick={() => onRemove(it.localId)}
                 aria-label={`사진 ${i + 1} 빼기`}
                 disabled={it.status === 'UPLOADING'}
               >
                 <X size={14} aria-hidden="true" />
-              </button>
+              </Button>
             </li>
           );
         })}

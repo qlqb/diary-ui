@@ -22,7 +22,7 @@ vi.mock('../api/api.js', () => ({
   },
   proposalAPI: { get: vi.fn() },
   contextSuggestionAPI: { apply: vi.fn(), dismiss: vi.fn() },
-  consultContextAPI: { update: vi.fn() },
+  consultContextAPI: { update: vi.fn(), openingQuestions: vi.fn() },
   planAPI: { loadDraft: vi.fn() },
 }));
 
@@ -67,6 +67,7 @@ beforeEach(() => {
   conversationAPI.create.mockResolvedValue({ conversationId: 1 });
   conversationAPI.getContextSuggestions.mockResolvedValue([]);
   conversationAPI.getScheduleSuggestions.mockResolvedValue([]);
+  consultContextAPI.openingQuestions.mockResolvedValue([]);
 });
 
 describe('질문 카드', () => {
@@ -423,5 +424,114 @@ describe('보내지 않은 입력', () => {
     render(<AiPanel scope={SCOPE} variant="workspace" />);
     await waitFor(() => expect(conversationAPI.list).toHaveBeenCalledTimes(2));
     expect(screen.getByRole('textbox')).toHaveValue('');
+  });
+});
+
+describe('범위·자료 서랍 버튼', () => {
+  it('상담 작업 공간에서는 늘 있고, 초안이 읽은 자료 수를 붙인다', async () => {
+    const onOpenScopePane = vi.fn();
+    const user = userEvent.setup();
+    render(<AiPanel scope={SCOPE} variant="workspace" onOpenScopePane={onOpenScopePane} scopeSectionCount={3} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    const button = screen.getByRole('button', { name: /범위·자료/ });
+    expect(button).toHaveClass('consult-scope-toggle');
+    expect(button).toHaveTextContent('자료 3개');
+    await user.click(button);
+    expect(onOpenScopePane).toHaveBeenCalledTimes(1);
+  });
+
+  it('읽은 자료가 없으면 수를 붙이지 않는다', async () => {
+    render(<AiPanel scope={SCOPE} variant="workspace" onOpenScopePane={() => {}} />);
+    await waitFor(() => expect(conversationAPI.list).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: /범위·자료/ })).not.toHaveTextContent(/자료 \d+개/);
+  });
+});
+
+describe('첫머리 질문', () => {
+  const OPENING = [
+    {
+      id: 'overlap:1:2', kind: 'OVERLAP', question: '11/19(목)에 약속 「치과」 14:30~15:30과 반복 일정 「빅데이터」 13:00~15:45이 겹쳐요. 그날은 어떻게 하실 건가요?',
+      choices: [
+        { label: '약속 쪽으로 갈게요', message: '「치과」 약속과 「빅데이터」 일정이 겹치는데, 그날은 약속 쪽으로 갈게요.' },
+        { label: '아직 몰라요', message: '아직 어느 쪽으로 갈지 몰라요.' },
+      ],
+    },
+    {
+      id: 'study-time', kind: 'STUDY_TIME', question: '오늘부터 11/25(수)까지 비어 있는 시간은 약 33시간이에요. 그중 공부에 쓰고 싶은 만큼은요?',
+      choices: [{ label: '5시간쯤', message: '이번 주는 공부에 5시간쯤 쓰고 싶어요.' }, { label: '직접 말할게요', message: null }],
+    },
+  ];
+
+  it('대화가 비어 있으면 데이터에서 나온 질문을 보이고, 고른 답을 한 문장으로 입력창에 모은다(보내지 않는다)', async () => {
+    consultContextAPI.openingQuestions.mockResolvedValue(OPENING);
+    const user = userEvent.setup();
+    render(<AiPanel scope={SCOPE} variant="workspace" />);
+
+    expect(await screen.findByText(/약속 「치과」 14:30~15:30과/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '약속 쪽으로 갈게요' }));
+    await user.click(screen.getByRole('button', { name: '5시간쯤' }));
+
+    expect(screen.getByRole('textbox')).toHaveValue(
+      '「치과」 약속과 「빅데이터」 일정이 겹치는데, 그날은 약속 쪽으로 갈게요. 이번 주는 공부에 5시간쯤 쓰고 싶어요.');
+    expect(conversationAPI.sendMessage).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '약속 쪽으로 갈게요' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('같은 답을 다시 누르면 그 답을 뺀다', async () => {
+    consultContextAPI.openingQuestions.mockResolvedValue(OPENING);
+    const user = userEvent.setup();
+    render(<AiPanel scope={SCOPE} variant="workspace" />);
+    await user.click(await screen.findByRole('button', { name: '5시간쯤' }));
+    await user.click(screen.getByRole('button', { name: '5시간쯤' }));
+    expect(screen.getByRole('textbox')).toHaveValue('');
+  });
+
+  it('"직접 말할게요"는 입력창만 열고 안내를 자리표시 글로 보인다', async () => {
+    consultContextAPI.openingQuestions.mockResolvedValue(OPENING);
+    const user = userEvent.setup();
+    render(<AiPanel scope={SCOPE} variant="workspace" />);
+    await user.click(await screen.findByRole('button', { name: '직접 말할게요' }));
+    expect(screen.getByRole('textbox')).toHaveValue('');
+    expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', expect.stringContaining('8시간쯤'));
+  });
+
+  it('입력창에서 고쳐 쓴 글은 다음 답을 골라도 지우지 않는다', async () => {
+    consultContextAPI.openingQuestions.mockResolvedValue(OPENING);
+    const user = userEvent.setup();
+    render(<AiPanel scope={SCOPE} variant="workspace" />);
+    await user.click(await screen.findByRole('button', { name: '약속 쪽으로 갈게요' }));
+    await user.type(screen.getByRole('textbox'), ' 오전엔 피곤해.');
+    await user.click(screen.getByRole('button', { name: '5시간쯤' }));
+
+    expect(screen.getByRole('textbox')).toHaveValue(
+      '「치과」 약속과 「빅데이터」 일정이 겹치는데, 그날은 약속 쪽으로 갈게요. 이번 주는 공부에 5시간쯤 쓰고 싶어요. 오전엔 피곤해.');
+  });
+
+  it('고쳐 쓴 글 안에 같은 질문의 예전 답이 남아 있으면 그 부분만 새 답으로 바꾼다', async () => {
+    consultContextAPI.openingQuestions.mockResolvedValue(OPENING);
+    const user = userEvent.setup();
+    render(<AiPanel scope={SCOPE} variant="workspace" />);
+    await user.click(await screen.findByRole('button', { name: '약속 쪽으로 갈게요' }));
+    const box = screen.getByRole('textbox');
+    await user.clear(box);
+    await user.type(box, '목요일 얘기부터. 「치과」 약속과 「빅데이터」 일정이 겹치는데, 그날은 약속 쪽으로 갈게요.');
+    await user.click(screen.getByRole('button', { name: '아직 몰라요' }));
+    expect(box).toHaveValue('목요일 얘기부터. 아직 어느 쪽으로 갈지 몰라요.');
+  });
+
+  it('"직접 말할게요"를 누르면 그 질문에 골라 둔 답을 푼다', async () => {
+    consultContextAPI.openingQuestions.mockResolvedValue(OPENING);
+    const user = userEvent.setup();
+    render(<AiPanel scope={SCOPE} variant="workspace" />);
+    await user.click(await screen.findByRole('button', { name: '5시간쯤' }));
+    await user.click(screen.getByRole('button', { name: '직접 말할게요' }));
+    expect(screen.getByRole('button', { name: '5시간쯤' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('textbox')).toHaveValue('');
+  });
+
+  it('질문이 없거나 못 읽으면 예전처럼 추천 문구를 보인다', async () => {
+    consultContextAPI.openingQuestions.mockRejectedValue(new Error('x'));
+    render(<AiPanel scope={SCOPE} variant="workspace" />);
+    expect(await screen.findByText('편하게 이야기해 주세요.')).toBeInTheDocument();
   });
 });

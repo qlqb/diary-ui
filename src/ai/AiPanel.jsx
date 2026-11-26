@@ -25,6 +25,7 @@ import {
   consultContextAPI, consultPhotoAPI, materialStoreAPI,
 } from '../api/api.js';
 import ConsultPhotoTray from './ConsultPhotoTray.jsx';
+import OpeningQuestions from './OpeningQuestions.jsx';
 import { photoTopicText } from '../lib/studyLabels.js';
 import { useConsultPhotos } from './useConsultPhotos.js';
 import { shrinkImageToFit } from '../lib/shrinkImage.js';
@@ -39,6 +40,7 @@ import { planStageLabel } from './consultLabels.js';
 import { isDismissed } from './dismissedDrafts.js';
 import { PLAN_INTENSITY_LABEL } from '../types/execution.js';
 
+import { ActionIcon, Badge, Button, Textarea } from '@mantine/core';
 /** 화면별 추천 질문. 지금 이 화면에서 실제로 할 수 있는 것만 보여준다. */
 const SUGGESTED_PROMPTS = {
   today: ['지금부터 뭐부터 하면 좋을까?', '오늘 너무 피곤해. 남은 걸 줄여줘'],
@@ -148,7 +150,10 @@ export default function AiPanel({
   onMemoryChanged,
   /** 좁은 화면에서 입력창 위에 늘 보이는 한 줄(포함·빠진 프로젝트, 가정 여부). 누르면 미리보기가 열린다. */
   draftNotice = null,
+  /** 범위·자료 서랍을 연다. 상담 작업 공간에서는 화면 폭과 상관없이 늘 있다(범위·자료는 칸이 아니라 서랍이다). */
   onOpenScopePane,
+  /** 이번 초안이 읽은 자료 구간 수. 0이면 버튼에 수를 붙이지 않는다. */
+  scopeSectionCount = 0,
   onOpenPreviewPane,
   /** "AI가 이해한 내 상황" 화면을 연다. 이 대화가 들고 들어가는 나에 대한 이해를 보고 고치는 곳이다. */
   onOpenMemory,
@@ -900,13 +905,42 @@ export default function AiPanel({
     handleImageChosen(file);
   }, [handleImageChosen, coursePhotos]);
 
-  const handleImportConfirm = async ({ conversationId, ...body }) => {
+  /**
+   * 표 검토 창에서 고른 칸만 바로 달력에 넣는다.
+   *
+   * 서버는 근무 칸마다 후보를 만들어 돌려준다. 그중 고른 날짜(첫 칸으로부터 며칠째인지)의
+   * 후보는 일괄 적용하고, 고르지 않은 것은 적용 안 함으로 닫는다 — 패널에 후보 카드를
+   * 다시 하나씩 누르게 하지 않는다.
+   *
+   * 적용된 후보는 패널에 카드로 띄우지 않는다. 일괄 적용이 실패하면 창을 닫고 후보 카드로 남긴다. 창에서 다시 [추가]를 누르면 후보가
+   * 두 벌 생기기 때문이다.
+   */
+  const handleImportConfirm = async ({ conversationId, selectedOffsets, ...body }) => {
     const created = await scheduleImportAPI.confirm(conversationId, {
       idempotencyKey: crypto.randomUUID(),
       ...body,
     });
+    const base = Date.parse(`${body.periodStartDate}T00:00:00Z`);
+    const offsetOf = (s) => {
+      const day = String(s.payload?.startAt ?? '').slice(0, 10);
+      return Math.round((Date.parse(`${day}T00:00:00Z`) - base) / 86400000);
+    };
+    const chosen = new Set(selectedOffsets ?? []);
+    const applying = created.filter((s) => chosen.has(offsetOf(s)));
+    const toDismiss = created.filter((s) => !chosen.has(offsetOf(s))).map((s) => s.suggestionId);
+
     setExtraction(null);
-    setScheduleSuggestions((prev) => [...prev, ...created]);
+    await Promise.allSettled(toDismiss.map((id) => scheduleSuggestionAPI.dismiss(id)));
+    if (applying.length === 0) return;
+
+    // 잘 들어가면 패널에 카드를 남기지 않는다 — 달력에 이미 보인다. 실패했을 때만 카드로 남긴다.
+    try {
+      await scheduleSuggestionAPI.applyBatch(applying.map((s) => s.suggestionId));
+      await onScheduleApplied?.();
+    } catch (err) {
+      setScheduleSuggestions((prev) => [...prev, ...applying]);
+      setBatchState({ status: 'error', message: err.message || '조금 뒤에 다시 시도해 주세요.' });
+    }
   };
 
   /**
@@ -964,6 +998,40 @@ export default function AiPanel({
   }, [onConsultState, activeConversationId, scope.courseId, hasMessages, consultDirection, consultUnderstanding,
     periodPlanStage, sending]);
 
+  /*
+   * 계획 상담 첫머리 질문(OpeningQuestions 머리말). 대화가 비어 있을 때만 쓰고, 못 읽으면 예전처럼 추천 문구를 보인다.
+   * 범위(전체·과목)가 바뀌면 다시 읽는다.
+   */
+  // 질문은 어느 범위에서 받은 것인지와 함께 둔다 — 범위를 바꾼 직후 새 응답이 오기 전에 이전 범위의 질문을 보이지 않게.
+  const [opening, setOpening] = useState({ key: null, list: [] });
+  const wantsOpening = workspace && scope.kind === 'consult' && !hasMessages;
+  useEffect(() => {
+    // consultContextAPI를 부분만 모킹한 테스트에서도 죽지 않게 메서드가 있을 때만 부른다.
+    if (!wantsOpening || !consultContextAPI?.openingQuestions) return undefined;
+    let cancelled = false;
+    const key = scopeKey;
+    Promise.resolve().then(() => consultContextAPI.openingQuestions())
+      .then((list) => { if (!cancelled) setOpening({ key, list: Array.isArray(list) ? list : [] }); })
+      .catch(() => { if (!cancelled) setOpening({ key, list: [] }); });
+    return () => { cancelled = true; };
+  }, [wantsOpening, scopeKey]);
+  const openingQuestions = wantsOpening && opening.key === scopeKey ? opening.list : [];
+  /*
+   * 고른 답을 입력창에 모은다. 사용자가 입력창에서 고친 글은 지우지 않는다: 입력창이 비었거나 직전에 모은 문장
+   * 그대로면 새 문장으로 바꾸고, 직전 문장으로 시작하면 그 앞부분만 바꾸고 뒤에 쓴 글은 두며, 완전히 고쳐 썼으면
+   * 새로 고른 답만 뒤에 붙인다. 다만 같은 질문의 예전 답 문장이 고친 글 안에 그대로 남아 있으면 그 부분만 새 답으로
+   * 바꾼다(빼면 지운다) — 서로 다른 두 답이 함께 보내지지 않게.
+   */
+  const composeOpening = useCallback(({ text, previous, added, removed }) => {
+    const current = inputText;
+    let next;
+    if (!current.trim() || current === previous) next = text;
+    else if (previous && current.startsWith(previous)) next = `${text}${current.slice(previous.length)}`;
+    else if (removed && current.includes(removed)) next = current.replace(removed, added ?? '').replace(/\s{2,}/g, ' ').trim();
+    else next = added ? `${current.trimEnd()} ${added}` : current;
+    typeInput(next);
+  }, [inputText, typeInput]);
+
   const prompts = SUGGESTED_PROMPTS[scope.kind] ?? SUGGESTED_PROMPTS.all;
   const visibleMessages = messages.filter((m) => m.role !== 'ASSISTANT' || m.streaming || m.content);
 
@@ -977,32 +1045,33 @@ export default function AiPanel({
             보이므로 CSS가 이 버튼들을 숨긴다.
           */}
           {workspace && onOpenScopePane && (
-            <button type="button" className="btn-ghost btn-sm consult-pane-toggle" onClick={onOpenScopePane}>
+            <Button variant="default" size="xs" type="button" className="consult-pane-toggle consult-scope-toggle" onClick={onOpenScopePane}>
               <FolderOpen size={14} /> 범위·자료
-            </button>
+              {scopeSectionCount > 0 && <span className="consult-scope-toggle-count">· 자료 {scopeSectionCount}개</span>}
+            </Button>
           )}
           {workspace && onOpenPreviewPane && (
-            <button type="button" className="btn-ghost btn-sm consult-pane-toggle" onClick={onOpenPreviewPane}>
+            <Button variant="default" size="xs" type="button" className="consult-pane-toggle" onClick={onOpenPreviewPane}>
               <ListChecks size={14} /> 계획 미리보기
-            </button>
+            </Button>
           )}
           {onOpenMemory && (
-            <button type="button" className="icon-btn" onClick={onOpenMemory}
+            <ActionIcon variant="subtle" color="gray" type="button" onClick={onOpenMemory}
               title="AI가 이해한 내 상황" aria-label="AI가 이해한 내 상황">
               <BrainCircuit size={16} />
-            </button>
+            </ActionIcon>
           )}
-          <button type="button" className="icon-btn" onClick={openList} title="대화 목록" aria-label="대화 목록">
+          <ActionIcon variant="subtle" color="gray" type="button" onClick={openList} title="대화 목록" aria-label="대화 목록">
             <List size={16} />
-          </button>
-          <button type="button" className="icon-btn" onClick={startNewConversation} title="새 대화" aria-label="새 대화">
+          </ActionIcon>
+          <ActionIcon variant="subtle" color="gray" type="button" onClick={startNewConversation} title="새 대화" aria-label="새 대화">
             <Plus size={16} />
-          </button>
+          </ActionIcon>
           {/* 작업 공간에서는 이 패널이 화면의 가운데다 — 접을 곳이 없다. */}
           {!workspace && (
-            <button type="button" className="icon-btn" onClick={onCollapse} title="패널 접기" aria-label="패널 접기">
+            <ActionIcon variant="subtle" color="gray" type="button" onClick={onCollapse} title="패널 접기" aria-label="패널 접기">
               <PanelRightClose size={16} />
-            </button>
+            </ActionIcon>
           )}
         </span>
       </header>
@@ -1014,9 +1083,9 @@ export default function AiPanel({
 
       {view === 'list' ? (
         <div className="ai-panel-body">
-          <button type="button" className="btn-ghost ai-panel-back" onClick={() => setView('chat')}>
+          <Button variant="default" type="button" className="ai-panel-back" onClick={() => setView('chat')}>
             <ArrowLeft size={14} /> 대화로 돌아가기
-          </button>
+          </Button>
           {/* 목록에서 삭제하다 실패했을 때 아무 말도 없이 그대로 남아 있으면 안 된다. */}
           {loadError && <p className="ai-error">{loadError}</p>}
           {listLoading && <p className="ai-hint"><Loader2 size={14} className="spin" /> 불러오는 중...</p>}
@@ -1042,9 +1111,9 @@ export default function AiPanel({
                 )}
                 <span className="ai-conv-item-time">{formatRelativeTime(item.lastMessageAt)}</span>
               </button>
-              <button
+              <ActionIcon variant="subtle" color="gray"
                 type="button"
-                className="icon-btn ai-conv-delete"
+                className="ai-conv-delete"
                 aria-label="대화 삭제"
                 title="대화 삭제"
                 disabled={deletingId === item.conversationId}
@@ -1053,7 +1122,7 @@ export default function AiPanel({
                 {deletingId === item.conversationId
                   ? <Loader2 size={14} className="spin" />
                   : <Trash2 size={14} />}
-              </button>
+              </ActionIcon>
             </div>
           ))}
         </div>
@@ -1065,14 +1134,24 @@ export default function AiPanel({
 
             {!loadingHistory && visibleMessages.length === 0 && (
               <div className="ai-empty">
-                <p className="ai-hint">{scope.emptyHint}</p>
-                <div className="ai-prompt-list">
-                  {prompts.map((prompt) => (
-                    <button key={prompt} type="button" className="ai-prompt" onClick={() => typeInput(prompt)}>
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
+                {wantsOpening && openingQuestions.length > 0 ? (
+                  <>
+                    <p className="ai-hint">이번 주를 같이 짜기 전에 몇 가지만 여쭤볼게요. 고른 답은 입력창에 모여요 — 확인하고 보내 주세요.</p>
+                    <OpeningQuestions key={`${scopeKey}|${openingQuestions.map((q) => q.id).join(',')}`}
+                      questions={openingQuestions} onCompose={composeOpening} onFocusInput={focusInput} />
+                  </>
+                ) : (
+                  <>
+                    <p className="ai-hint">{scope.emptyHint}</p>
+                    <div className="ai-prompt-list">
+                      {prompts.map((prompt) => (
+                        <button key={prompt} type="button" className="ai-prompt" onClick={() => typeInput(prompt)}>
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -1093,20 +1172,20 @@ export default function AiPanel({
                       return (
                         <li key={id} className="ai-bubble-photo">
                           {/* 제목에 단원 제목이 이미 들어 있으면 단원은 다시 쓰지 않고, 추정 여부와 목차 순번만 덧붙인다. */}
-                          <span className="chip chip-status" title={p?.topic ? photoTopicText(p.topic) : undefined}>
+                          <Badge component="span" color="gray" className="chip chip-status" title={p?.topic ? photoTopicText(p.topic) : undefined}>
                             {p?.title ?? '교재 사진'}
                             {p?.topic && !(p.title ?? '').includes(p.topic.title) ? ` · ${photoTopicText(p.topic)}` : ''}
                             {p?.link === 'GUESSED' ? ' · 단원 추정' : ''}
-                          </span>
+                          </Badge>
                           {p && (p.originalAvailable ? (
                             <>
-                              <button type="button" className="btn-ghost btn-sm" onClick={() => openPhotoOriginal(id)}>
+                              <Button variant="default" size="xs" type="button" onClick={() => openPhotoOriginal(id)}>
                                 원본 보기
-                              </button>
-                              <button type="button" className="btn-ghost btn-sm" onClick={() => deletePhotoOriginal(id)}
+                              </Button>
+                              <Button variant="default" size="xs" type="button" onClick={() => deletePhotoOriginal(id)}
                                 title="읽은 글은 남아요">
                                 원본 지우기
-                              </button>
+                              </Button>
                             </>
                           ) : <span className="ai-photo-gone">원본은 지워졌어요(읽은 글은 남아요)</span>)}
                         </li>
@@ -1125,12 +1204,12 @@ export default function AiPanel({
             {pendingScheduleIds.length > 1 && (
               <div className="ai-schedule-batch">
                 <span>일정 후보 {pendingScheduleIds.length}개</span>
-                <button type="button" className="btn-ghost btn-sm"
+                <Button variant="default" size="xs" type="button"
                   disabled={batchState?.status === 'working'}
                   onClick={() => handleApplyAll(pendingScheduleIds)}>
                   {batchState?.status === 'working'
                     ? <Loader2 size={13} className="spin" /> : null} 모두 적용
-                </button>
+                </Button>
               </div>
             )}
             {batchState?.status === 'error' && <p className="ai-error">{batchState.message}</p>}
@@ -1176,16 +1255,16 @@ export default function AiPanel({
                     </p>
                   ) : (
                     <div className="ai-context-actions">
-                      <button type="button" className="btn-ghost btn-sm"
+                      <Button variant="default" size="xs" type="button"
                         onClick={() => handleContextAction(suggestion.suggestionId, 'dismiss')}
                         disabled={state?.status === 'working'}>
                         {copy.secondaryLabel}
-                      </button>
-                      <button type="button" className="btn-primary btn-sm"
+                      </Button>
+                      <Button size="xs" type="button"
                         onClick={() => handleContextAction(suggestion.suggestionId, 'apply')}
                         disabled={state?.status === 'working'}>
                         {copy.primaryLabel}
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1218,9 +1297,9 @@ export default function AiPanel({
             {quickReplies.length > 0 && !sending && (
               <div className="ai-quick-replies" role="group" aria-label="빠른 답">
                 {quickReplies.map((text) => (
-                  <button key={text} type="button" className="chip" onClick={() => handleQuickReply(text)}>
+                  <Button variant="default" size="xs" radius="xl" key={text} type="button" className="chip" onClick={() => handleQuickReply(text)}>
                     {text}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -1257,9 +1336,9 @@ export default function AiPanel({
                     <p className="ai-hint">다르면 누르기 전에 대화로 고쳐 말해 주세요.</p>
                   </div>
                 )}
-                <button type="button" className="btn-primary ai-offer-btn" onClick={handleCreateProposalFromOffer}>
+                <Button type="button" className="ai-offer-btn" onClick={handleCreateProposalFromOffer}>
                   {currentOffer.label || '이 내용으로 초안 만들기'}
-                </button>
+                </Button>
               </div>
             )}
 
@@ -1315,15 +1394,15 @@ export default function AiPanel({
           {pastedImage && (
             <div className="ai-paste-choice" role="group" aria-label="붙여넣은 이미지">
               <span>붙여넣은 이미지를 어떻게 할까요?</span>
-              <button type="button" className="btn-ghost btn-sm"
+              <Button variant="default" size="xs" type="button"
                 onClick={() => { photos.add([pastedImage]); setPastedImage(null); }}>
                 교재 사진으로 보기
-              </button>
-              <button type="button" className="btn-ghost btn-sm"
+              </Button>
+              <Button variant="default" size="xs" type="button"
                 onClick={() => { handleImageChosen(pastedImage); setPastedImage(null); }}>
                 일정표로 가져오기
-              </button>
-              <button type="button" className="btn-ghost btn-sm" onClick={() => setPastedImage(null)}>취소</button>
+              </Button>
+              <Button variant="default" size="xs" type="button" onClick={() => setPastedImage(null)}>취소</Button>
             </div>
           )}
 
@@ -1358,9 +1437,9 @@ export default function AiPanel({
             )}
             {coursePhotos ? (
               <div className="ai-attach-wrap">
-                <button
+                <Button variant="default"
                   type="button"
-                  className="btn-ghost ai-attach"
+                  className="ai-attach"
                   onClick={() => setAttachMenuOpen((o) => !o)}
                   disabled={sending || loadingHistory || importing}
                   aria-label="사진 첨부"
@@ -1369,7 +1448,7 @@ export default function AiPanel({
                   title="교재 사진을 같이 보거나, 일정표 사진을 일정 후보로 가져와요"
                 >
                   {importing || photos.busy ? <Loader2 size={15} className="spin" /> : <ImagePlus size={15} />}
-                </button>
+                </Button>
                 {attachMenuOpen && (
                   <div className="ai-attach-menu" role="menu">
                     <button type="button" role="menuitem"
@@ -1384,18 +1463,18 @@ export default function AiPanel({
                 )}
               </div>
             ) : (
-              <button
+              <Button variant="default"
                 type="button"
-                className="btn-ghost ai-attach"
+                className="ai-attach"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={sending || loadingHistory || importing}
                 aria-label="일정표 이미지 첨부"
                 title="근무표 같은 일정표 이미지를 넣으면 일정 후보로 만들어요. 교재 사진은 과목 대화에서 올릴 수 있어요"
               >
                 {importing ? <Loader2 size={15} className="spin" /> : <ImagePlus size={15} />}
-              </button>
+              </Button>
             )}
-            <textarea
+            <Textarea
               ref={inputRef}
               className="ai-textarea"
               placeholder={inputHint ? `${inputHint} — 여기에 적어 주세요` : scope.placeholder}
@@ -1412,15 +1491,15 @@ export default function AiPanel({
               disabled={loadingHistory}
               rows={2}
             />
-            <button
+            <Button
               type="button"
-              className="btn-primary ai-send"
+              className="ai-send"
               onClick={handleSend}
               disabled={sending || loadingHistory || (!inputText.trim() && photos.readyIds.length === 0)}
               aria-label="보내기"
             >
               {sending ? <Loader2 size={15} className="spin" /> : <Send size={15} />}
-            </button>
+            </Button>
           </footer>
 
           {importing && (

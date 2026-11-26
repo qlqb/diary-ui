@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { HelpCircle } from 'lucide-react';
 import { LOOKUP_TEXT } from './consultLabels.js';
 
+import { Button } from '@mantine/core';
 export default function ConsultQuestionCard({
   question, disabled = false, onAnswer, onPlanNow, onFocusInput,
 }) {
@@ -34,7 +35,7 @@ export default function ConsultQuestionCard({
       <p className="consult-later" role="status">
         이어서 할 수 있어요.
         {' '}
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setLater(false)}>질문 다시 보기</button>
+        <Button variant="default" size="xs" type="button" onClick={() => setLater(false)}>질문 다시 보기</Button>
       </p>
     );
   }
@@ -72,7 +73,7 @@ export default function ConsultQuestionCard({
         <div className="consult-question-choices" role="group"
           aria-label={multi ? '선택지 (여러 개 고를 수 있어요)' : '선택지'}>
           {choices.map((choice) => (
-            <button
+            <Button variant={picked.has(choice.id) ? 'light' : 'default'} size="xs" radius="xl"
               key={choice.id}
               type="button"
               className={`chip consult-chip${picked.has(choice.id) ? ' is-picked' : ''}`}
@@ -82,64 +83,64 @@ export default function ConsultQuestionCard({
             >
               {/* 고른 상태는 색만이 아니라 글자(✓)로도 보인다. */}
               {multi && picked.has(choice.id) ? '✓ ' : ''}{choice.label}
-            </button>
+            </Button>
           ))}
         </div>
       )}
       {(inputChoices.length > 0 || lookupChoices.length > 0) && (
         <div className="consult-question-choices" role="group" aria-label="답하는 다른 방법">
           {inputChoices.map((choice) => (
-            <button key={choice.id} type="button" className="chip consult-chip consult-chip-input"
+            <Button variant="default" size="xs" radius="xl" key={choice.id} type="button" className="chip consult-chip consult-chip-input"
               onClick={() => onFocusInput?.(choice.label)}>
               ✎ {choice.label}
-            </button>
+            </Button>
           ))}
           {lookupChoices.map((choice) => (
-            <button key={choice.id} type="button" className="chip consult-chip consult-chip-lookup" disabled={disabled}
+            <Button variant="default" size="xs" radius="xl" key={choice.id} type="button" className="chip consult-chip consult-chip-lookup" disabled={disabled}
               onClick={() => send([choice.id], choice.label)}>
               {choice.label}
-            </button>
+            </Button>
           ))}
         </div>
       )}
       {multi && choices.length > 0 && (
         <div className="consult-question-multi">
           <span className="ai-hint">여러 개 고를 수 있어요 · {picked.size}개 고름</span>
-          <button type="button" className="btn-primary btn-sm" disabled={disabled || picked.size === 0}
+          <Button size="xs" type="button" disabled={disabled || picked.size === 0}
             onClick={sendPicked}>
             고른 답 보내기
-          </button>
+          </Button>
         </div>
       )}
 
       <div className="consult-question-escape" role="group" aria-label="다르게 답하기">
         {choices.length > 0 && (
-          <button type="button" className="btn-ghost btn-sm" disabled={disabled}
+          <Button variant="default" size="xs" type="button" disabled={disabled}
             onClick={() => send([], '둘 다 아님')}>
             둘 다 아님
-          </button>
+          </Button>
         )}
-        <button type="button" className="btn-ghost btn-sm" disabled={disabled}
+        <Button variant="default" size="xs" type="button" disabled={disabled}
           onClick={() => send([], '잘 모르겠어')}>
           잘 모르겠어
-        </button>
-        <button type="button" className="btn-ghost btn-sm" onClick={() => onFocusInput?.()}>
+        </Button>
+        <Button variant="default" size="xs" type="button" onClick={() => onFocusInput?.()}>
           직접 말하기
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={disabled}
+        </Button>
+        <Button variant="default" size="xs" type="button" disabled={disabled}
           onClick={() => send([], LOOKUP_TEXT, false, true)}>
           내 자료에서 찾아봐
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={disabled}
+        </Button>
+        <Button variant="default" size="xs" type="button" disabled={disabled}
           onClick={() => send([], '이 질문은 건너뛸게요.', true)}>
           이 질문 건너뛰기
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={disabled} onClick={() => onPlanNow?.()}>
+        </Button>
+        <Button variant="default" size="xs" type="button" disabled={disabled} onClick={() => onPlanNow?.()}>
           지금까지 얘기로 계획해줘
-        </button>
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setLater(true)}>
+        </Button>
+        <Button variant="default" size="xs" type="button" onClick={() => setLater(true)}>
           나중에 이어하기
-        </button>
+        </Button>
       </div>
     </section>
   );

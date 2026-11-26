@@ -11,6 +11,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Check, RefreshCw, X } from 'lucide-react';
 import { changeBundleAPI } from '../api/api.js';
 
+import { Button, Checkbox } from '@mantine/core';
 const CHECK_TEXT = {
   NOT_FOUND: '대상을 찾지 못했어요',
   INVALID: '지금 상태에서는 할 수 없어요',
@@ -98,7 +99,7 @@ export default function ChangeBundleCard({ bundle: initial, onApplied }) {
           return (
             <li key={item.itemId} className="ai-change-item">
               <label>
-                <input type="checkbox" checked={item.selected} disabled={resolved || working || failed}
+                <Checkbox size="xs" checked={item.selected} disabled={resolved || working || failed}
                   onChange={() => toggle(item.itemId)} aria-label={item.summary} />
                 {' '}
                 <span>{item.summary}</span>
@@ -121,17 +122,17 @@ export default function ChangeBundleCard({ bundle: initial, onApplied }) {
       {!resolved && (
         <div className="ai-schedule-actions">
           {state?.status === 'stale' ? (
-            <button type="button" className="btn-primary btn-sm" disabled={working} onClick={refresh}>
+            <Button size="xs" type="button" disabled={working} onClick={refresh}>
               <RefreshCw size={13} /> 다시 검토
-            </button>
+            </Button>
           ) : (
-            <button type="button" className="btn-primary btn-sm" disabled={working || selected.length === 0} onClick={apply}>
+            <Button size="xs" type="button" disabled={working || selected.length === 0} onClick={apply}>
               <Check size={13} /> 고른 {selected.length}개 적용
-            </button>
+            </Button>
           )}
-          <button type="button" className="btn-ghost btn-sm" disabled={working} onClick={dismiss}>
+          <Button variant="default" size="xs" type="button" disabled={working} onClick={dismiss}>
             <X size={13} /> 적용 안 함
-          </button>
+          </Button>
         </div>
       )}
     </div>

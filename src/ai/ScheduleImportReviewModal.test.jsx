@@ -85,7 +85,7 @@ describe('ScheduleImportReviewModal', () => {
     const user = userEvent.setup();
     const { onConfirm } = renderModal();
 
-    await user.click(screen.getByRole('button', { name: '가져오기' }));
+    await user.click(screen.getByRole('button', { name: /추가/ }));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
     const body = onConfirm.mock.calls[0][0];
@@ -95,6 +95,8 @@ describe('ScheduleImportReviewModal', () => {
       rowIndex: 1,
       periodStartDate: '2026-09-07',
       title: '근무',
+      // 휴무(1번 칸)는 고를 수 없고, 근무 칸은 기본으로 전부 고른다.
+      selectedOffsets: [0, 2],
       legendOverrides: {},
     });
     expect(body).not.toHaveProperty('cells');
@@ -112,12 +114,12 @@ describe('ScheduleImportReviewModal', () => {
       unresolvedCodes: ['A'],
     });
 
-    expect(screen.getByRole('button', { name: '가져오기' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /추가/ })).toBeDisabled();
 
     await user.type(screen.getByLabelText('A 시간'), '10~15');
 
-    expect(screen.getByRole('button', { name: '가져오기' })).toBeEnabled();
-    await user.click(screen.getByRole('button', { name: '가져오기' }));
+    expect(screen.getByRole('button', { name: /추가/ })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: /추가/ }));
     expect(onConfirm.mock.calls[0][0].legendOverrides).toEqual({ A: '10~15' });
   });
 
@@ -125,10 +127,20 @@ describe('ScheduleImportReviewModal', () => {
     const user = userEvent.setup();
     renderModal({ matchedRowIndex: null });
 
-    expect(screen.getByRole('button', { name: '가져오기' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /추가/ })).toBeDisabled();
 
     await user.selectOptions(screen.getByLabelText('내 줄'), '1');
-    expect(screen.getByRole('button', { name: '가져오기' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /추가/ })).toBeEnabled();
+  });
+
+  it('체크를 푼 칸은 빼고 보낸다 — 다 풀면 추가할 수 없다', async () => {
+    const user = userEvent.setup();
+    const { onConfirm } = renderModal();
+
+    expect(screen.getByRole('button', { name: '2개 일정 추가' })).toBeEnabled();
+    await user.click(screen.getByRole('checkbox', { name: '9/9 (수) 넣기' }));
+    await user.click(screen.getByRole('button', { name: '1개 일정 추가' }));
+    expect(onConfirm.mock.calls[0][0].selectedOffsets).toEqual([0]);
   });
 
   it('요일이 어긋나면 조용히 넘기지 않고 알린다', () => {
@@ -140,7 +152,7 @@ describe('ScheduleImportReviewModal', () => {
     renderModal({ periodMissing: true, resolvedPeriod: null });
 
     expect(screen.getByLabelText('첫 칸의 날짜')).toHaveValue('');
-    expect(screen.getByRole('button', { name: '가져오기' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /추가/ })).toBeDisabled();
   });
 
   it('문구에 실패·부족 계열 표현을 쓰지 않는다', () => {
@@ -152,7 +164,7 @@ describe('ScheduleImportReviewModal', () => {
   it('두 버튼에 시각적 우열을 주지 않는다', () => {
     renderModal();
 
-    expect(screen.getByRole('button', { name: '가져오기' })).toHaveClass('btn-ghost');
-    expect(screen.getByRole('button', { name: '나중에 하기' })).toHaveClass('btn-ghost');
+    expect(screen.getByRole('button', { name: /추가/ })).toHaveAttribute('data-variant', 'default');
+    expect(screen.getByRole('button', { name: '나중에 하기' })).toHaveAttribute('data-variant', 'default');
   });
 });
