@@ -10,6 +10,7 @@ import { CheckCircle2, CircleSlash, MinusCircle } from 'lucide-react';
 import { executionItemAPI } from '../api/api.js';
 import { formatDateKo, formatMinutes, shiftDate, todayString } from '../lib/datetime.js';
 import { BLOCKER_LABEL, SUPPORT_LABEL } from '../lib/recordLabels.js';
+import { Badge, Button } from '@mantine/core';
 import '../styles/records.css';
 
 const RANGES = [
@@ -65,14 +66,14 @@ export default function RecordView({ projectTitles, refreshToken }) {
         </div>
         <div className="week-nav">
           {RANGES.map((range) => (
-            <button
+            <Button variant={days === range.key ? 'light' : 'default'} size="xs"
               key={range.key}
               type="button"
-              className={`btn-ghost btn-sm${days === range.key ? ' is-selected' : ''}`}
+              className={`${days === range.key ? 'is-selected' : ''}`}
               onClick={() => setDays(range.key)}
             >
               {range.label}
-            </button>
+            </Button>
           ))}
         </div>
       </header>
@@ -100,9 +101,9 @@ export default function RecordView({ projectTitles, refreshToken }) {
                   <div className="record-row-main">
                     <span className="record-row-title">{record.title ?? '계획 밖에서 한 일'}</span>
                     <span className="record-row-meta">
-                      <span className="chip">{outcome.label}</span>
+                      <Badge component="span" color="gray" className="chip">{outcome.label}</Badge>
                       {record.completionPercent != null && record.outcome === 'PARTIAL' && (
-                        <span className="chip">{record.completionPercent}%</span>
+                        <Badge component="span" color="gray" className="chip">{record.completionPercent}%</Badge>
                       )}
                       {/*
                         세 가지를 섞지 않는다: 계획 시간(예상) / 내가 적은 시간 / 시간 미기록.
@@ -110,20 +111,20 @@ export default function RecordView({ projectTitles, refreshToken }) {
                         계획 시간은 서버가 실어 줄 때만 보인다.
                       */}
                       {plannedMinutesOf(record) != null && (
-                        <span className="chip">계획 시간 {formatMinutes(plannedMinutesOf(record))}</span>
+                        <Badge component="span" color="gray" className="chip">계획 시간 {formatMinutes(plannedMinutesOf(record))}</Badge>
                       )}
                       {record.actualMinutes != null
-                        ? <span className="chip">내가 적은 시간 {formatMinutes(record.actualMinutes)}</span>
-                        : <span className="chip record-chip-missing">시간 미기록</span>}
+                        ? <Badge component="span" color="gray" className="chip">내가 적은 시간 {formatMinutes(record.actualMinutes)}</Badge>
+                        : <Badge component="span" color="gray" variant="outline" className="chip record-chip-missing">시간 미기록</Badge>}
                       {SUPPORT_LABEL[record.supportLevel] && (
-                        <span className="chip">{SUPPORT_LABEL[record.supportLevel]}</span>
+                        <Badge component="span" color="gray" className="chip">{SUPPORT_LABEL[record.supportLevel]}</Badge>
                       )}
-                      {record.stuckStep && <span className="chip record-chip-blocker">막힌 단계: {record.stuckStep}</span>}
+                      {record.stuckStep && <Badge component="span" color="orange" className="chip record-chip-blocker">막힌 단계: {record.stuckStep}</Badge>}
                       {BLOCKER_LABEL[record.blockerKind] && (
-                        <span className="chip record-chip-blocker">걸린 점: {BLOCKER_LABEL[record.blockerKind]}</span>
+                        <Badge component="span" color="orange" className="chip record-chip-blocker">걸린 점: {BLOCKER_LABEL[record.blockerKind]}</Badge>
                       )}
                       {record.courseId && projectTitles?.[record.courseId] && (
-                        <span className="chip chip-project">{projectTitles[record.courseId]}</span>
+                        <Badge component="span" color="blue" className="chip chip-project">{projectTitles[record.courseId]}</Badge>
                       )}
                     </span>
                     {record.note && <p className="record-row-note">{record.note}</p>}

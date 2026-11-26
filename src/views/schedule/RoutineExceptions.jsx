@@ -11,6 +11,8 @@ import { Trash2 } from 'lucide-react';
 import { formatDateKo } from '../../lib/datetime.js';
 import { formatDays, dayOfWeekOf } from './routineDays.js';
 
+import { ActionIcon, Badge, Button, TextInput } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 const EMPTY = {
   exceptionDate: '',
   type: 'SKIP',
@@ -77,9 +79,9 @@ export default function RoutineExceptions({ routine, busy, error, onAdd, onRemov
           {routine.exceptions.map((exception) => (
             <li key={exception.routineExceptionId} className="routine-exception">
               <span className="routine-exception-date">{formatDateKo(exception.exceptionDate)}</span>
-              <span className={`chip ${exception.type === 'SKIP' ? 'chip-status' : 'chip-warn'}`}>
+              <Badge component="span" color={exception.type === 'SKIP' ? 'gray' : 'orange'} className={`chip ${exception.type === 'SKIP' ? 'chip-status' : 'chip-warn'}`}>
                 {exception.type === 'SKIP' ? '쉬어요' : '보강'}
-              </span>
+              </Badge>
               {exception.type === 'MOVED' && (
                 <span className="routine-exception-moved">
                   → {formatDateKo(exception.movedDate)}
@@ -88,10 +90,10 @@ export default function RoutineExceptions({ routine, busy, error, onAdd, onRemov
                 </span>
               )}
               {exception.note && <span className="routine-exception-note">{exception.note}</span>}
-              <button type="button" className="icon-btn" aria-label="예외 삭제" disabled={busy}
+              <ActionIcon variant="subtle" color="gray" type="button" aria-label="예외 삭제" disabled={busy}
                 onClick={() => onRemove(exception.routineExceptionId)}>
                 <Trash2 size={13} />
-              </button>
+              </ActionIcon>
             </li>
           ))}
         </ul>
@@ -100,15 +102,15 @@ export default function RoutineExceptions({ routine, busy, error, onAdd, onRemov
       {error && <p className="view-error">{error}</p>}
 
       {!adding ? (
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setAdding(true)}>
+        <Button variant="default" size="xs" type="button" onClick={() => setAdding(true)}>
           + 예외 추가
-        </button>
+        </Button>
       ) : (
         <form className="routine-form" onSubmit={submit}>
           <div className="routine-form-row">
             <label className="inline-field">
               날짜
-              <input type="date" value={form.exceptionDate} autoFocus
+              <TextInput type="date" value={form.exceptionDate} autoFocus
                 onChange={(e) => patch({ exceptionDate: e.target.value })} />
             </label>
             <label className="inline-field">
@@ -127,22 +129,22 @@ export default function RoutineExceptions({ routine, busy, error, onAdd, onRemov
             <div className="routine-form-row">
               <label className="inline-field">
                 옮길 날짜
-                <input type="date" value={form.movedDate}
+                <TextInput type="date" value={form.movedDate}
                   onChange={(e) => patch({ movedDate: e.target.value })} />
               </label>
               <label className="inline-field">
                 시각
-                <input type="time" value={form.movedStartTime}
+                <TimeInput value={form.movedStartTime}
                   onChange={(e) => patch({ movedStartTime: e.target.value })} />
               </label>
               <span className="routine-form-tilde">~</span>
               <label className="inline-field">
-                <input type="time" value={form.movedEndTime}
+                <TimeInput value={form.movedEndTime}
                   onChange={(e) => patch({ movedEndTime: e.target.value })} />
               </label>
               <label className="inline-field">
                 장소
-                <input type="text" value={form.movedLocation} maxLength={100}
+                <TextInput type="text" value={form.movedLocation} maxLength={100}
                   onChange={(e) => patch({ movedLocation: e.target.value })} />
               </label>
             </div>
@@ -151,7 +153,7 @@ export default function RoutineExceptions({ routine, busy, error, onAdd, onRemov
           <div className="routine-form-row">
             <label className="inline-field routine-form-note">
               메모
-              <input type="text" value={form.note} maxLength={200} placeholder="추석 보강"
+              <TextInput type="text" value={form.note} maxLength={200} placeholder="추석 보강"
                 onChange={(e) => patch({ note: e.target.value })} />
             </label>
           </div>
@@ -165,9 +167,9 @@ export default function RoutineExceptions({ routine, busy, error, onAdd, onRemov
           </p>
 
           <div className="routine-form-actions">
-            <button type="submit" className="btn-primary btn-sm" disabled={!canSubmit || busy}>추가</button>
-            <button type="button" className="btn-ghost btn-sm" disabled={busy}
-              onClick={() => { setForm(EMPTY); setAdding(false); }}>취소</button>
+            <Button size="xs" type="submit" disabled={!canSubmit || busy}>추가</Button>
+            <Button variant="default" size="xs" type="button" disabled={busy}
+              onClick={() => { setForm(EMPTY); setAdding(false); }}>취소</Button>
           </div>
         </form>
       )}

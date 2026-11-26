@@ -11,6 +11,8 @@ import { useState } from 'react';
 import { WEEKDAYS } from './routineDays.js';
 import { formatDateKo, toHHmm } from '../../lib/datetime.js';
 
+import { Button, NativeSelect, TextInput } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 /*
  * 서버는 사유를 enum으로만 보낸다. 문구는 화면 것이다 — 서버가 문구까지 보내면 문구를
  * 다듬는 순간 화면이 깨진다. 모르는 값이 오면 그 값을 그대로 보여준다: 사유를 늘렸는데
@@ -81,22 +83,22 @@ export default function RoutineForm({ routine, courses, busy, error, conflicts, 
       <div className="routine-form-row">
         <label className="inline-field">
           제목
-          <input type="text" value={form.title} maxLength={200} autoFocus
+          <TextInput type="text" value={form.title} maxLength={200} autoFocus
             placeholder="빅데이터분석"
             onChange={(e) => patch({ title: e.target.value })} />
         </label>
         <label className="inline-field">
           프로젝트
-          <select value={form.courseId} onChange={(e) => patch({ courseId: e.target.value })}>
+          <NativeSelect value={form.courseId} onChange={(e) => patch({ courseId: e.target.value })}>
             <option value="">없음</option>
             {(courses ?? []).map((course) => (
               <option key={course.courseId} value={course.courseId}>{course.title}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="inline-field">
           장소
-          <input type="text" value={form.location} maxLength={100} placeholder="3-315"
+          <TextInput type="text" value={form.location} maxLength={100} placeholder="3-315"
             onChange={(e) => patch({ location: e.target.value })} />
         </label>
       </div>
@@ -121,22 +123,22 @@ export default function RoutineForm({ routine, courses, busy, error, conflicts, 
       <div className="routine-form-row">
         <label className="inline-field">
           시각
-          <input type="time" value={form.startTime}
+          <TimeInput value={form.startTime}
             onChange={(e) => patch({ startTime: e.target.value })} />
         </label>
         <span className="routine-form-tilde">~</span>
         <label className="inline-field">
-          <input type="time" value={form.endTime}
+          <TimeInput value={form.endTime}
             onChange={(e) => patch({ endTime: e.target.value })} />
         </label>
         <label className="inline-field">
           기간
-          <input type="date" value={form.effectiveFrom}
+          <TextInput type="date" value={form.effectiveFrom}
             onChange={(e) => patch({ effectiveFrom: e.target.value })} />
         </label>
         <span className="routine-form-tilde">~</span>
         <label className="inline-field">
-          <input type="date" value={form.effectiveUntil}
+          <TextInput type="date" value={form.effectiveUntil}
             onChange={(e) => patch({ effectiveUntil: e.target.value })} />
         </label>
       </div>
@@ -168,10 +170,10 @@ export default function RoutineForm({ routine, courses, busy, error, conflicts, 
       )}
 
       <div className="routine-form-actions">
-        <button type="submit" className="btn-primary btn-sm" disabled={!canSubmit || busy}>
+        <Button size="xs" type="submit" disabled={!canSubmit || busy}>
           {routine ? '저장' : '추가'}
-        </button>
-        <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}>취소</button>
+        </Button>
+        <Button variant="default" size="xs" type="button" onClick={onCancel} disabled={busy}>취소</Button>
       </div>
     </form>
   );

@@ -18,6 +18,7 @@ import {
   CardState, COURSE_KEY, EVIDENCE_KIND_LABEL, Placement, UNASSIGNED_KEY,
   acceptRequest, addWeekRequest, buildBoard, bulkItems, cardStatusText, moveRequest, placeLabel, slotOptions,
 } from '../../lib/materialWeeks.js';
+import { ActionIcon, Badge, Button, NativeSelect } from '@mantine/core';
 import '../../styles/material-weeks.css';
 
 const IN_PROGRESS = new Set(['QUEUED', 'RUNNING']);
@@ -113,9 +114,9 @@ export default function MaterialWeekReview({ courseId, onClose, onChanged = null
         <header className="mw-head">
           <h2 id="mw-title" className="mw-title" tabIndex={-1} ref={headingRef}>자료 주차 확인</h2>
           {review && <span className="mw-count">확인 필요 {review.needsReview}개</span>}
-          <button type="button" className="icon-btn mw-close" aria-label="닫기" disabled={busy} onClick={onClose}>
+          <ActionIcon variant="subtle" color="gray" type="button" className="mw-close" aria-label="닫기" disabled={busy} onClick={onClose}>
             <X size={16} />
-          </button>
+          </ActionIcon>
         </header>
         <p className="mw-desc">
           AI 추천은 확인하기 전까지 학습 지도에 반영되지 않아요. 카드를 끌어 다른 주차에 놓거나, 카드의 선택 상자로 고르세요.
@@ -166,11 +167,11 @@ export default function MaterialWeekReview({ courseId, onClose, onChanged = null
           {notice && <p className="hint mw-message" role="status">{notice}</p>}
           {busy && <span className="mw-saving" role="status"><Loader2 size={13} className="spin" aria-hidden="true" /> 저장 중…</span>}
           <div className="mw-foot-actions">
-            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onClose}>나중에</button>
-            <button type="button" className="btn-primary btn-sm" disabled={busy || pending.length === 0} onClick={applyAll}
+            <Button variant="default" size="xs" type="button" disabled={busy} onClick={onClose}>나중에</Button>
+            <Button size="xs" type="button" disabled={busy || pending.length === 0} onClick={applyAll}
               title="점선 카드(AI 추천)만 적용해요. 확인 필요·약한 추천은 그대로 둬요.">
               추천대로 적용{pending.length > 0 ? ` (${pending.length})` : ''}
-            </button>
+            </Button>
           </div>
         </footer>
       </div>
@@ -194,53 +195,53 @@ function WeekCard({ card, options, busy, dragging, onDragStart, onDragEnd, onMov
         <FileText size={14} aria-hidden="true" className="mw-card-icon" />
         <span className="mw-card-name" title={name}>{name}</span>
         <span className={`mw-status mw-status-${state.toLowerCase()}`}>{cardStatusText(card)}</span>
-        {analyzing && <span className="chip chip-status">분석 중 · 추천이 바뀔 수 있어요</span>}
+        {analyzing && <Badge component="span" color="gray" className="chip chip-status">분석 중 · 추천이 바뀔 수 있어요</Badge>}
       </div>
 
       <div className="mw-card-actions">
-        <select className="mw-select" value={card.key} disabled={busy}
+        <NativeSelect className="mw-select" value={card.key} disabled={busy}
           aria-label={`${name}을(를) 놓을 자리`} onChange={(e) => onMove(e.target.value)}>
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        </NativeSelect>
 
         {state === CardState.SUGGESTED && (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onMove(card.key)}>
+          <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => onMove(card.key)}>
             확인
-          </button>
+          </Button>
         )}
         {state === CardState.NEEDS_REVIEW && s && (s.options ?? []).map((o) => (
-          <button key={`${o.placement}-${o.week ?? ''}`} type="button" className="btn-ghost btn-sm" disabled={busy}
+          <Button variant="default" size="xs" key={`${o.placement}-${o.week ?? ''}`} type="button" disabled={busy}
             onClick={() => onPlace(acceptRequest(o))}>
             {placeLabel(o.placement, o.week)}로 확인
-          </button>
+          </Button>
         ))}
         {state === CardState.NEEDS_REVIEW && (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy}
+          <Button variant="default" size="xs" type="button" disabled={busy}
             title="어느 주차 자료도 아니라고 확인해요. 다시 묻지 않아요."
             onClick={() => onPlace({ placement: Placement.UNASSIGNED, weeks: [], source: 'USER' })}>
             주차 없음으로 두기
-          </button>
+          </Button>
         )}
         {item.assignment?.placement === Placement.WEEK && (adding ? (
-          <select className="mw-select" defaultValue="" disabled={busy} aria-label={`${name}에 더할 주차`}
+          <NativeSelect className="mw-select" defaultValue="" disabled={busy} aria-label={`${name}에 더할 주차`}
             onChange={(e) => { const w = Number(e.target.value); setAdding(false); if (w) onPlace(addWeekRequest(item, w)); }}
             onBlur={() => setAdding(false)}>
             <option value="" disabled>더할 주차</option>
             {Array.from({ length: weekCount }, (_, i) => i + 1)
               .filter((w) => !(item.assignment.weeks ?? []).includes(w))
               .map((w) => <option key={w} value={w}>{w}주차</option>)}
-          </select>
+          </NativeSelect>
         ) : (
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setAdding(true)}
+          <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setAdding(true)}
             title="여러 주차에 걸친 자료(총정리 등)면 주차를 더해요">
             주차 추가
-          </button>
+          </Button>
         ))}
         {evidence.length > 0 && (
-          <button type="button" className="btn-ghost btn-sm mw-why-toggle" aria-expanded={why} onClick={() => setWhy((v) => !v)}>
+          <Button variant="default" size="xs" type="button" className="mw-why-toggle" aria-expanded={why} onClick={() => setWhy((v) => !v)}>
             {why ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
             추천 이유 보기
-          </button>
+          </Button>
         )}
       </div>
 

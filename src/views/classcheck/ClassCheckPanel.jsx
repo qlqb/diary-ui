@@ -13,6 +13,7 @@ import { CalendarCheck } from 'lucide-react';
 import { classApi } from './classSessionApi.js';
 import { MAX_ITEMS, confirmItem, sessionViewKey } from '../../lib/classCheck.js';
 import ClassCheckSession from './ClassCheckSession.jsx';
+import { Button, Checkbox } from '@mantine/core';
 import '../../styles/class-check.css';
 
 const CONFLICT = '다른 곳에서 먼저 바뀌었어요. 다시 불러왔어요.';
@@ -105,7 +106,7 @@ export default function ClassCheckPanel({ courseId, refreshToken = 0, onChanged 
       {loadError && (
         <p className="view-error" role="alert">
           {loadError}{' '}
-          <button type="button" className="btn-ghost btn-sm" disabled={locked} onClick={retry}>다시 불러오기</button>
+          <Button variant="default" size="xs" type="button" disabled={locked} onClick={retry}>다시 불러오기</Button>
         </p>
       )}
       {view && !view.promptEnabled && <p className="view-dim">이 과목은 수업 후 확인을 묻지 않아요.</p>}
@@ -117,14 +118,14 @@ export default function ClassCheckPanel({ courseId, refreshToken = 0, onChanged 
       {view && (
         <div className="class-check-actions">
           {withDefaults.length > 1 && (
-            <button type="button" className="btn-primary btn-sm" disabled={locked}
+            <Button size="xs" type="button" disabled={locked}
               onClick={() => send(batch.map((s) => confirmItem(s, 'COVERED', s.defaults)),
                 withDefaults.length > batch.length ? `${batch.length}개를 저장했어요. 나머지는 다음에 확인해 주세요.` : '모두 저장했어요.')}>
               {withDefaults.length > batch.length ? `${batch.length}개 맞아요` : '모두 맞아요'}
-            </button>
+            </Button>
           )}
           <label className="class-check-toggle">
-            <input type="checkbox" checked={Boolean(view.promptEnabled)} disabled={locked} onChange={togglePrompt} />
+            <Checkbox size="xs" checked={Boolean(view.promptEnabled)} disabled={locked} onChange={togglePrompt} />
             {' '}수업 후 확인 묻기
           </label>
         </div>

@@ -17,6 +17,7 @@ import { formatDays } from './routineDays.js';
 import { formatDateShort, toHHmm } from '../../lib/datetime.js';
 import { routineAPI } from '../../api/api.js';
 
+import { ActionIcon, Badge, Button } from '@mantine/core';
 export default function RoutineSection({ routines, courses, loading, onChanged }) {
   const [editingId, setEditingId] = useState(null); // 'new' 또는 routineId
   const [expandedId, setExpandedId] = useState(null);
@@ -61,10 +62,10 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
         {/* aria-label로 읽히는 이름만 구체적으로 한다 — 폼 안의 "추가" 버튼과 이름이 같으면
             어느 쪽인지 알 수 없다. 보이는 글자는 그대로 둔다. */}
         {editingId !== 'new' && (
-          <button type="button" className="btn-ghost btn-sm" aria-label="반복 일정 추가"
+          <Button variant="default" size="xs" type="button" aria-label="반복 일정 추가"
             onClick={() => { closeForm(); setEditingId('new'); }}>
             <Plus size={13} /> 추가
-          </button>
+          </Button>
         )}
       </div>
       <p className="section-desc">
@@ -103,8 +104,8 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
                 </button>
 
                 <span className="routine-row-title">{routine.title}</span>
-                {course && <span className="chip chip-project">{course.title}</span>}
-                {routine.ended && <span className="chip chip-status">종료됨</span>}
+                {course && <Badge component="span" color="blue" className="chip chip-project">{course.title}</Badge>}
+                {routine.ended && <Badge component="span" color="gray" className="chip chip-status">종료됨</Badge>}
 
                 <span className="routine-row-when">
                   {formatDays(routine.daysOfWeek)} {toHHmm(routine.startTime)}-{toHHmm(routine.endTime)}
@@ -112,14 +113,14 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
                   {routine.location && ` · ${routine.location}`}
                 </span>
 
-                <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                <Button variant="default" size="xs" type="button" disabled={busy}
                   onClick={() => { closeForm(); setEditingId(editing ? null : routine.routineId); }}>
                   <Pencil size={12} /> 수정
-                </button>
-                <button type="button" className="icon-btn" aria-label="반복 일정 삭제" disabled={busy}
+                </Button>
+                <ActionIcon variant="subtle" color="gray" type="button" aria-label="반복 일정 삭제" disabled={busy}
                   onClick={() => run(() => routineAPI.remove(routine.routineId))}>
                   <Trash2 size={13} />
-                </button>
+                </ActionIcon>
               </div>
 
               <div className="routine-row-sub">

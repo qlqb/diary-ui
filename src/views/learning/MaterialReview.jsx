@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react';
+import { ActionIcon, Button, TextInput } from '@mantine/core';
 import { materialAnalysisAPI } from '../../api/api.js';
 import { MaterialAnalysisStatus, COURSE_NOTE_CATEGORY_LABEL } from '../../types/learning.js';
 
@@ -169,13 +170,13 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
           {!hasAnythingToApply && (
             <span className="material-review-head-count">적용할 내용이 없어요</span>
           )}
-          <button type="button" className="v6-btn-small" onClick={handleApply}
+          <Button variant="filled" size="xs" type="button" onClick={handleApply}
             disabled={applying || !hasAnythingToApply}>
             {applying ? '적용 중...' : '검토 완료 — 적용'}
-          </button>
-          <button type="button" className="v6-btn-small" onClick={() => onDismiss?.()} disabled={applying}>
+          </Button>
+          <Button variant="default" size="xs" type="button" onClick={() => onDismiss?.()} disabled={applying}>
             폐기
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -188,7 +189,7 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
         {COURSE_FIELD_LABELS.map(([key, label]) => (
           <label key={key} className="material-review-field-row">
             <span>{label}</span>
-            <input
+            <TextInput
               type="text"
               className="learning-input material-review-input"
               value={courseFields?.[key] ?? ''}
@@ -255,13 +256,15 @@ export default function MaterialReview({ analysis, onApplied, onDismiss }) {
         </ul>
       )}
 
-      <button
+      <Button
+        variant="default"
+        size="xs"
         type="button"
-        className="v6-btn-small material-review-add-root"
+        className="material-review-add-root"
         onClick={() => setTopics((prev) => addChild(prev, null))}
       >
         <Plus size={13} /> 최상위 항목 추가
-      </button>
+      </Button>
 
       </div>
       )}
@@ -278,7 +281,7 @@ function MaterialReviewNode({ node, depth, onChangeTitle, onRemove, onAddChild }
   return (
     <li style={{ marginLeft: depth * 16 }} className="material-review-node">
       <div className="material-review-topic-row">
-        <input
+        <TextInput
           type="text"
           className="learning-input material-review-input material-review-title-input"
           value={node.title}
@@ -288,22 +291,27 @@ function MaterialReviewNode({ node, depth, onChangeTitle, onRemove, onAddChild }
         <span className={`learning-badge learning-badge-${node.sourceType === 'SOURCE' ? 'source' : 'derived'}`}>
           {node.sourceType === 'SOURCE' ? '원문 근거' : 'AI 세분화'}
         </span>
-        <button
+        <ActionIcon
+          variant="subtle"
+          color="gray"
           type="button"
-          className="learning-icon-btn"
           onClick={() => onAddChild(node._localId)}
           title="하위 항목 추가"
+          aria-label="하위 항목 추가"
         >
           <Plus size={14} />
-        </button>
-        <button
+        </ActionIcon>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
           type="button"
-          className="learning-icon-btn material-review-remove-btn"
+          className="material-review-remove-btn"
           onClick={() => onRemove(node._localId)}
           title="이 항목 제거"
+          aria-label="이 항목 제거"
         >
           <X size={14} />
-        </button>
+        </ActionIcon>
       </div>
       {node.children?.length > 0 && (
         <ul>

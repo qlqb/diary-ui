@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MAX_SOURCES, optionLabel, sessionLabel } from '../../lib/classCheck.js';
 
+import { Button, Checkbox } from '@mantine/core';
 const OTHER_CHOICES = [
   { action: 'UNKNOWN_CONTENT', label: '아직 자료가 안 올라왔어요' },
   { action: 'CANCELLED', label: '휴강했어요' },
@@ -71,11 +72,11 @@ export default function ClassCheckSession({ title, session, options = [], busy =
             {defaults.map((o) => <li key={o.ref}>{optionLabel(o)}</li>)}
           </ul>
           <div className="class-check-actions">
-            <button type="button" className="btn-primary btn-sm" disabled={busy}
-              onClick={() => onConfirm('COVERED', defaults)}>맞아요</button>
-            <button type="button" className="btn-ghost btn-sm" disabled={busy} ref={editButton}
-              onClick={() => setEditing(true)}>고치기</button>
-            {onLater && <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onLater}>나중에</button>}
+            <Button size="xs" type="button" disabled={busy}
+              onClick={() => onConfirm('COVERED', defaults)}>맞아요</Button>
+            <Button variant="default" size="xs" type="button" disabled={busy} ref={editButton}
+              onClick={() => setEditing(true)}>고치기</Button>
+            {onLater && <Button variant="default" size="xs" type="button" disabled={busy} onClick={onLater}>나중에</Button>}
           </div>
         </>
       )}
@@ -87,7 +88,7 @@ export default function ClassCheckSession({ title, session, options = [], busy =
             {choices.map((o, i) => (
               <li key={o.ref}>
                 <label>
-                  <input type="checkbox" ref={i === 0 ? firstInput : undefined} disabled={busy || (full && !picked.has(o.ref))}
+                  <Checkbox size="xs" ref={i === 0 ? firstInput : undefined} disabled={busy || (full && !picked.has(o.ref))}
                     checked={picked.has(o.ref) && !other} onChange={() => toggle(o.ref)} />
                   {' '}{optionLabel(o)}
                 </label>
@@ -105,11 +106,11 @@ export default function ClassCheckSession({ title, session, options = [], busy =
             ))}
           </ul>
           <div className="class-check-actions">
-            <button type="button" className="btn-primary btn-sm" disabled={busy || !canSave} onClick={save}>저장</button>
+            <Button size="xs" type="button" disabled={busy || !canSave} onClick={save}>저장</Button>
             {defaults.length > 0 && (
-              <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setEditing(false)}>취소</button>
+              <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setEditing(false)}>취소</Button>
             )}
-            {onLater && <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onLater}>나중에</button>}
+            {onLater && <Button variant="default" size="xs" type="button" disabled={busy} onClick={onLater}>나중에</Button>}
           </div>
         </>
       )}

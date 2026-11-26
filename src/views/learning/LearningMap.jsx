@@ -15,6 +15,7 @@ import { useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown, CheckCircle2, CircleDot, Circle } from 'lucide-react';
 import { TopicProgressStatus } from '../../types/learning.js';
 
+import { Button } from '@mantine/core';
 const STATUS_ICON = {
   [TopicProgressStatus.LEARNED]: CheckCircle2,
   [TopicProgressStatus.IN_PROGRESS]: CircleDot,
@@ -81,18 +82,18 @@ function TopicMarkButtons({ topic, onMarkTopic }) {
 
   return (
     <span className="learning-map-marks">
-      <button type="button"
-        className={`btn-ghost btn-sm${mark === 'KNOWN' ? ' is-active' : ''}`}
+      <Button variant={mark === 'KNOWN' ? 'light' : 'default'} size="xs" type="button"
+        className={`${mark === 'KNOWN' ? 'is-active' : ''}`}
         aria-pressed={mark === 'KNOWN'}
         onClick={() => set('KNOWN')}>
         이미 알아요
-      </button>
-      <button type="button"
-        className={`btn-ghost btn-sm${mark === 'DEFER' ? ' is-active' : ''}`}
+      </Button>
+      <Button variant={mark === 'DEFER' ? 'light' : 'default'} size="xs" type="button"
+        className={`${mark === 'DEFER' ? 'is-active' : ''}`}
         aria-pressed={mark === 'DEFER'}
         onClick={() => set('DEFER')}>
         나중에
-      </button>
+      </Button>
     </span>
   );
 }

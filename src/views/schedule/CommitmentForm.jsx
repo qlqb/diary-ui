@@ -14,6 +14,8 @@ import { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { toHHmm } from '../../lib/datetime.js';
 
+import { Button, TextInput } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 /** 'YYYY-MM-DDTHH:mm:ss' -> 날짜와 시각으로 나눈다. 없으면 빈 값. */
 function splitLocal(value) {
   if (!value) return { date: '', time: '' };
@@ -54,39 +56,39 @@ export default function CommitmentForm({ initial, busy, onSubmit, onCancel, subm
     <form className="commitment-form" onSubmit={submit}>
       <label className="inline-field">
         <span>제목</span>
-        <input value={title} onChange={(e) => setTitle(e.target.value)}
+        <TextInput value={title} onChange={(e) => setTitle(e.target.value)}
           placeholder="예: 친구 약속" aria-label="약속 제목" />
       </label>
       <label className="inline-field">
         <span>시작</span>
-        <input type="date" value={startDate} aria-label="시작 날짜"
+        <TextInput type="date" value={startDate} aria-label="시작 날짜"
           onChange={(e) => {
             setStartDate(e.target.value);
             // 대부분 같은 날 안에서 끝난다. 다르면 사용자가 고친다.
             if (!endDate) setEndDate(e.target.value);
           }} />
-        <input type="time" step="300" value={startTime} aria-label="시작 시각"
+        <TimeInput step="300" value={startTime} aria-label="시작 시각"
           onChange={(e) => setStartTime(e.target.value)} />
       </label>
       <label className="inline-field">
         <span>종료</span>
-        <input type="date" value={endDate} aria-label="종료 날짜"
+        <TextInput type="date" value={endDate} aria-label="종료 날짜"
           onChange={(e) => setEndDate(e.target.value)} />
-        <input type="time" step="300" value={endTime} aria-label="종료 시각"
+        <TimeInput step="300" value={endTime} aria-label="종료 시각"
           onChange={(e) => setEndTime(e.target.value)} />
       </label>
       <label className="inline-field">
         <span>장소</span>
-        <input value={locationText} onChange={(e) => setLocationText(e.target.value)}
+        <TextInput value={locationText} onChange={(e) => setLocationText(e.target.value)}
           placeholder="선택" aria-label="장소" />
       </label>
       <div className="commitment-form-actions">
-        <button type="submit" className="btn-primary btn-sm" disabled={busy || !valid}>
+        <Button size="xs" type="submit" disabled={busy || !valid}>
           <Check size={13} /> {submitLabel}
-        </button>
-        <button type="button" className="btn-ghost btn-sm" onClick={onCancel}>
+        </Button>
+        <Button variant="default" size="xs" type="button" onClick={onCancel}>
           <X size={13} /> 취소
-        </button>
+        </Button>
       </div>
     </form>
   );

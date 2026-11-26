@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Pencil, Trash2 } from 'lucide-react';
 import { contextAPI } from '../../api/api.js';
+import { Badge, Button, Textarea } from '@mantine/core';
 import '../../styles/memory.css';
 
 const GROUPS = Object.freeze([
@@ -126,7 +127,7 @@ export default function MemoryView({ onOpenDraft = null }) {
       {error && (
         <p className="view-error" role="alert">
           {error}{' '}
-          <button type="button" className="btn-ghost btn-sm" onClick={load}>다시 불러오기</button>
+          <Button variant="default" size="xs" type="button" onClick={load}>다시 불러오기</Button>
         </p>
       )}
 
@@ -137,9 +138,9 @@ export default function MemoryView({ onOpenDraft = null }) {
           {onOpenDraft && (
             <p className="memory-stale-actions">
               {staleDraftIds.map((id, i) => (
-                <button key={id} type="button" className="btn-ghost btn-sm" onClick={() => onOpenDraft(id)}>
+                <Button variant="default" size="xs" key={id} type="button" onClick={() => onOpenDraft(id)}>
                   {staleDraftIds.length > 1 ? `초안 ${i + 1} 열기` : '초안 열기'}
-                </button>
+                </Button>
               ))}
             </p>
           )}
@@ -180,13 +181,13 @@ export default function MemoryView({ onOpenDraft = null }) {
                         if (!text || text === item.content) { setEditing(null); return; }
                         mutate(id, () => contextAPI.update(id, text), '고친 내용으로 바꿨어요. 이제 "내가 말한 것"으로 다뤄요.');
                       }}>
-                        <textarea className="memory-edit-input" rows={2} autoFocus disabled={busy}
+                        <Textarea className="memory-edit-input" rows={2} autoFocus disabled={busy}
                           aria-label="내용 고치기" value={editing.text}
                           onChange={(e) => setEditing({ id, text: e.target.value })}
                           onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } }} />
                         <span className="memory-actions">
-                          <button type="submit" className="btn-primary btn-sm" disabled={busy || !editing.text.trim()}>저장</button>
-                          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setEditing(null)}>취소</button>
+                          <Button size="xs" type="submit" disabled={busy || !editing.text.trim()}>저장</Button>
+                          <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => setEditing(null)}>취소</Button>
                         </span>
                       </form>
                     ) : (
@@ -196,28 +197,28 @@ export default function MemoryView({ onOpenDraft = null }) {
                     <p className="memory-meta">
                       <span>{scopeLabel(item)}</span>
                       <span>{confirmedAt ? `마지막 확인 ${confirmedAt}` : '아직 확인한 적 없음'}</span>
-                      {item.status === 'STALE' && <span className="chip chip-status">오래된 내용일 수 있어요</span>}
+                      {item.status === 'STALE' && <Badge component="span" color="gray" className="chip chip-status">오래된 내용일 수 있어요</Badge>}
                     </p>
 
                     {!isEditing && !isConfirming && (
                       <span className="memory-actions">
                         {group.type === 'INFERRED' && (
-                          <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                          <Button variant="default" size="xs" type="button" disabled={busy}
                             aria-label={`맞아요: ${item.content}`}
                             onClick={() => mutate(id, () => contextAPI.confirm(id), '확인했어요. 이제 "내가 말한 것"으로 다뤄요.')}>
                             <Check size={13} aria-hidden="true" /> 맞아요
-                          </button>
+                          </Button>
                         )}
-                        <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                        <Button variant="default" size="xs" type="button" disabled={busy}
                           aria-label={`고치기: ${item.content}`}
                           onClick={() => { setEditing({ id, text: item.content ?? '' }); setRowError(null); }}>
                           <Pencil size={13} aria-hidden="true" /> 고치기
-                        </button>
-                        <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                        </Button>
+                        <Button variant="default" size="xs" type="button" disabled={busy}
                           aria-label={`지우기: ${item.content}`}
                           onClick={() => { setConfirmingDelete(id); setRowError(null); }}>
                           <Trash2 size={13} aria-hidden="true" /> 지우기
-                        </button>
+                        </Button>
                       </span>
                     )}
 
@@ -225,14 +226,14 @@ export default function MemoryView({ onOpenDraft = null }) {
                       <p className="memory-confirm" role="group" aria-label="지우기 확인">
                         <span>지우면 AI가 이 내용을 더는 참고하지 않고, 다시 저장하지도 않아요.</span>
                         <span className="memory-actions">
-                          <button type="button" className="btn-ghost btn-sm btn-danger" disabled={busy} autoFocus
+                          <Button variant="light" color="red" size="xs" type="button" disabled={busy} autoFocus
                             onClick={() => mutate(id, () => contextAPI.remove(id), '지웠어요. AI가 더는 참고하지 않아요.')}>
                             지우기
-                          </button>
-                          <button type="button" className="btn-ghost btn-sm" disabled={busy}
+                          </Button>
+                          <Button variant="default" size="xs" type="button" disabled={busy}
                             onClick={() => setConfirmingDelete(null)}>
                             그대로 두기
-                          </button>
+                          </Button>
                         </span>
                       </p>
                     )}

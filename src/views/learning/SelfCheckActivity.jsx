@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react';
 import { selfCheckAPI } from '../../api/api.js';
 import { SELF_CHECK_LABEL, SELF_CHECK_LEVELS, selfCheckItemsOf } from './learningMapModel.js';
 
+import { Button, NativeSelect, TextInput } from '@mantine/core';
 export default function SelfCheckActivity({ courseId, groups, onClose, onSubmitted }) {
   const [groupId, setGroupId] = useState(groups[0]?.topicId ?? null);
   const [answers, setAnswers] = useState({});
@@ -57,10 +58,10 @@ export default function SelfCheckActivity({ courseId, groups, onClose, onSubmitt
 
       <label className="lm-selfcheck-group">
         <span>점검할 묶음</span>
-        <select value={groupId ?? ''} disabled={busy}
+        <NativeSelect value={groupId ?? ''} disabled={busy}
           onChange={(e) => { setGroupId(Number(e.target.value)); setAnswers({}); setSkipped(new Set()); }}>
           {groups.map((g) => <option key={g.topicId} value={g.topicId}>{g.title}</option>)}
-        </select>
+        </NativeSelect>
       </label>
 
       {visible.length === 0 ? (
@@ -80,13 +81,13 @@ export default function SelfCheckActivity({ courseId, groups, onClose, onSubmitt
                       <span>{SELF_CHECK_LABEL[level]}</span>
                     </label>
                   ))}
-                  <button type="button" className="btn-ghost btn-sm"
+                  <Button variant="default" size="xs" type="button"
                     aria-label={`${it.label} 건너뛰기`}
                     onClick={() => setSkipped((prev) => new Set(prev).add(it.key))}>
                     건너뛰기
-                  </button>
+                  </Button>
                 </div>
-                <input type="text" className="lm-selfcheck-note" maxLength={300}
+                <TextInput type="text" className="lm-selfcheck-note" maxLength={300}
                   aria-label={`${it.label} 메모 (선택)`} placeholder="메모 (선택)"
                   value={answers[it.key]?.note ?? ''}
                   onChange={(e) => setAnswer(it.key, { note: e.target.value })} />
@@ -99,12 +100,12 @@ export default function SelfCheckActivity({ courseId, groups, onClose, onSubmitt
       {error && <p className="view-error" role="alert">{error}</p>}
 
       <div className="lm-selfcheck-actions">
-        <button type="button" className="btn-primary btn-sm" disabled={busy || answered.length === 0} onClick={submit}>
+        <Button size="xs" type="button" disabled={busy || answered.length === 0} onClick={submit}>
           {answered.length > 0 ? `${answered.length}개 자기평가 저장` : '자기평가 저장'}
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={onClose}>
+        </Button>
+        <Button variant="default" size="xs" type="button" disabled={busy} onClick={onClose}>
           이번엔 건너뛰기
-        </button>
+        </Button>
       </div>
     </section>
   );

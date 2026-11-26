@@ -29,6 +29,7 @@ import MaterialWeekReview from './MaterialWeekReview.jsx';
 import {
   SELF_CHECK_LABEL, ancestorIdsOf, flattenTopics, loadLearningMap, mapStates, searchTopics,
 } from './learningMapModel.js';
+import { ActionIcon, Badge, Button, Checkbox, TextInput } from '@mantine/core';
 import '../../styles/learning-map.css';
 import '../../styles/material-weeks.css';
 
@@ -261,9 +262,9 @@ export default function ProjectLearningMap({
       <p className="lm-optional">
         지도를 정리하지 않아도 상담과 계획은 바로 할 수 있어요.
         {onOpenConsult && (
-          <button type="button" className="btn-primary btn-sm" onClick={() => onOpenConsult(courseId)}>
+          <Button size="xs" type="button" onClick={() => onOpenConsult(courseId)}>
             <Sparkles size={13} aria-hidden="true" /> 이 프로젝트로 상담하기
-          </button>
+          </Button>
         )}
       </p>
 
@@ -271,7 +272,7 @@ export default function ProjectLearningMap({
       {error && (
         <p className="view-error" role="alert">
           {error}{' '}
-          <button type="button" className="btn-ghost btn-sm" onClick={load}>다시 불러오기</button>
+          <Button variant="default" size="xs" type="button" onClick={load}>다시 불러오기</Button>
         </p>
       )}
       {notice && <p className="hint" role="status">{notice}</p>}
@@ -314,25 +315,25 @@ export default function ProjectLearningMap({
             )}
             <label className="lm-search">
               <Search size={13} aria-hidden="true" />
-              <input type="search" value={query} placeholder="주제·자료 이름 찾기" aria-label="학습 지도에서 찾기"
+              <TextInput type="search" value={query} placeholder="주제·자료 이름 찾기" aria-label="학습 지도에서 찾기"
                 onChange={(e) => changeQuery(e.target.value)} />
               {query && (
-                <button type="button" className="icon-btn" aria-label="검색어 지우기" onClick={() => changeQuery('')}>
+                <ActionIcon variant="subtle" color="gray" type="button" aria-label="검색어 지우기" onClick={() => changeQuery('')}>
                   <X size={13} />
-                </button>
+                </ActionIcon>
               )}
             </label>
             <div className="lm-toolbar-actions">
-              <button type="button" className="btn-ghost btn-sm" onClick={expandAll}>모두 펼치기</button>
-              <button type="button" className="btn-ghost btn-sm" onClick={collapseAll}>모두 접기</button>
-              <button type="button" className="btn-ghost btn-sm" disabled={selectedTopicId == null}
+              <Button variant="default" size="xs" type="button" onClick={expandAll}>모두 펼치기</Button>
+              <Button variant="default" size="xs" type="button" onClick={collapseAll}>모두 접기</Button>
+              <Button variant="default" size="xs" type="button" disabled={selectedTopicId == null}
                 onClick={jumpToSelected}>
                 선택한 항목으로 이동
-              </button>
+              </Button>
             </div>
             {proposedCount > 0 && (
               <label className="lm-overlay-toggle">
-                <input type="checkbox" checked={showProposed} onChange={(e) => setShowProposed(e.target.checked)} />
+                <Checkbox size="xs" checked={showProposed} onChange={(e) => setShowProposed(e.target.checked)} />
                 <span>자동 분석 제안 함께 보기</span>
               </label>
             )}
@@ -418,9 +419,9 @@ export default function ProjectLearningMap({
       )}
       {model && topics.length > 0 && !selfCheckOpen && !states.includes('NO_RECORDS') && (
         <p className="lm-selfcheck-entry">
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setSelfCheckOpen(true)}>
+          <Button variant="default" size="xs" type="button" onClick={() => setSelfCheckOpen(true)}>
             점검 활동 해보기 (선택)
-          </button>
+          </Button>
           <span className="view-dim">시험이 아니라 자기평가예요. 다음 상담에 반영돼요.</span>
         </p>
       )}
@@ -475,7 +476,7 @@ function MapCorrections({ courseId, refreshKey, onChanged }) {
           {view.exclusions.map((e) => (
             <li key={e.exclusionId}>
               <span className="lm-corrections-label">{e.label || '이번 계획'} 범위에서 뺌</span> {e.title}
-              <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => remove(e.exclusionId)}>풀기</button>
+              <Button variant="default" size="xs" type="button" disabled={busy} onClick={() => remove(e.exclusionId)}>풀기</Button>
             </li>
           ))}
         </ul>
@@ -509,7 +510,7 @@ function MapStateNotices({
           <p className="lm-state-title">아직 올린 자료가 없어요</p>
           <p className="lm-state-desc">강의 자료나 교재 목차를 올리면 여기에 주제 지도가 만들어져요.</p>
           {onOpenMaterials && (
-            <button type="button" className="btn-ghost btn-sm" onClick={onOpenMaterials}>자료 올리기</button>
+            <Button variant="default" size="xs" type="button" onClick={onOpenMaterials}>자료 올리기</Button>
           )}
         </div>
       )}
@@ -521,9 +522,9 @@ function MapStateNotices({
             승인하지 않아도 상담·계획에는 자료 내용이 쓰여요.
           </p>
           {onReviewProposals && (
-            <button type="button" className="btn-ghost btn-sm" onClick={() => onReviewProposals(null)}>
+            <Button variant="default" size="xs" type="button" onClick={() => onReviewProposals(null)}>
               제안 검토하기
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -531,16 +532,16 @@ function MapStateNotices({
         <div className="lm-state" data-state="ANALYSIS_PENDING" role="status">
           <p className="lm-state-title">자료 {s.analysisPending}개를 분석하려고 기다리는 중이에요</p>
           <p className="lm-state-desc">끝나면 구조 제안이 여기에 나타나요. 기다리는 동안에도 상담은 할 수 있어요.</p>
-          <button type="button" className="btn-ghost btn-sm" onClick={onReload}>지금 다시 확인</button>
+          <Button variant="default" size="xs" type="button" onClick={onReload}>지금 다시 확인</Button>
         </div>
       )}
       {states.includes('ANALYSIS_FAILED') && (
         <div className="lm-state is-problem" data-state="ANALYSIS_FAILED" role="status">
           <p className="lm-state-title">분석하지 못한 자료가 {s.analysisFailed}개 있어요</p>
           <p className="lm-state-desc">그 자료의 내용은 지도에 없어요. 다시 시도할 수 있어요.</p>
-          <button type="button" className="btn-ghost btn-sm" disabled={retrying} onClick={onRetryFailed}>
+          <Button variant="default" size="xs" type="button" disabled={retrying} onClick={onRetryFailed}>
             {retrying ? '다시 시도하는 중...' : '분석 다시 시도'}
-          </button>
+          </Button>
         </div>
       )}
       {states.includes('NO_RECORDS') && (
@@ -550,7 +551,7 @@ function MapStateNotices({
             계획한 일을 기록하면 주제마다 진행이 쌓여요. 이미 아는 내용이 있다면 점검 활동으로 먼저 알려 줄 수 있어요.
           </p>
           {onStartSelfCheck && (
-            <button type="button" className="btn-ghost btn-sm" onClick={onStartSelfCheck}>점검 활동 해보기 (선택)</button>
+            <Button variant="default" size="xs" type="button" onClick={onStartSelfCheck}>점검 활동 해보기 (선택)</Button>
           )}
         </div>
       )}
@@ -574,9 +575,9 @@ function TopicList({ nodes, scope, depth, insideMatch, shared }) {
       ))}
       {visible.length > shown.length && (
         <li className="lm-more">
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setLimit((v) => v + SIBLING_PAGE)}>
+          <Button variant="default" size="xs" type="button" onClick={() => setLimit((v) => v + SIBLING_PAGE)}>
             나머지 {visible.length - shown.length}개 더 보기
-          </button>
+          </Button>
         </li>
       )}
     </ul>
@@ -622,36 +623,36 @@ function TopicNode({ topic, scope, depth, insideMatch, shared }) {
               <span>계획한 일 {topic.plannedItems}개 · 끝낸 일 {topic.doneItems ?? 0}개</span>
             )}
             {SELF_CHECK_LABEL[topic.selfCheck] && (
-              <span className="chip chip-status">자기평가: {SELF_CHECK_LABEL[topic.selfCheck]}</span>
+              <Badge component="span" color="gray" className="chip chip-status">자기평가: {SELF_CHECK_LABEL[topic.selfCheck]}</Badge>
             )}
             {topic.classWeek != null && (
-              <span className="chip">실제 수업 {topic.classWeek}주차{topic.classSeq != null ? ` · ${topic.classSeq}번째` : ''}</span>
+              <Badge component="span" color="gray" className="chip">실제 수업 {topic.classWeek}주차{topic.classSeq != null ? ` · ${topic.classSeq}번째` : ''}</Badge>
             )}
             {topic.classWeek == null && topic.classSeq != null && (
-              <span className="chip">실제 수업 {topic.classSeq}번째</span>
+              <Badge component="span" color="gray" className="chip">실제 수업 {topic.classSeq}번째</Badge>
             )}
             {topic.scopeLabel != null && (
-              <span className="chip chip-status">{topic.scopeLabel || '이번 계획'} 범위에서 뺌</span>
+              <Badge component="span" color="gray" className="chip chip-status">{topic.scopeLabel || '이번 계획'} 범위에서 뺌</Badge>
             )}
             {topic.priorTextbook && (
-              <span className="chip chip-status" title="교재를 바꾸기 전 책의 목차에서 온 항목이에요. 기록은 그대로이고, 지금 교재의 범위로 세지 않아요.">
+              <Badge component="span" color="gray" className="chip chip-status" title="교재를 바꾸기 전 책의 목차에서 온 항목이에요. 기록은 그대로이고, 지금 교재의 범위로 세지 않아요.">
                 이전 교재 목차
-              </span>
+              </Badge>
             )}
             {!topic.priorTextbook && topic.tocOrigin === 'WEB' && (
-              <span className="chip chip-status" title="서점 페이지의 목차에서 온 항목이에요. 목차 제목·쪽만 확인했고 본문은 보지 않았어요.">
+              <Badge component="span" color="gray" className="chip chip-status" title="서점 페이지의 목차에서 온 항목이에요. 목차 제목·쪽만 확인했고 본문은 보지 않았어요.">
                 웹 목차
-              </span>
+              </Badge>
             )}
             {topic.mergedDoneItems > 0 && (
-              <span className="chip chip-warn" title="병합으로 보관된 항목에 남아 있는 기록이에요. 이 항목의 상태는 직접 확인해 주세요.">
+              <Badge component="span" color="orange" className="chip chip-warn" title="병합으로 보관된 항목에 남아 있는 기록이에요. 이 항목의 상태는 직접 확인해 주세요.">
                 합친 항목의 끝낸 일 {topic.mergedDoneItems}개 · 상태 확인 필요
-              </span>
+              </Badge>
             )}
-            {mark === 'KNOWN' && <span className="chip chip-status">이미 알아요</span>}
-            {mark === 'DEFER' && <span className="chip chip-status">나중에</span>}
+            {mark === 'KNOWN' && <Badge component="span" color="gray" className="chip chip-status">이미 알아요</Badge>}
+            {mark === 'DEFER' && <Badge component="span" color="gray" className="chip chip-status">나중에</Badge>}
             {!open && proposedHere.length > 0 && (
-              <span className="chip lm-proposed-chip">승인 전 제안 {proposedHere.length}개</span>
+              <Badge component="span" color="violet" className="chip lm-proposed-chip">승인 전 제안 {proposedHere.length}개</Badge>
             )}
           </span>
 
@@ -670,14 +671,14 @@ function TopicNode({ topic, scope, depth, insideMatch, shared }) {
 
         {onMarkTopic && (
           <span className="lm-marks">
-            <button type="button" className={`btn-ghost btn-sm${mark === 'KNOWN' ? ' is-active' : ''}`}
+            <Button variant={mark === 'KNOWN' ? 'light' : 'default'} size="xs" type="button" className={`${mark === 'KNOWN' ? 'is-active' : ''}`}
               aria-pressed={mark === 'KNOWN'} onClick={() => onMarkTopic(topic.topicId, mark === 'KNOWN' ? null : 'KNOWN')}>
               이미 알아요
-            </button>
-            <button type="button" className={`btn-ghost btn-sm${mark === 'DEFER' ? ' is-active' : ''}`}
+            </Button>
+            <Button variant={mark === 'DEFER' ? 'light' : 'default'} size="xs" type="button" className={`${mark === 'DEFER' ? 'is-active' : ''}`}
               aria-pressed={mark === 'DEFER'} onClick={() => onMarkTopic(topic.topicId, mark === 'DEFER' ? null : 'DEFER')}>
               나중에
-            </button>
+            </Button>
           </span>
         )}
       </div>
@@ -714,8 +715,8 @@ function ProposedNode({ node, depth, shared }) {
         <span className="lm-toggle-spacer" aria-hidden="true" />
         <div className="lm-row-main">
           <span className="lm-proposed-head">
-            <span className="chip lm-proposed-chip">자동 분석 제안(승인 전)</span>
-            <span className="chip chip-status">{CHANGE_OP_LABEL[node.op] ?? '변경'}</span>
+            <Badge component="span" color="violet" className="chip lm-proposed-chip">자동 분석 제안(승인 전)</Badge>
+            <Badge component="span" color="gray" className="chip chip-status">{CHANGE_OP_LABEL[node.op] ?? '변경'}</Badge>
           </span>
           <span className="lm-title"><Highlight text={node.title} query={query} /></span>
           <span className="lm-meta">
@@ -728,10 +729,10 @@ function ProposedNode({ node, depth, shared }) {
           </span>
           {structural && <p className="lm-proposed-note">{STRUCTURAL_NOTE}</p>}
           {onReviewProposals && (
-            <button type="button" className="btn-ghost btn-sm lm-proposed-review"
+            <Button variant="default" size="xs" type="button" className="lm-proposed-review"
               onClick={() => onReviewProposals(node.proposalId)}>
               변경안에서 검토·적용하기
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -758,14 +759,14 @@ function WeekReviewNotice({ review, hasWeeks, onOpen }) {
         <p className="lm-state-desc">
           주차별 보기는 확인한 자료로만 만들어요. AI가 추천한 주차를 한 화면에서 보고, 맞으면 적용하고 다르면 옮기세요.
         </p>
-        <button type="button" className="btn-ghost btn-sm" onClick={onOpen}>자료 주차 확인하기</button>
+        <Button variant="default" size="xs" type="button" onClick={onOpen}>자료 주차 확인하기</Button>
       </div>
     );
   }
   return (
     <p className="lm-week-review view-dim">
       {hasWeeks ? '모든 자료의 주차를 확인했어요.' : '확인한 자료 중 특정 주차에 놓인 것이 없어요.'}
-      <button type="button" className="btn-ghost btn-sm" onClick={onOpen}>자료 주차 고치기</button>
+      <Button variant="default" size="xs" type="button" onClick={onOpen}>자료 주차 고치기</Button>
     </p>
   );
 }
@@ -816,7 +817,7 @@ function WeekView({ weeks, topics, topicById, model, shared, onOpenReview }) {
         <p className="lm-week-reference">
           전체 참고자료: {courseWide.map((m) => m.filename).join(' · ')}
           {onOpenReview && (
-            <button type="button" className="btn-ghost btn-sm" onClick={onOpenReview}>자료 주차 고치기</button>
+            <Button variant="default" size="xs" type="button" onClick={onOpenReview}>자료 주차 고치기</Button>
           )}
         </p>
       )}
@@ -841,7 +842,7 @@ function UnlinkedGroup({ unlinked, query }) {
               <li key={m.materialId} className="lm-unlinked-item">
                 <span className="lm-unlinked-name">
                   <FileText size={13} aria-hidden="true" /> <Highlight text={m.filename} query={query} />
-                  {m.analysisState && <span className="chip chip-status">{analysisStateLabel(m.analysisState).label}</span>}
+                  {m.analysisState && <Badge component="span" color="gray" className="chip chip-status">{analysisStateLabel(m.analysisState).label}</Badge>}
                 </span>
                 {(m.sections ?? []).length > 0 && (
                   <ul className="lm-unlinked-sections">
@@ -849,7 +850,7 @@ function UnlinkedGroup({ unlinked, query }) {
                       <li key={sec.sectionId}>
                         {sec.locator && <span className="lm-material-locator">{sec.locator}</span>}
                         <span>{sec.title}</span>
-                        {(sec.roles ?? []).map((r) => <span key={r} className="chip chip-status">{sectionRoleLabel(r)}</span>)}
+                        {(sec.roles ?? []).map((r) => <Badge component="span" color="gray" key={r} className="chip chip-status">{sectionRoleLabel(r)}</Badge>)}
                       </li>
                     ))}
                   </ul>

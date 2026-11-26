@@ -15,6 +15,7 @@ import CommitmentForm from './CommitmentForm.jsx';
 import { commitmentAPI } from '../../api/api.js';
 import { formatDateShort, toHHmm } from '../../lib/datetime.js';
 
+import { Badge, Button } from '@mantine/core';
 /** "9/4 19:00 ~ 21:00" — 날짜가 넘어가면 종료 쪽 날짜도 보여준다. */
 function rangeLabel(commitment) {
   const startDate = String(commitment.startAt).slice(0, 10);
@@ -52,10 +53,10 @@ export default function CommitmentSection({
     <section className="view-section">
       <div className="section-head">
         <h2 className="section-title">일회성 일정</h2>
-        <button type="button" className="btn-ghost btn-sm" disabled={busy}
+        <Button variant="default" size="xs" type="button" disabled={busy}
           onClick={() => { setAdding((v) => !v); setError(null); }}>
           <Plus size={13} /> 일회성 일정 추가
-        </button>
+        </Button>
       </div>
       <p className="section-desc">
         약속·병원·면접처럼 한 번만 시간을 차지하는 일이에요. 이 시간에는 계획이 잡히지 않아요.
@@ -89,7 +90,7 @@ export default function CommitmentSection({
                 <span className="exec-row-title">{commitment.title}</span>
               </div>
               <div className="exec-row-meta">
-                <span className="chip chip-block"><MapPin size={11} /> 약속</span>
+                <Badge component="span" color="gray" className="chip chip-block"><MapPin size={11} /> 약속</Badge>
                 {commitment.locationText && (
                   <span className="exec-row-dim">{commitment.locationText}</span>
                 )}
@@ -112,16 +113,16 @@ export default function CommitmentSection({
 
             {/* 완료·일부·줄이기·보류가 없다. 약속은 수행 대상이 아니다. */}
             <div className="exec-row-actions">
-              <button type="button" className="btn-ghost btn-sm" disabled={busy}
+              <Button variant="default" size="xs" type="button" disabled={busy}
                 onClick={() => onEdit?.(editingId === commitment.commitmentId
                   ? null : commitment.commitmentId)}>
                 수정
-              </button>
-              <button type="button" className="btn-ghost btn-sm btn-danger" disabled={busy}
+              </Button>
+              <Button variant="light" color="red" size="xs" type="button" disabled={busy}
                 onClick={() => run(() => commitmentAPI.remove(
                   commitment.commitmentId, commitment.version))}>
                 <Trash2 size={13} /> 삭제
-              </button>
+              </Button>
             </div>
           </article>
         ))}

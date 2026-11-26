@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
 import { structureAPI } from '../../api/api.js';
 
+import { ActionIcon, Button, NativeSelect, TextInput, Textarea } from '@mantine/core';
 import '../../styles/learning-flow.css';
 const WEEKS = Array.from({ length: 16 }, (_, i) => i + 1);
 
@@ -79,46 +80,46 @@ export default function StructureEditor({ courseId, topic, topics, onSent }) {
       <fieldset className="structure-editor-group">
         <legend>교재 구조</legend>
         <div className="structure-editor-row">
-          <input className="input" aria-label="새 이름" placeholder="새 이름" value={rename}
+          <TextInput className="input" aria-label="새 이름" placeholder="새 이름" value={rename}
             onChange={(e) => setRename(e.target.value)} />
-          <button type="button" className="btn-ghost btn-sm" disabled={!rename.trim()}
+          <Button variant="default" size="xs" type="button" disabled={!rename.trim()}
             onClick={() => { add({ op: 'RENAME', ...base, title: rename.trim(), reason: '이름 고침' }, `이름을 「${rename.trim()}」로`); setRename(''); }}>
             이름 바꾸기
-          </button>
+          </Button>
         </div>
         <div className="structure-editor-row">
-          <button type="button" className="btn-ghost btn-sm" disabled={index <= 0}
+          <Button variant="default" size="xs" type="button" disabled={index <= 0}
             onClick={() => moveTo(topic.parentTopicId ?? null, index >= 2 ? siblings[index - 2].topicId : 0, '한 칸 위로')}>
             위로
-          </button>
-          <button type="button" className="btn-ghost btn-sm" disabled={index < 0 || index >= siblings.length - 1}
+          </Button>
+          <Button variant="default" size="xs" type="button" disabled={index < 0 || index >= siblings.length - 1}
             onClick={() => moveTo(topic.parentTopicId ?? null, siblings[index + 1]?.topicId, '한 칸 아래로')}>
             아래로
-          </button>
-          <select aria-label="옮길 부모" value={parentId} onChange={(e) => setParentId(e.target.value)}>
+          </Button>
+          <NativeSelect aria-label="옮길 부모" value={parentId} onChange={(e) => setParentId(e.target.value)}>
             <option value="">다른 항목 아래로…</option>
             <option value="root">맨 위 단계</option>
             {others.filter((t) => !descendants.has(t.topicId)).map((t) => (
               <option key={t.topicId} value={t.topicId}>{t.title}</option>
             ))}
-          </select>
-          <button type="button" className="btn-ghost btn-sm" disabled={!parentId}
+          </NativeSelect>
+          <Button variant="default" size="xs" type="button" disabled={!parentId}
             onClick={() => {
               const parent = parentId === 'root' ? null : Number(parentId);
               moveTo(parent, null, parent == null ? '맨 위 단계로' : `「${byId.get(parent)?.title}」 아래로`);
               setParentId('');
             }}>
             옮기기
-          </button>
+          </Button>
         </div>
         <div className="structure-editor-row">
-          <select aria-label="같은 내용인 항목" value={mergeWith} onChange={(e) => setMergeWith(e.target.value)}>
+          <NativeSelect aria-label="같은 내용인 항목" value={mergeWith} onChange={(e) => setMergeWith(e.target.value)}>
             <option value="">같은 내용인 항목과 합치기…</option>
             {others.filter((t) => !descendants.has(t.topicId)).map((t) => (
               <option key={t.topicId} value={t.topicId}>{t.title}</option>
             ))}
-          </select>
-          <button type="button" className="btn-ghost btn-sm" disabled={!mergeWith}
+          </NativeSelect>
+          <Button variant="default" size="xs" type="button" disabled={!mergeWith}
             onClick={() => {
               const other = Number(mergeWith);
               add({ op: 'MERGE', survivingTopicId: topic.topicId, absorbedTopicIds: [other],
@@ -126,13 +127,13 @@ export default function StructureEditor({ courseId, topic, topics, onSent }) {
               setMergeWith('');
             }}>
             합치기
-          </button>
+          </Button>
         </div>
         <div className="structure-editor-row">
-          <textarea className="input" rows={2} aria-label="나눌 하위 항목 제목(한 줄에 하나)"
+          <Textarea className="input" rows={2} aria-label="나눌 하위 항목 제목(한 줄에 하나)"
             placeholder="나눌 하위 항목 제목(한 줄에 하나, 둘 이상)" value={splitText}
             onChange={(e) => setSplitText(e.target.value)} />
-          <button type="button" className="btn-ghost btn-sm"
+          <Button variant="default" size="xs" type="button"
             disabled={splitText.split('\n').filter((l) => l.trim()).length < 2}
             onClick={() => {
               const titles = splitText.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -141,23 +142,23 @@ export default function StructureEditor({ courseId, topic, topics, onSent }) {
               setSplitText('');
             }}>
             나누기
-          </button>
+          </Button>
         </div>
       </fieldset>
 
       <fieldset className="structure-editor-group">
         <legend>실제 수업 <span className="view-sub-dim">(교재 구조는 그대로)</span></legend>
         <div className="structure-editor-row">
-          <select aria-label="실제로 다룬 주차" value={week} onChange={(e) => setWeek(e.target.value)}>
+          <NativeSelect aria-label="실제로 다룬 주차" value={week} onChange={(e) => setWeek(e.target.value)}>
             <option value="">몇 주차에 다뤘나요…</option>
             {WEEKS.map((w) => <option key={w} value={w}>{w}주차</option>)}
-          </select>
-          <select aria-label="바로 앞에 다룬 항목" value={classAfter} onChange={(e) => setClassAfter(e.target.value)}>
+          </NativeSelect>
+          <NativeSelect aria-label="바로 앞에 다룬 항목" value={classAfter} onChange={(e) => setClassAfter(e.target.value)}>
             <option value="">바로 앞에 다룬 항목…(선택)</option>
             <option value="0">가장 먼저 다룸</option>
             {others.map((t) => <option key={t.topicId} value={t.topicId}>{t.title} 다음</option>)}
-          </select>
-          <button type="button" className="btn-ghost btn-sm" disabled={!week && classAfter === ''}
+          </NativeSelect>
+          <Button variant="default" size="xs" type="button" disabled={!week && classAfter === ''}
             onClick={() => {
               const after = classAfter === '' ? null : Number(classAfter);
               add({ op: 'CLASS', ...base, week: week ? Number(week) : null, afterTopicId: after, reason: '실제 수업 정정' },
@@ -167,20 +168,20 @@ export default function StructureEditor({ courseId, topic, topics, onSent }) {
               setClassAfter('');
             }}>
             기록
-          </button>
+          </Button>
         </div>
       </fieldset>
 
       <fieldset className="structure-editor-group">
         <legend>시험·계획 범위</legend>
         <div className="structure-editor-row">
-          <input className="input" aria-label="어느 시험·계획" placeholder="예: 중간고사 (비우면 이번 계획)" maxLength={60}
+          <TextInput className="input" aria-label="어느 시험·계획" placeholder="예: 중간고사 (비우면 이번 계획)" maxLength={60}
             value={scopeLabel} onChange={(e) => setScopeLabel(e.target.value)} />
-          <button type="button" className="btn-ghost btn-sm"
+          <Button variant="default" size="xs" type="button"
             onClick={() => { add({ op: 'SCOPE_EXCLUDE', ...base, label: scopeLabel.trim() || null, reason: '범위에서 뺌' },
               `${scopeLabel.trim() || '이번 계획'} 범위에서 빼기(완료로 보지 않음)`); setScopeLabel(''); }}>
             범위에서 빼기
-          </button>
+          </Button>
         </div>
       </fieldset>
 
@@ -191,16 +192,16 @@ export default function StructureEditor({ courseId, topic, topics, onSent }) {
             {pending.map((p, i) => (
               <li key={i}>
                 {p.text}
-                <button type="button" className="icon-btn" aria-label={`${p.text} 빼기`}
+                <ActionIcon variant="subtle" color="gray" type="button" aria-label={`${p.text} 빼기`}
                   onClick={() => setPending((prev) => prev.filter((_, j) => j !== i))}>
                   <Trash2 size={13} />
-                </button>
+                </ActionIcon>
               </li>
             ))}
           </ul>
-          <button type="button" className="btn-primary btn-sm" disabled={sending} onClick={send}>
+          <Button size="xs" type="button" disabled={sending} onClick={send}>
             {sending ? <Loader2 size={13} className="spin" /> : null} 검토로 보내기
-          </button>
+          </Button>
           <span className="view-sub-dim"> 아래 정리 구역에서 전후 구조를 보고 적용해요.</span>
         </div>
       )}

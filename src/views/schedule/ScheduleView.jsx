@@ -19,6 +19,7 @@ import CommitmentSection from './CommitmentSection.jsx';
 import { commitmentAPI, executionItemAPI, routineAPI } from '../../api/api.js';
 import { formatDateShort, todayString, weekDates, weekOffsetOf } from '../../lib/datetime.js';
 
+import { ActionIcon, Button } from '@mantine/core';
 export default function ScheduleView({
   draft, onPatchCard, onToggleExclude, onOpenAi, refreshToken, projectTitles, projects, onItemDeleted,
 }) {
@@ -152,13 +153,13 @@ export default function ScheduleView({
           </p>
         </div>
         <div className="week-nav">
-          <button type="button" className="icon-btn" onClick={() => setWeekOffset((v) => v - 1)} aria-label="지난 주">
+          <ActionIcon variant="subtle" color="gray" type="button" onClick={() => setWeekOffset((v) => v - 1)} aria-label="지난 주">
             <ChevronLeft size={16} />
-          </button>
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setWeekOffset(0)}>이번 주</button>
-          <button type="button" className="icon-btn" onClick={() => setWeekOffset((v) => v + 1)} aria-label="다음 주">
+          </ActionIcon>
+          <Button variant="default" size="xs" type="button" onClick={() => setWeekOffset(0)}>이번 주</Button>
+          <ActionIcon variant="subtle" color="gray" type="button" onClick={() => setWeekOffset((v) => v + 1)} aria-label="다음 주">
             <ChevronRight size={16} />
-          </button>
+          </ActionIcon>
         </div>
       </header>
 
@@ -189,7 +190,7 @@ export default function ScheduleView({
             onAction={handleAction}
             busy={busyId === selected.executionItemId}
           />
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setSelected(null)}>닫기</button>
+          <Button variant="default" size="xs" type="button" onClick={() => setSelected(null)}>닫기</Button>
         </section>
       )}
 
@@ -241,9 +242,9 @@ export default function ScheduleView({
         <div className="empty-block">
           <p className="empty-title">이번 주에 잡힌 것이 없어요</p>
           <p className="empty-desc">오른쪽에서 &quot;이번 주 계획 짜줘&quot;라고 말하면 초안이 이 격자 위에 바로 나타나요.</p>
-          <button type="button" className="btn-ghost btn-sm" onClick={onOpenAi}>
+          <Button variant="default" size="xs" type="button" onClick={onOpenAi}>
             <Sparkles size={13} /> AI와 계획 세우기
-          </button>
+          </Button>
         </div>
       )}
     </div>

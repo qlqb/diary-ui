@@ -17,6 +17,7 @@ import {
   TOPIC_SOURCE_TYPE_LABEL,
 } from '../../types/learning.js';
 
+import { Badge, Button } from '@mantine/core';
 const NEXT_STATUS = {
   [TopicProgressStatus.NOT_STARTED]: TopicProgressStatus.IN_PROGRESS,
   [TopicProgressStatus.IN_PROGRESS]: TopicProgressStatus.LEARNED,
@@ -144,7 +145,7 @@ export default function TopicDetail({ courseTitle, ancestors, topic, onProgressC
           <ul className="topic-detail-linked-list">
             {topic.linkedMaterials.map((l) => (
               <li key={l.linkId}>
-                <span className="chip chip-status">{l.roleLabel ?? '자료'}</span>
+                <Badge component="span" color="gray" className="chip chip-status">{l.roleLabel ?? '자료'}</Badge>
                 {' '}{l.sectionTitle}{l.locator ? ` (${l.locator})` : ''}
                 {l.taskText && <span className="view-dim"> — {l.taskText}</span>}
                 {l.materialDeleted
@@ -173,12 +174,12 @@ export default function TopicDetail({ courseTitle, ancestors, topic, onProgressC
       )}
 
       <div className="topic-detail-actions">
-        <button type="button" className="v6-btn-small" disabled={updating} onClick={handleStatusChange}>
+        <Button variant="default" size="xs" type="button" disabled={updating} onClick={handleStatusChange}>
           <GraduationCap size={14} /> {NEXT_ACTION_LABEL[topic.progressStatus]}
-        </button>
-        <button type="button" className="btn-primary topic-detail-tutor-btn" onClick={() => onStartTutor?.(topic)}>
+        </Button>
+        <Button type="button" className="topic-detail-tutor-btn" onClick={() => onStartTutor?.(topic)}>
           <MessageCircleQuestion size={14} /> AI 과외 시작
-        </button>
+        </Button>
       </div>
     </div>
   );
