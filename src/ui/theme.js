@@ -7,7 +7,15 @@
  */
 import { Badge, createTheme } from '@mantine/core';
 
+/*
+ * 강조색. 로고 바탕의 남색(#4f46e5)이 6번 단계(버튼·선택 표시의 기본 단계)에 오는 10단계다.
+ * 기존 CSS의 --ws-accent* 도 이 팔레트에 묶여 있다(styles/mantine-tokens.css).
+ */
+const brand = ['#eef0fe', '#e0e7ff', '#c7d2fe', '#a5b4fc', '#818cf8', '#6366f1', '#4f46e5', '#4338ca', '#3730a3', '#312e81'];
+
 export const theme = createTheme({
+  colors: { brand },
+  primaryColor: 'brand',
   fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   components: {
     Badge: Badge.extend({ defaultProps: { variant: 'light', radius: 'sm', size: 'md', tt: 'none' } }),

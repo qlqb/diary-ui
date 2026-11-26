@@ -124,7 +124,7 @@ export default function RecordView({ projectTitles, refreshToken }) {
                         <Badge component="span" color="orange" className="chip record-chip-blocker">걸린 점: {BLOCKER_LABEL[record.blockerKind]}</Badge>
                       )}
                       {record.courseId && projectTitles?.[record.courseId] && (
-                        <Badge component="span" color="blue" className="chip chip-project">{projectTitles[record.courseId]}</Badge>
+                        <Badge component="span" className="chip chip-project">{projectTitles[record.courseId]}</Badge>
                       )}
                     </span>
                     {record.note && <p className="record-row-note">{record.note}</p>}

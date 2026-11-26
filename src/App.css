@@ -88,18 +88,6 @@ body {
   margin-bottom: 1.5rem;
 }
 
-.auth-logo-icon {
-  width: 36px;
-  height: 36px;
-  background: #6366f1;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  color: white;
-}
-
 .auth-logo h1 {
   font-size: 20px;
   font-weight: 600;
@@ -206,18 +194,6 @@ body {
   text-decoration: none;
 }
 
-.nav-logo-icon {
-  width: 28px;
-  height: 28px;
-  background: #6366f1;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  color: white;
-  flex-shrink: 0;
-}
 
 .nav-logo span {
   font-size: 15px;

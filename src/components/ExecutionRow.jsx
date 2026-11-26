@@ -295,7 +295,7 @@ export default function ExecutionRow({
           ) : (
             <span className="exec-row-title">{item.title}</span>
           )}
-          {projectTitle && <Badge component="span" color="blue" className="chip chip-project">{projectTitle}</Badge>}
+          {projectTitle && <Badge component="span" className="chip chip-project">{projectTitle}</Badge>}
         </div>
         <div className="exec-row-meta">
           <span className="exec-row-time">

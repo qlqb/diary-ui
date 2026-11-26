@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Sparkles } from 'lucide-react';
 
 import './App.css';
 import './styles/workspace.css';
@@ -7,6 +6,7 @@ import './styles/mantine-tokens.css';
 
 import { authAPI } from './api/api';
 import MainShell from './shell/MainShell.jsx';
+import Logo from './ui/Logo.jsx';
 
 import { Button, TextInput } from '@mantine/core';
 /**
@@ -104,7 +104,7 @@ function AuthView({ mode, onAuth, onSwitch }) {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="auth-logo-icon"><Sparkles size={18} /></div>
+          <Logo size={40} />
           <h1>오늘조각</h1>
         </div>
         <p className="subtitle">AI와 이야기하고, 그 결정을 오늘로 옮기세요</p>

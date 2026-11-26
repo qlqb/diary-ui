@@ -1,7 +1,7 @@
 /*
  * 기존 색 변수(--ws-*)를 Mantine 팔레트에 묶는다(2026-11-20, Mantine 전환).
  * 부품은 Mantine 컴포넌트로 바꿔 가지만, 행·칸·배지처럼 기존 CSS가 그리는 부분도 같은 색이어야 화면이 한 벌로 보인다.
- * workspace.css의 :root 정의 뒤에 불러와 값을 덮는다. 값은 Mantine 기본 테마(primaryColor = blue)의 변수다.
+ * workspace.css의 :root 정의 뒤에 불러와 값을 덮는다. 값은 Mantine 테마의 변수다. 강조색은 로고에 맞춘 남색 팔레트(ui/theme.js의 brand)다.
  */
 :root {
   --ws-bg: var(--mantine-color-gray-0);
@@ -11,9 +11,9 @@
   --ws-text: var(--mantine-color-black);
   --ws-text-dim: var(--mantine-color-gray-7);
   --ws-text-faint: var(--mantine-color-dimmed);
-  --ws-accent: var(--mantine-color-blue-6);
-  --ws-accent-soft: var(--mantine-color-blue-0);
-  --ws-accent-text: var(--mantine-color-blue-8);
+  --ws-accent: var(--mantine-color-brand-6);
+  --ws-accent-soft: var(--mantine-color-brand-0);
+  --ws-accent-text: var(--mantine-color-brand-8);
   --ws-draft: var(--mantine-color-violet-6);
   --ws-draft-soft: var(--mantine-color-violet-0);
   --ws-danger: var(--mantine-color-red-8);

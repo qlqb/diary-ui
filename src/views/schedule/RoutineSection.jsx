@@ -104,7 +104,7 @@ export default function RoutineSection({ routines, courses, loading, onChanged }
                 </button>
 
                 <span className="routine-row-title">{routine.title}</span>
-                {course && <Badge component="span" color="blue" className="chip chip-project">{course.title}</Badge>}
+                {course && <Badge component="span" className="chip chip-project">{course.title}</Badge>}
                 {routine.ended && <Badge component="span" color="gray" className="chip chip-status">종료됨</Badge>}
 
                 <span className="routine-row-when">

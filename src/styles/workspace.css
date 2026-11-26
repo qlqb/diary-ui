@@ -68,15 +68,6 @@
   font-size: 15px;
 }
 
-.nav-logo-icon {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--ws-accent);
-  color: #fff;
-}
 
 .nav-menu {
   display: flex;

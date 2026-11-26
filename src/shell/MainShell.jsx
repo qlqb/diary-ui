@@ -26,9 +26,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Sparkles, CalendarCheck2, FolderKanban, CalendarDays, CalendarRange, NotebookPen, FileText,
+  CalendarCheck2, FolderKanban, CalendarDays, CalendarRange, NotebookPen, FileText,
   LogOut, PanelRightOpen, BrainCircuit,
 } from 'lucide-react';
+import Logo from '../ui/Logo.jsx';
 
 import AiPanel from '../ai/AiPanel.jsx';
 import { useProposalDraft } from '../ai/useProposalDraft.js';
@@ -459,7 +460,7 @@ export default function MainShell({ user, onLogout }) {
     <div className={`shell${aiVisible ? '' : ' ai-collapsed'}${consultActive ? ' is-consult' : ''}${aiVisible && !consultActive ? ' ai-open' : ''}`}>
       <aside className="nav">
         <div className="nav-logo">
-          <span className="nav-logo-icon"><Sparkles size={17} /></span>
+          <Logo size={30} />
           <span className="nav-logo-text">오늘조각</span>
         </div>
 
