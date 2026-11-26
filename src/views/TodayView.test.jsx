@@ -638,3 +638,34 @@ describe('이동 액션', () => {
     expect(screen.getByLabelText('옮길 날짜')).toBeInTheDocument();
   });
 });
+
+describe('틀어졌을 때 — 앱이 먼저 띄우는 카드', () => {
+  it('지난 일정 카드는 「지금」보다 위에 있다', () => {
+    freezeAt(21, 10);
+    renderToday([timed(1, '소켓 서버 과제', '19:00', '20:30'), timed(2, '회로도 확인', '21:00', '21:20')]);
+    const card = screen.getByText('예정 시간이 지난 일정이 1개 있어요');
+    const now = screen.getByRole('heading', { name: '지금' });
+    expect(card.compareDocumentPosition(now) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('같은 시각에 겹쳐 있던 자리면 원인을 자리로 말한다', () => {
+    freezeAt(21, 10);
+    renderToday([timed(1, '소켓 서버 과제', '19:00', '20:30'), timed(2, '영어회화 스크립트', '19:30', '20:00')]);
+    expect(screen.getAllByText(/같은 시각에 다른 일정/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/고르기 전에는 아무것도 바뀌지 않아요/)).toBeInTheDocument();
+  });
+
+  it('수업 직후 자리면 바로 이어 붙은 자리라고 말한다', () => {
+    freezeAt(21, 10);
+    renderToday([timed(1, '힙 정리', '15:50', '17:00')], {
+      occurrences: [{ routineId: 7, title: '빅데이터분석', startAt: `${TODAY_STRING}T13:00:00`, endAt: `${TODAY_STRING}T15:45:00`, sourceDate: TODAY_STRING }],
+    });
+    expect(screen.getByText(/빅데이터분석 끝나고 5분 만에 이어 붙은 자리/)).toBeInTheDocument();
+  });
+
+  it('근거가 없으면 자리 설명을 붙이지 않는다', () => {
+    freezeAt(21, 10);
+    renderToday([timed(1, '혼자 있던 일정', '11:00', '12:00')]);
+    expect(screen.queryByText(/자리였어요/)).not.toBeInTheDocument();
+  });
+});

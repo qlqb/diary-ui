@@ -22,6 +22,8 @@ import {
 import { formatDateShort, formatMinutes, hhmmOf, minutesOf, shiftDate } from '../../lib/datetime.js';
 import { isTimed } from '../../lib/today.js';
 
+import { ActionIcon, Badge, Button, TextInput } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 /**
  * 고정된 enum이 아니라 자주 쓰는 말의 목록이다. 사용자가 아무것도 고르지 않아도 재조정은 된다 —
  * 상황을 설명해야만 계획을 고칠 수 있게 만들지 않는다.
@@ -136,23 +138,23 @@ export default function ReschedulePanel({
             아직 아무것도 바뀌지 않았어요. 아래에서 고치고 적용을 눌러야 반영돼요.
           </p>
         </div>
-        <button type="button" className="icon-btn" onClick={onClose} aria-label="다시 잡기 닫기">
+        <ActionIcon variant="subtle" color="gray" type="button" onClick={onClose} aria-label="다시 잡기 닫기">
           <X size={16} />
-        </button>
+        </ActionIcon>
       </header>
 
       <div className="reschedule-tags">
         <span className="reschedule-tags-label">현재 상황</span>
         {SITUATION_TAGS.map((tag) => (
-          <button
+          <Button variant={tags.includes(tag) ? 'light' : 'default'} size="xs"
             key={tag}
             type="button"
-            className={`btn-ghost btn-sm${tags.includes(tag) ? ' is-selected' : ''}`}
+            className={`${tags.includes(tag) ? 'is-selected' : ''}`}
             aria-pressed={tags.includes(tag)}
             onClick={() => setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))}
           >
             {tag}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -163,33 +165,33 @@ export default function ReschedulePanel({
               <span className="reschedule-item-title">{entry.title}</span>
               <span className="exec-row-dim">기존 {entry.beforeStartTime}–{entry.beforeEndTime}</span>
               {entry.recommended && (
-                <span className="chip chip-warn">추천 · {entry.recommended.reasonText}</span>
+                <Badge component="span" color="orange" className="chip chip-warn">추천 · {entry.recommended.reasonText}</Badge>
               )}
             </div>
 
             <div className="reschedule-item-actions">
               {DECISION_LABELS.map((option) => (
-                <button
+                <Button variant={entry.decision === option.value ? 'light' : 'default'} size="xs"
                   key={option.value}
                   type="button"
-                  className={`btn-ghost btn-sm${entry.decision === option.value ? ' is-selected' : ''}`}
+                  className={`${entry.decision === option.value ? 'is-selected' : ''}`}
                   aria-pressed={entry.decision === option.value}
                   onClick={() => chooseDecision(entry, option.value)}
                 >
                   {option.label}
-                </button>
+                </Button>
               ))}
 
               {entry.decision === DECISIONS.LATER_TODAY && (
                 <>
                   <label className="inline-field">
                     <span>시작</span>
-                    <input type="time" step="300" value={entry.startTime ?? ''}
+                    <TimeInput step="300" value={entry.startTime ?? ''}
                       onChange={(e) => setStart(entry, e.target.value)} />
                   </label>
                   <label className="inline-field">
                     <span>분</span>
-                    <input type="number" min="5" step="5" value={entry.expectedMinutes}
+                    <TextInput type="number" min="5" step="5" value={entry.expectedMinutes}
                       onChange={(e) => setMinutes(entry, Number(e.target.value) || 0)} />
                   </label>
                 </>
@@ -198,7 +200,7 @@ export default function ReschedulePanel({
               {entry.decision === DECISIONS.PICK_DATE && (
                 <label className="inline-field">
                   <span>날짜</span>
-                  <input type="date" value={entry.toDate ?? ''}
+                  <TextInput type="date" value={entry.toDate ?? ''}
                     onChange={(e) => patch(entry.executionItemId, { toDate: e.target.value })} />
                 </label>
               )}
@@ -224,15 +226,15 @@ export default function ReschedulePanel({
       )}
 
       <div className="reschedule-foot">
-        <button type="button" className="btn-ghost" onClick={handleAskAi}>
+        <Button variant="default" type="button" onClick={handleAskAi}>
           <Sparkles size={14} /> AI에게 다시 조정 요청
-        </button>
-        <button type="button" className="btn-ghost" onClick={onClose} disabled={applying}>
+        </Button>
+        <Button variant="default" type="button" onClick={onClose} disabled={applying}>
           취소
-        </button>
-        <button type="button" className="btn-primary" onClick={handleApply} disabled={applying || changed.length === 0}>
+        </Button>
+        <Button type="button" onClick={handleApply} disabled={applying || changed.length === 0}>
           {applying ? <><Loader2 size={14} className="spin" /> 적용 중...</> : `이대로 적용 (${changed.length}개)`}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -276,7 +278,7 @@ function PreviewList({ entries, upcoming, today }) {
                 {row.startTime && row.endTime ? `${row.startTime}–${row.endTime}` : '시각 미정'}
               </span>
               <span>{row.title}</span>
-              {row.fixed && <span className="chip">그대로</span>}
+              {row.fixed && <Badge component="span" color="gray" className="chip">그대로</Badge>}
             </li>
           ))}
         </ul>

@@ -21,6 +21,7 @@ import ExecutionItemEvidence from '../plan/ExecutionItemEvidence.jsx';
 import { actionOf, doneCriteriaOf, startSourceLine } from '../../lib/planItemText.js';
 import { BLOCKER_LABEL, SUPPORT_LABEL, SUPPORT_OPTIONS } from '../../lib/recordLabels.js';
 import { ItemWorkspaceContext } from './itemWorkspaceContext.js';
+import { ActionIcon, Button, TextInput } from '@mantine/core';
 import '../../styles/item-workspace.css';
 import '../../styles/learning-flow.css';
 
@@ -137,13 +138,13 @@ export default function ItemWorkspace({ executionItemId, onClose, onChanged, onA
               {item?.title ?? (loading ? '불러오는 중…' : '항목')}
             </h2>
           </div>
-          <button type="button" className="icon-btn" aria-label="닫기" onClick={onClose}><X size={16} /></button>
+          <ActionIcon variant="subtle" color="gray" type="button" aria-label="닫기" onClick={onClose}><X size={16} /></ActionIcon>
         </header>
 
         <div className="iw-body" aria-busy={loading}>
           {error && !ws && (
             <p className="error-text">
-              {error} <button type="button" className="btn-ghost btn-sm" onClick={load}>다시 시도</button>
+              {error} <Button variant="default" size="xs" type="button" onClick={load}>다시 시도</Button>
             </p>
           )}
 
@@ -216,14 +217,14 @@ export default function ItemWorkspace({ executionItemId, onClose, onChanged, onA
                   </div>
                 )}
                 <div className="iw-help-ask">
-                  <input type="text" aria-label="어디가 막막한지 (선택)" placeholder="어디가 막막한지 (선택)"
+                  <TextInput type="text" aria-label="어디가 막막한지 (선택)" placeholder="어디가 막막한지 (선택)"
                     maxLength={500} value={helpText} onChange={(e) => setHelpText(e.target.value)} disabled={helpBusy} />
-                  <button type="button" className="btn-primary btn-sm" disabled={helpBusy} onClick={() => requestHelp('WHERE_TO_START')}>
+                  <Button size="xs" type="button" disabled={helpBusy} onClick={() => requestHelp('WHERE_TO_START')}>
                     <LifeBuoy size={13} /> {helpBusy ? '만드는 중…' : '어디서 시작할지 모르겠어요'}
-                  </button>
-                  <button type="button" className="btn-ghost btn-sm" disabled={helpBusy} onClick={() => requestHelp('TOO_BIG')}>
+                  </Button>
+                  <Button variant="default" size="xs" type="button" disabled={helpBusy} onClick={() => requestHelp('TOO_BIG')}>
                     너무 커요
-                  </button>
+                  </Button>
                 </div>
                 {helpError && <p className="error-text">{helpError}</p>}
               </Section>
@@ -244,10 +245,10 @@ export default function ItemWorkspace({ executionItemId, onClose, onChanged, onA
                 {(ws.records ?? []).some((r) => r.supportLevel === 'GUIDED' || r.stuckStep) && onAskAi && (
                   <p className="iw-adjust">
                     이 결과로 다음 계획을 조정할 수 있어요. 지금 계획은 저절로 바뀌지 않아요.
-                    <button type="button" className="btn-ghost btn-sm"
+                    <Button variant="default" size="xs" type="button"
                       onClick={() => onAskAi(`「${item.title}」를 해 본 결과를 반영해서 이 부분의 설명·연습·분량 조정안을 만들어 줘. 과목 전체를 다시 짜지는 말아 줘.`, item)}>
                       조정안 상담하기
-                    </button>
+                    </Button>
                   </p>
                 )}
               </Section>
@@ -275,10 +276,10 @@ function HelpCard({ help, onAskAi, item }) {
         <p className="iw-adjust">
           분량·범위를 바꾸는 건 계획 조정이에요. 이 도움은 범위를 바꾸지 않았어요.
           {onAskAi && (
-            <button type="button" className="btn-ghost btn-sm"
+            <Button variant="default" size="xs" type="button"
               onClick={() => onAskAi(`「${item.title}」의 분량이나 범위를 조정하고 싶어. 조정안을 보여 줘.`, item)}>
               계획 조정 상담하기
-            </button>
+            </Button>
           )}
         </p>
       )}
@@ -325,23 +326,23 @@ function RecordLine({ record, onSaved }) {
           {record.stuckStep && <> · 막힌 단계: {record.stuckStep}</>}
           {record.blockerKind && <> · 걸린 점: {BLOCKER_LABEL[record.blockerKind]}</>}
           {record.note && <> · {record.note}</>}
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(true)}>고치기</button>
+          <Button variant="default" size="xs" type="button" onClick={() => setEditing(true)}>고치기</Button>
         </p>
       )}
       {editing && (
         <div className="iw-record-edit">
           <div role="group" aria-label="어떻게 했나요">
             {SUPPORT_OPTIONS.map((o) => (
-              <button key={o.level} type="button" className={`btn-ghost btn-sm${support === o.level ? ' is-active' : ''}`}
+              <Button variant={support === o.level ? 'light' : 'default'} size="xs" key={o.level} type="button" className={`${support === o.level ? 'is-active' : ''}`}
                 aria-pressed={support === o.level} onClick={() => setSupport(support === o.level ? null : o.level)}>
                 {o.label}
-              </button>
+              </Button>
             ))}
           </div>
-          <input type="text" aria-label="막힌 단계" maxLength={300} value={stuck} onChange={(e) => setStuck(e.target.value)}
+          <TextInput type="text" aria-label="막힌 단계" maxLength={300} value={stuck} onChange={(e) => setStuck(e.target.value)}
             placeholder="막힌 단계 (선택)" />
-          <button type="button" className="btn-primary btn-sm" disabled={saving} onClick={save}>저장</button>
-          <button type="button" className="btn-ghost btn-sm" disabled={saving} onClick={() => setEditing(false)}>취소</button>
+          <Button size="xs" type="button" disabled={saving} onClick={save}>저장</Button>
+          <Button variant="default" size="xs" type="button" disabled={saving} onClick={() => setEditing(false)}>취소</Button>
           {err && <p className="error-text">{err}</p>}
         </div>
       )}

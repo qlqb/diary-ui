@@ -15,7 +15,7 @@
  * 새 항목은 남은 오늘 자리에 ghost로, 기존 항목 변경은 그 항목 줄 위에 변경 전 -> 후로.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Sparkles, Clock3 } from 'lucide-react';
 import ExecutionRow from '../components/ExecutionRow.jsx';
 import TimeBlockRow from '../components/TimeBlockRow.jsx';
@@ -30,7 +30,10 @@ import { formatDateKo, formatMinutes, minutesOf, nowMinutes, toHHmm, todayString
 import { assignmentAPI, executionItemAPI } from '../api/api.js';
 import { dueWithin, formatDueWithWeekday, isOverdue } from '../lib/analysisLabels.js';
 import TodayClassCheck from './classcheck/TodayClassCheck.jsx';
+import { placementNote } from '../lib/placementNote.js';
+import { precededByLabel } from '../lib/precededBy.js';
 
+import { Button, Checkbox, TextInput } from '@mantine/core';
 export default function TodayView({
   items, occurrences, commitments, loading, error, notice, onRefresh, projectTitles,
   draft, onPatchCard, onToggleExclude, onOpenAi, onAsk, onItemDeleted, onOpenSource,
@@ -126,6 +129,19 @@ export default function TodayView({
     return [...untimedRows, ...[...timedRows, ...blockRows].sort((a, b) => a.at - b.at)];
   }, [shownFocus, focus, rest, upcomingBlocks]);
 
+  /*
+   * 앞 일정 기준 표현의 재료 — 오늘의 반복 일정·약속과 시각 있는 조각 전부(끝낸 조각도 "앞 일정"이다).
+   * 저장하지 않고 그릴 때마다 계산한다(lib/precededBy.js 머리말).
+   */
+  const dayBlocks = useMemo(() => [
+    ...timeline.filter((e) => e.kind !== 'EXECUTION').map((e) => ({ key: e.key, title: e.title, startAt: e.startAt, endAt: e.endAt })),
+    ...(items ?? []).filter((i) => isTimed(i) && (i.scheduledDate ?? today) === today)
+      .map((i) => ({ key: `EXECUTION:${i.executionItemId}`, title: i.title, startAt: `${today}T${toHHmm(i.startTime)}`, endAt: `${today}T${toHHmm(i.endTime)}` })),
+  ], [timeline, items, today]);
+  const afterLabelOf = useCallback((item) => (isTimed(item)
+    ? precededByLabel(`${today}T${toHHmm(item.startTime)}`, dayBlocks.filter((b) => b.key !== `EXECUTION:${item.executionItemId}`))
+    : null), [dayBlocks, today]);
+
   // 보류와 완료는 같은 "끝난 것"이 아니다 — 보류는 되돌릴 수 있는 상태이므로 따로 보여준다.
   const held = finished.filter((i) => i.status === 'HOLD');
   const done = finished.filter((i) => i.status !== 'HOLD');
@@ -206,6 +222,7 @@ export default function TodayView({
     onAction: handleAction,
     busyId,
     onOpenSource,
+    afterLabelOf,
   };
 
   const showOverdueCta = overdue.length > 0 && !dismissedOverdue && !rescheduling;
@@ -219,14 +236,14 @@ export default function TodayView({
             {formatDateKo(today)} · 남은 예정 {formatMinutes(remainingMinutes) || '0분'}
           </p>
         </div>
-        <button type="button" className="btn-ghost" onClick={() => setAdding((v) => !v)}>
+        <Button variant="default" type="button" onClick={() => setAdding((v) => !v)}>
           <Plus size={15} /> 직접 추가
-        </button>
+        </Button>
       </header>
 
       {adding && (
         <form className="quick-add" onSubmit={handleAdd}>
-          <input
+          <TextInput
             type="text"
             className="quick-add-title"
             placeholder="무엇을 할까요?"
@@ -236,11 +253,11 @@ export default function TodayView({
           />
           <label className="inline-field">
             <span>분</span>
-            <input type="number" min="5" step="5" value={newMinutes}
+            <TextInput type="number" min="5" step="5" value={newMinutes}
               onChange={(e) => setNewMinutes(Number(e.target.value) || 0)} />
           </label>
-          <button type="submit" className="btn-primary btn-sm" disabled={!newTitle.trim()}>추가</button>
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setAdding(false)}>취소</button>
+          <Button size="xs" type="submit" disabled={!newTitle.trim()}>추가</Button>
+          <Button variant="default" size="xs" type="button" onClick={() => setAdding(false)}>취소</Button>
         </form>
       )}
 
@@ -255,6 +272,41 @@ export default function TodayView({
           {/* 다시 잡기 검토 중에는 그 영역이 곧 화면이다 — 같은 항목을 아래에 또 늘어놓아
               검토 영역을 화면 밖으로 밀어내지 않는다(1536x760 기준). 검토를 닫으면
               평소 화면이 그대로 돌아온다. */}
+          {/*
+            틀어졌을 때는 앱이 먼저 알린다 — 그래서 "지금"보다 위다(handoff plan-experience-plan-2026-11-20 §1 2단계).
+            원인은 사람이 아니라 자리로 말한다. 그날 일정만으로 확실히 말할 수 있는 자리의 속성(겹침, 수업 직후)만 붙이고,
+            근거가 없으면 설명을 붙이지 않는다. 다시 잡기는 안을 만들 뿐이고, 고르기 전에는 아무것도 바뀌지 않는다.
+          */}
+          {showOverdueCta && (
+            <section className="view-section overdue-first" role="status">
+              <div className="empty-block overdue-block">
+                <p className="empty-title">예정 시간이 지난 일정이 {overdue.length}개 있어요</p>
+                <ul className="overdue-notes">
+                  {overdue.map((item) => {
+                    const note = placementNote(item, timeline);
+                    return (
+                      <li key={item.executionItemId}>
+                        <span className="overdue-note-title">
+                          {item.startTime ? `${toHHmm(item.startTime)} ` : ''}{item.title}
+                        </span>
+                        {note && <span className="overdue-note-why">{note.text}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="empty-desc">남은 오늘을 지금 상황에 맞게 다시 놓는 안을 만들 수 있어요. 고르기 전에는 아무것도 바뀌지 않아요.</p>
+                <div className="overdue-actions">
+                  <Button size="xs" type="button" onClick={() => setRescheduling(true)}>
+                    남은 오늘 다시 잡기
+                  </Button>
+                  <Button variant="default" size="xs" type="button" onClick={() => setDismissedOverdue(true)}>
+                    그대로 둘게요
+                  </Button>
+                </div>
+              </div>
+            </section>
+          )}
+
           {!rescheduling && (
           <section className="view-section">
             <h2 className="section-title">지금</h2>
@@ -269,33 +321,6 @@ export default function TodayView({
             {/* 지금 할 것이 있으면 그 줄이 주인공이므로 한 줄 띠로만 알리고, 지금 자리가 비어
                 있으면 이 안내가 곧 "지금"의 내용이다. 어느 쪽이든 "지금 잡힌 것이 없어요"로
                 끝내지 않는다. */}
-            {showOverdueCta && (shownFocus || runningBlocks.length > 0 ? (
-              <div className="overdue-strip">
-                <p className="empty-title">예정 시간이 지난 일정이 {overdue.length}개 있어요</p>
-                <div className="overdue-actions">
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => setRescheduling(true)}>
-                    남은 오늘 다시 잡기
-                  </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => setDismissedOverdue(true)}>
-                    그대로 둘게요
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="empty-block overdue-block">
-                <p className="empty-title">예정 시간이 지난 일정이 {overdue.length}개 있어요</p>
-                <p className="empty-desc">오늘 계획을 지금 상황에 맞게 다시 정리할 수 있어요.</p>
-                <div className="overdue-actions">
-                  <button type="button" className="btn-primary btn-sm" onClick={() => setRescheduling(true)}>
-                    남은 오늘 다시 잡기
-                  </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => setDismissedOverdue(true)}>
-                    그대로 둘게요
-                  </button>
-                </div>
-              </div>
-            ))}
-
             {/* 다음 일정은 실행 조각일 수도 수업일 수도 있다. 둘을 나눠 세면 "다음 일정까지
                 3시간"이라고 해놓고 1시간 뒤 수업이 시작하는 상태가 만들어진다. */}
             {!shownFocus && runningBlocks.length === 0 && overdue.length === 0 && nextTimed && (
@@ -317,12 +342,12 @@ export default function TodayView({
                 <p className="empty-title">아직 계획된 항목이 없어요.</p>
                 <p className="empty-desc">직접 추가하거나, 오른쪽에서 AI에게 남은 오늘을 어떻게 쓸지 물어보세요.</p>
                 <div className="overdue-actions">
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => setAdding(true)}>
+                  <Button variant="default" size="xs" type="button" onClick={() => setAdding(true)}>
                     <Plus size={13} /> 직접 추가
-                  </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={onOpenAi}>
+                  </Button>
+                  <Button variant="default" size="xs" type="button" onClick={onOpenAi}>
                     <Sparkles size={13} /> AI와 정리하기
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -372,9 +397,9 @@ export default function TodayView({
                     {overdueOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                     <span>예정 시간이 지난 항목 {overdue.length}개</span>
                   </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => setRescheduling(true)}>
+                  <Button variant="default" size="xs" type="button" onClick={() => setRescheduling(true)}>
                     한번에 정리
-                  </button>
+                  </Button>
                 </div>
                 {overdueOpen && (
                   <div className="row-list">
@@ -447,6 +472,7 @@ export default function TodayView({
 /** 초안 겹치기와 프로젝트 이름표를 붙여 ExecutionRow를 그린다. */
 function Row({
   item, projectTitles, draft, onPatchCard, onToggleExclude, onAction, busyId, highlight, compact, onOpenSource,
+  afterLabelOf = null,
 }) {
   const adjustment = adjustmentFor(draft, item.executionItemId);
   return (
@@ -461,6 +487,7 @@ function Row({
         onAction={onAction}
         busy={busyId === item.executionItemId}
         compact={compact}
+        afterLabel={afterLabelOf ? afterLabelOf(item) : null}
       />
     </div>
   );
@@ -489,7 +516,7 @@ function TodayAssignments({ assignments, today, busyId, onComplete, projectTitle
           return (
             <li key={a.assignmentId} className={`assignment-row${overdue ? ' is-overdue' : ''}`}>
               <label className="assignment-row-main">
-                <input type="checkbox" checked={false} disabled={busyId === a.assignmentId}
+                <Checkbox size="xs" checked={false} disabled={busyId === a.assignmentId}
                   onChange={() => onComplete(a)} aria-label={`${a.title} 완료`} />
                 <span className="assignment-row-title">{a.title}</span>
                 <span className={`assignment-row-due${overdue ? ' is-overdue' : ''}`}>
